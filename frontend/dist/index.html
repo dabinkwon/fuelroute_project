@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="남은 연료와 목적지 경로를 바탕으로, 안전하게 갈 수 있는 주유 지점을 찾는 FuelRoute. 현재 개발 중인 서비스입니다.">
+  <meta name="theme-color" content="#164b3c">
+  <meta property="og:title" content="FuelRoute — 가는 길 위의 주유 계획">
+  <meta property="og:description" content="남은 연료, 가는 경로, 주유 가격. 함께 생각하는 더 합리적인 주유 계획.">
+  <meta property="og:url" content="https://fuelroute-348.netlify.app">
+  <link rel="canonical" href="https://fuelroute-348.netlify.app">
+  <link rel="stylesheet" href="/styles.css">
+  <title>FuelRoute — 가는 길 위의 주유 계획</title>
+</head>
+<body>
+  <a class="skip" href="#main">본문으로 이동</a>
+  <header class="header wrap">
+    <a class="brand" href="/" aria-label="FuelRoute 홈">
+      <span class="brand-mark" aria-hidden="true">↗</span> FuelRoute<span class="brand-dot">.</span>
+    </a>
+    <nav aria-label="주요 메뉴"><a href="#about">서비스 소개</a><a href="#how">이용 흐름 <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot"></span> 더 나은 주유 계획을 준비하고 있어요</p>
+        <h1 id="hero-title">다음 주유는,<br>가는 길 <em>위에서.</em></h1>
+        <p class="intro">남은 연료로 어디까지 갈 수 있을까?<br>FuelRoute는 이동 경로와 주유 가격, 우회 비용을 함께 살펴<br class="desktop"> 안전하고 합리적인 주유 지점을 찾도록 돕습니다.</p>
+        <a class="button" href="#about">FuelRoute 알아보기 <span aria-hidden="true">↗</span></a>
+        <p class="development">현재 개발 중 · 실시간 검색과 추천은 추후 제공됩니다.</p>
+      </div>
+      <div class="journey" aria-label="입력 기반 안전 주행거리 계산 예시: 현재 연료 15리터, 안전 잔량 3리터, 평균 연비 리터당 12킬로미터일 때 144킬로미터">
+        <div class="journey-top"><span>YOUR NEXT STOP</span><span class="example-label">계산 예시</span></div>
+        <div class="range"><span>안전 잔량을 남긴 추정 거리</span><strong>144<span> km</span></strong></div>
+        <svg class="route" viewBox="0 0 400 180" fill="none" role="img" aria-label="출발점에서 경로를 따라 주유 지점을 찾는 개념도">
+          <path d="M30 146H116C143 146 139 92 175 92H224C253 92 250 37 283 37H365" stroke="#97b6a7" stroke-width="2" stroke-dasharray="6 7"/>
+          <path d="M30 146H116C143 146 139 92 175 92H224C253 92 250 37 283 37H310" stroke="#d5ed7e" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="30" cy="146" r="7" fill="#d5ed7e"/>
+          <circle cx="310" cy="37" r="17" fill="#d5ed7e"/>
+          <path d="M304 42V30H313V42M303 35H314M306 42V38H310V42M313 32L318 36V42" stroke="#164b3c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="19" y="174" fill="#c8d8cf" font-size="12">출발</text>
+          <text x="280" y="78" fill="#d5ed7e" font-size="12">주유 지점 탐색</text>
+        </svg>
+        <dl class="inputs"><div><dt>현재 연료</dt><dd>15 <span>L</span></dd></div><div><dt>안전 잔량</dt><dd>3 <span>L</span></dd></div><div><dt>평균 연비</dt><dd>12 <span>km/L</span></dd></div></dl>
+        <p class="formula">(15L − 3L) × 12km/L = 144km</p>
+        <p class="estimate">입력값에 따른 추정치이며, 실제 주행 환경에 따라 달라집니다.</p>
+      </div>
+    </section>
+    <section class="principles" id="about" aria-labelledby="about-title">
+      <div class="wrap">
+        <div class="section-heading"><p class="eyebrow">A BETTER WAY TO REFUEL</p><h2 id="about-title">가격을 비교하기 전에,<br>갈 수 있는 곳부터.</h2><p>잠깐의 주유를 위해 길게 돌아가지 않도록.<br>세 가지 기준으로 주유 계획을 설계합니다.</p></div>
+        <div class="principle-list">
+          <article><span class="number">01 /</span><h3>남겨둘 연료까지 생각합니다</h3><p>현재 연료와 평균 연비에 안전 잔량을 반영해<br>도달 가능한 주행 범위를 먼저 계산합니다.</p></article>
+          <article><span class="number">02 /</span><h3>목적지로 가는 길을 봅니다</h3><p>현재 위치 주변을 넘어 이동 경로를 기준으로,<br>주유소를 들르는 데 필요한 거리와 시간을 살핍니다.</p></article>
+          <article><span class="number">03 /</span><h3>선택의 근거를 보여줍니다</h3><p>가격, 도달 가능성, 우회 비용을 함께 비교하고<br>추천 이유와 조건에 맞지 않는 사유를 설명합니다.</p></article>
+        </div>
+      </div>
+    </section>
+    <section class="how wrap" id="how" aria-labelledby="how-title">
+      <div><p class="eyebrow">HOW IT WILL WORK</p><h2 id="how-title">출발 전, 조건을 알려주세요.</h2><p class="how-note">아래 흐름으로 서비스를 개발하고 있습니다.</p></div>
+      <ol class="steps"><li><span>01</span><div><h3>주행 조건 입력</h3><p>출발지·목적지, 유종, 연료량, 평균 연비와 안전 잔량</p></div></li><li><span>02</span><div><h3>경로와 주유 후보 비교</h3><p>실제 이동 거리와 주유 가격, 추가로 필요한 우회 시간</p></div></li><li><span>03</span><div><h3>주유 계획 확인</h3><p>조건을 만족하는 주유 지점과 선택의 근거</p></div></li></ol>
+    </section>
+    <section class="coming wrap"><div><span class="status-dot"></span><strong>지금은 서비스를 준비하는 중입니다.</strong><p>이 페이지는 FuelRoute의 공식 서비스 소개 페이지입니다.<br>추천 기능과 지도는 API 연동을 마친 뒤 공개할 예정입니다.</p></div><a href="#main" aria-label="페이지 처음으로">다음 여정을 준비하며 <span aria-hidden="true">↑</span></a></section>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="/">FuelRoute<span class="brand-dot">.</span></a><p>가는 길 위의 주유 계획.</p><small>© 2026 FuelRoute</small></footer>
+</body>
+</html>
