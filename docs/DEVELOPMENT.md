@@ -504,3 +504,11 @@ TASK-010 → TASK-011 → TASK-012 순서로 구현했다. 이 18개 TASK의 완
 기본 추천의 최대 예산은 Opinet 14회·Kakao 19회이며 조기 종료·캐시로 실제 호출은 줄어들 수 있다. 전역 최저가나 전체 경로 탐색은 보장하지 않는다. 새 실호출은 첫 회차 성공이므로 재계획 성공 증거로 해석하지 않는다. 재계획·실패 분기는 모의 응답으로 확인했다.
 
 근거: [추천 검증 JSON](verification/2026-11-18-recommendation.json), [Tool 계약](TOOL_CONTRACTS.md), [기계 판독 명세](TOOL_CONTRACTS.json). 다음 작업은 LangGraph State와 요청 분석·계획·Tool 실행·판단·재계획·최종 응답 연결이다. 프론트·배포·개인 TASKS/daily·인증키 파일은 변경하지 않았다.
+
+## 12. GitHub 원격 추가와 업로드 준비 — 2026-11-18
+
+- 사용자 요청으로 기존 GitLab `origin`을 유지하고 `github` 원격에 `https://github.com/dabinkwon/fuelroute_project.git`을 추가했다. 공유 브랜치는 `master`다.
+- 원격 조회에서 GitLab은 초기 커밋 `062e7b8`, GitHub는 빈 저장소임을 확인했다. 기존 이력을 보존하는 일반 push를 사용한다.
+- 추천·재계획·통합 Tool 변경을 `7ad21e9`로 커밋하고 README 단계별 진행표를 갱신했다. 코드 검증 결과는 11장을 따른다.
+- 업로드할 작업 파일과 기존 커밋의 모든 blob에서 현재 API 키가 없는지 검사했다. `.env`·가상환경·로컬 원본 응답은 Git에서 제외했다.
+- README에 두 원격 주소와 각각의 Bash push 명령을 기록했다. 개인 TASKS/daily·프론트 배포 설정은 변경하지 않았다.

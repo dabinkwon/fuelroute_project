@@ -14,7 +14,7 @@
 | 3. 프론트·배포 설정 | 서비스 소개 HTML/CSS, Netlify 설정, 기존 배포 이력 | 정적 파일·대표 URL·배포 설정 확인 | `5f4c195` |
 | 4. GMS·외부 API 연동 | GMS 검증, Opinet·Kakao·휴게소 조회, 좌표 변환, 공통 오류 처리 | 모의 테스트 45개 통과, 기존 실호출 기록 보존 | `609bd11` |
 | 5. 경로 기반 후보 평가 | 검색점 보간, 안전 구간 후보 검색, 실제 도달·우회비용 판정, CLI | 테스트 84개 통과. 기존 실호출에서 후보 16곳 중 3곳 평가 | `1a6a8e9` |
-| 6. 추천·재계획·Tool 계약 | 제약 우선 정렬, 최대 2회 재계획·캐시, 일곱 Tool 등록·스키마 출력 | 테스트 110개·Ruff 통과, 추천 실호출 성공. [검증 기록](docs/verification/2026-11-18-recommendation.json) | 작업 트리 반영, 미커밋 |
+| 6. 추천·재계획·Tool 계약 | 제약 우선 정렬, 최대 2회 재계획·캐시, 일곱 Tool 등록·스키마 출력 | 테스트 110개·Ruff 통과, 추천 실호출 성공. [검증 기록](docs/verification/2026-11-18-recommendation.json) | `7ad21e9` |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -24,6 +24,23 @@
 git log --oneline --reverse 062e7b8..HEAD
 git show --stat 1a6a8e9
 git log --oneline -- README.md
+```
+
+## GitLab·GitHub 원격 저장소
+
+같은 `master` 브랜치를 두 저장소에서 관리한다. 기존 GitLab은 `origin`, GitHub는 `github`로 등록했다.
+
+| 원격 이름 | 저장소 |
+|---|---|
+| `origin` | [GitLab](https://lab.ssafy.com/ekqlsekqls8857/fuelroute_project) |
+| `github` | [GitHub](https://github.com/dabinkwon/fuelroute_project) |
+
+로컬 커밋을 두 곳에 올릴 때는 Bash에서 각각 실행한다.
+
+```bash
+git remote -v
+git push origin master
+git push github master
 ```
 
 ## 프론트엔드 선배포
