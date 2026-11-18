@@ -10,10 +10,10 @@
 - 기존 Python 서버: 상위 `fuelroute/`
 - 배포 방식: Netlify 정적 호스팅. `dist/`의 HTML/CSS만 공개한다.
 
-미리 보기(저장소 루트에서 실행):
+미리 보기(저장소 루트의 Bash에서 프로젝트 가상환경을 활성화한 뒤 실행):
 
-```powershell
-.\.venv\Scripts\python.exe -m http.server 5173 --directory frontend/dist
+```bash
+python -m http.server 5173 --directory frontend/dist
 ```
 
 `http://127.0.0.1:5173`으로 접속한다. `.env`나 Python 소스를 이 정적 폴더에 복사하지 않는다. 공개 페이지에는 비밀키를 넣지 않으며 향후 REST API 호출은 Backend에서 수행한다.
@@ -33,11 +33,10 @@
 
 canonical/og:url은 실제 운영 주소로 설정했다. 인증 없는 HTTPS 요청에서 HTML·CSS의 HTTP 200을 확인했다. HTML에는 Netlify의 기본 호스팅 주석·스크립트가 추가되며 본문과 CSS가 배포 소스와 일치하는지 확인했다. 카카오 앱 대표 도메인에는 새 운영 주소를 사용한다.
 
-기존 로그인된 Netlify CLI를 사용해 저장소 루트의 PowerShell에서 재배포한다.
+기존 로그인된 Netlify CLI를 사용해 저장소 루트의 Bash에서 재배포한다.
 
-```powershell
-$publishPath = (Resolve-Path frontend/dist).Path
-netlify deploy --prod --no-build --dir $publishPath --site 21ab4da2-503e-4dfe-bcc8-346b74f64a7d
+```bash
+netlify deploy --prod --no-build --dir frontend/dist --site 21ab4da2-503e-4dfe-bcc8-346b74f64a7d
 ```
 
 새 개발 환경에서는 먼저 `netlify login`이 필요하다. CLI의 로컬 연결 상태 `.netlify/`는 Git에서 제외하며, 위 사이트 ID로 기존 사이트를 재사용한다. 배포 대상 폴더만 전송하므로 `.env`, Python 소스, Sites 설정은 업로드하지 않는다.

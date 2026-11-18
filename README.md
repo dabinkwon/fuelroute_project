@@ -19,7 +19,7 @@
 
 커밋과 변경 파일 확인:
 
-```powershell
+```bash
 git log --oneline --reverse 062e7b8..HEAD
 git show --stat 1a6a8e9
 git log --oneline -- README.md
@@ -148,15 +148,20 @@ project-root/
 
 ## 로컬 개발 환경 설정 및 실행 방법
 
-저장소 루트의 PowerShell에서 실행한다. 현재 Windows / Python 3.11.9로 확인했다. `.venv`를 직접 호출하므로 가상환경 활성화나 PowerShell 실행 정책 변경은 필요 없다.
+모든 명령어는 저장소 루트의 Bash에서 실행한다. 현재 Windows 환경에서는 Git Bash를 사용하며 Python 3.11.9로 확인했다. 아래에서 가상환경을 활성화한 뒤 이후 명령어에도 같은 터미널을 사용한다.
 
-```powershell
+```bash
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+source .venv/Scripts/activate
+python -m pip install -r requirements-dev.txt
 # .env가 없는 새 체크아웃에서만 실행한다. 기존 키 파일을 덮어쓰지 않는다.
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-.\.venv\Scripts\python.exe -m fuelroute doctor
+if [ ! -f .env ]; then
+  cp .env.example .env
+fi
+python -m fuelroute doctor
 ```
+
+Linux/macOS의 Bash에서는 가상환경 활성화 명령을 `source .venv/bin/activate`로 사용한다. `python3`만 제공되는 환경에서는 최초 생성 명령을 `python3 -m venv .venv`로 실행한다. 활성화 후의 명령은 동일하게 `python -m ...`이다.
 
 실행 의존성만 설치할 때는 `requirements.txt`를 사용한다. 전체 설치 환경의 버전 재현이 필요하면 `requirements.lock.txt`를 사용한다. lock 파일은 개발 도구도 포함한다.
 
@@ -164,28 +169,28 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 기본 서버:
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn fuelroute.main:app --reload
+```bash
+python -m uvicorn fuelroute.main:app --reload
 ```
 
 `http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 현재 `/health`만 구현되어 있으며 Chat·추천·계획 CRUD는 설계 단계다.
 
 ### API별 독립 검증
 
-```powershell
+```bash
 # GMS: 텍스트 → 완전/누락 조건 추출 → 로컬 계산 Tool 왕복 순서로 확인
-.\.venv\Scripts\python.exe -m fuelroute gms --mode text
-.\.venv\Scripts\python.exe -m fuelroute gms --mode conditions
-.\.venv\Scripts\python.exe -m fuelroute gms --mode tool
+python -m fuelroute gms --mode text
+python -m fuelroute gms --mode conditions
+python -m fuelroute gms --mode tool
 
 # Opinet 공식 반경 검색 문서의 예시 KATEC 좌표. WGS84 경도·위도가 아니다.
-.\.venv\Scripts\python.exe -m fuelroute opinet-nearby --x 314681.7 --y 544837.1 --radius-m 3000
+python -m fuelroute opinet-nearby --x 314681.7 --y 544837.1 --radius-m 3000
 # 실제 검색 결과의 UNI_ID로 example-id를 바꾼다.
-.\.venv\Scripts\python.exe -m fuelroute opinet-detail --station-id example-id
+python -m fuelroute opinet-detail --station-id example-id
 
 # Kakao 공식 예시의 WGS84 경도·위도. --via LON LAT로 경유 요청도 확인한다.
-.\.venv\Scripts\python.exe -m fuelroute route --origin 127.1076419 37.4024648 --destination 127.1105634 37.3941969
-.\.venv\Scripts\python.exe -m fuelroute rest-area --page 1 --rows 10
+python -m fuelroute route --origin 127.1076419 37.4024648 --destination 127.1105634 37.3941969
+python -m fuelroute rest-area --page 1 --rows 10
 ```
 
 성공은 종료 코드 `0`, 설정·입력·API 실패는 `1`과 공통 JSON 응답으로 표시한다. GMS 조건 추출·Tool 검증은 여러 번의 LLM 호출을 발생시킨다. 자동 재시도는 하지 않는다. 결과는 기본적으로 파일에 저장하지 않는다.
@@ -194,11 +199,11 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ### 구현한 세 조회 Tool의 개별 호출
 
-```powershell
-.\.venv\Scripts\python.exe -m fuelroute stations --point 127.035092567 37.494343243 --fuel-type gasoline --radius-m 5000
+```bash
+python -m fuelroute stations --point 127.035092567 37.494343243 --fuel-type gasoline --radius-m 5000
 # 위 응답 data.items의 station_id를 사용한다. 아래 ID는 독립 조회 형식의 예시다.
-.\.venv\Scripts\python.exe -m fuelroute station-detail --station-id A0010207 --fuel-type gasoline
-.\.venv\Scripts\python.exe -m fuelroute rest-search --point 128.806648 37.758206 --radius-m 3000 --direction 하행
+python -m fuelroute station-detail --station-id A0010207 --fuel-type gasoline
+python -m fuelroute rest-search --point 128.806648 37.758206 --radius-m 3000 --direction 하행
 ```
 
 `stations`는 WGS84 좌표를 KATEC로 변환하고 `data.items`에 ID·가격·위치를 반환한다. `station-detail`은 해당 ID로 상세·가격 기준시각을 반환한다. `rest-search`는 전체 휴게소 페이지를 읽고 반경·노선·방향을 필터한다. 휴게소 `match_status=unverified`는 가까운 참고 정보라는 뜻이며 같은 주유소라는 의미가 아니다. 전체 Agent 추천 흐름은 후속 단계다.
@@ -207,8 +212,8 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ### 경로→후보→실제 도달·우회비용 연결 실험
 
-```powershell
-.\.venv\Scripts\python.exe -m fuelroute route-spike --origin 128.6014 35.8714 --destination 126.9780 37.5665 --current-fuel-l 15 --reserve-fuel-l 3 --efficiency-kmpl 12 --fuel-type gasoline --max-detour-min 15 --max-candidates 3
+```bash
+python -m fuelroute route-spike --origin 128.6014 35.8714 --destination 126.9780 37.5665 --current-fuel-l 15 --reserve-fuel-l 3 --efficiency-kmpl 12 --fuel-type gasoline --max-detour-min 15 --max-candidates 3
 ```
 
 144km 안전 구간에서 기본 반경 5km의 검색점을 최대 3개 만든다. 도로별 보고 거리와 상세 좌표를 사용하며, 도로 안의 위치는 지오데식 길이 비율로 근사한다. 조회한 후보를 ID로 합친 뒤 일부 후보만 상세·접근·경유 경로로 평가한다. 독립 접근 거리와 경유 첫 구간 거리 중 큰 값으로 안전 잔량을 확인한다.
@@ -219,11 +224,11 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ### 로컬 검증
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m pip check
+```bash
+python -m pytest -q
+python -m ruff check .
+python -m ruff format --check .
+python -m pip check
 ```
 
 ## 주요 문서
