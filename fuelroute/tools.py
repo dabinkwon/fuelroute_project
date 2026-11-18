@@ -357,20 +357,15 @@ class FuelTools:
     def registered_tools(self) -> list[StructuredTool]:
         """세 비동기 조회 함수를 설명·필드 스키마와 함께 LangChain Tool로 등록한다.
 
-        반환 Tool은 실제 호출까지 HTTP를 실행하지 않는다. Agent 없이 ainvoke(dict)로
-        호출할 수 있고 같은 인스턴스의 설정/클라이언트를 사용한다. DB 저장은 없다.
-        직렬화 스키마 검증과 향후 LangGraph 연결에 사용한다.
+        통합 ToolRegistry에서 세 조회 Tool만 선택한다. 등록만으로 HTTP·DB를 실행하지
+        않으며 같은 설정/클라이언트를 사용한다. ainvoke(dict)는 입력 오류도 포함한
+        공통 JSON 객체를 반환한다. 직접 Python 메서드의 ToolResult 반환은 유지한다.
         """
+        from fuelroute.tool_registry import ToolRegistry
+
+        names = {"search_gas_stations", "get_station_details", "search_rest_area_info"}
         return [
-            StructuredTool.from_function(
-                coroutine=method,
-                name=method.__name__,
-                description=method.__doc__,
-                args_schema=schema,
-            )
-            for method, schema in (
-                (self.search_gas_stations, CandidateSearch),
-                (self.get_station_details, StationLookup),
-                (self.search_rest_area_info, RestAreaSearch),
-            )
+            tool
+            for tool in ToolRegistry(self.settings, self.client).registered_tools()
+            if tool.name in names
         ]

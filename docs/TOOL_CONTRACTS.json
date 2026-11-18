@@ -1,0 +1,2242 @@
+{
+  "contract_version": 1,
+  "tools": {
+    "calculate_safe_range": {
+      "provider": "local",
+      "description": "사용자 입력으로 안전 잔량을 남기는 최대 추정 주행거리(km)를 계산한다.\n\n    현재 연료·안전 잔량은 L, 평균 연비는 km/L이며 모두 필수다. 현재 연료와\n    연비는 양수, 잔량은 0 이상/현재 연료 미만이어야 하며 NaN·무한대는 거절한다.\n    (현재 연료-안전 잔량)*평균 연비를 float(km)로 반환한다. 예: (15, 3, 12) → 144.\n    잘못된 입력은 Pydantic ValidationError, 계산 범위 초과는 ValueError다.\n    외부 호출·저장·재시도는 없다.\n    이 수치는 입력 기반 추정치로 후보까지의 실제 자동차 경로 거리와 비교해야 한다.\n    \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.safe_range_km",
+      "input_schema": {
+        "additionalProperties": false,
+        "description": "사용자가 입력한 연료(L)·연비(km/L)를 검증하는 안전거리 입력.",
+        "properties": {
+          "current_fuel_l": {
+            "description": "현재 연료량(L), 0보다 커야 함",
+            "exclusiveMinimum": 0,
+            "title": "Current Fuel L",
+            "type": "number"
+          },
+          "reserve_fuel_l": {
+            "description": "안전 잔량(L), 현재 연료량 미만",
+            "minimum": 0,
+            "title": "Reserve Fuel L",
+            "type": "number"
+          },
+          "avg_efficiency_kmpl": {
+            "description": "평균 연비(km/L), 0보다 커야 함",
+            "exclusiveMinimum": 0,
+            "title": "Avg Efficiency Kmpl",
+            "type": "number"
+          }
+        },
+        "required": [
+          "current_fuel_l",
+          "reserve_fuel_l",
+          "avg_efficiency_kmpl"
+        ],
+        "title": "FuelConditions",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "SafeRangeOutput": {
+            "description": "안전 잔량을 남길 수 있는 입력 기반 추정 주행거리.",
+            "properties": {
+              "safe_range_km": {
+                "description": "안전 주행거리(km)",
+                "exclusiveMinimum": 0,
+                "title": "Safe Range Km",
+                "type": "number"
+              }
+            },
+            "required": [
+              "safe_range_km"
+            ],
+            "title": "SafeRangeOutput",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/SafeRangeOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[SafeRangeOutput]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE"
+      ],
+      "next_fields": [
+        "data.safe_range_km"
+      ]
+    },
+    "get_driving_route": {
+      "provider": "kakao",
+      "description": "기본·접근·단일 경유 자동차 비용을 독립 조회하고 원본 구조를 제거한다.\n\n        WGS84 출발·목적 좌표와 선택 경유 좌표가 필요하다. Kakao HTTP는 1회이며 재시도·\n        후보 검색·저장은 없다. 거리 m·시간 초·순서가 보존된 legs를 반환한다. 결과는\n        assess_candidate_routes의 base/approach/via에 전달한다. 원본 상세 좌표는 반환하지 않는다.\n        설정·인증·타임아웃·경로 없음은 공통 실패, 잘못된 비용은 INVALID_RESPONSE다.\n        예: via=null은 기본/접근 경로, via=주유소 좌표는 경유 비용이다.\n        \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.distance_m, data.duration_s, data.legs",
+      "input_schema": {
+        "$defs": {
+          "Coordinate": {
+            "additionalProperties": false,
+            "description": "경도·위도 순서의 유한한 WGS84 좌표(도). KATEC 입력과 혼용 금지.",
+            "properties": {
+              "longitude": {
+                "description": "WGS84 경도(도)",
+                "maximum": 180,
+                "minimum": -180,
+                "title": "Longitude",
+                "type": "number"
+              },
+              "latitude": {
+                "description": "WGS84 위도(도)",
+                "maximum": 90,
+                "minimum": -90,
+                "title": "Latitude",
+                "type": "number"
+              }
+            },
+            "required": [
+              "longitude",
+              "latitude"
+            ],
+            "title": "Coordinate",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "기본·접근 또는 단일 주유소 경유 경로를 독립 조회하는 입력.",
+        "properties": {
+          "origin": {
+            "$ref": "#/$defs/Coordinate",
+            "description": "출발 WGS84 경도·위도(도)"
+          },
+          "destination": {
+            "$ref": "#/$defs/Coordinate",
+            "description": "목적 WGS84 경도·위도(도)"
+          },
+          "via": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Coordinate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "단일 주유소 경유 좌표, 기본 경로는 null"
+          }
+        },
+        "required": [
+          "origin",
+          "destination"
+        ],
+        "title": "DrivingRouteRequest",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "DrivingRoute": {
+            "additionalProperties": false,
+            "description": "원본 제공사 구조를 제거한 전체 경로와 경유 전후 구간 비용.",
+            "properties": {
+              "distance_m": {
+                "description": "자동차 경로 거리(m)",
+                "minimum": 0,
+                "title": "Distance M",
+                "type": "integer"
+              },
+              "duration_s": {
+                "description": "자동차 경로 예상 시간(초)",
+                "minimum": 0,
+                "title": "Duration S",
+                "type": "integer"
+              },
+              "legs": {
+                "description": "순서가 보존된 경로 구간 비용",
+                "items": {
+                  "$ref": "#/$defs/RouteLeg"
+                },
+                "minItems": 1,
+                "title": "Legs",
+                "type": "array"
+              }
+            },
+            "required": [
+              "distance_m",
+              "duration_s",
+              "legs"
+            ],
+            "title": "DrivingRoute",
+            "type": "object"
+          },
+          "RouteLeg": {
+            "additionalProperties": false,
+            "description": "한 자동차 경로 구간의 거리(m)와 예상 소요시간(초).",
+            "properties": {
+              "distance_m": {
+                "description": "자동차 경로 거리(m)",
+                "minimum": 0,
+                "title": "Distance M",
+                "type": "integer"
+              },
+              "duration_s": {
+                "description": "자동차 경로 예상 시간(초)",
+                "minimum": 0,
+                "title": "Duration S",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "distance_m",
+              "duration_s"
+            ],
+            "title": "RouteLeg",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DrivingRoute"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[DrivingRoute]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE",
+        "CONFIG_ERROR",
+        "AUTH_FAILED",
+        "TIMEOUT",
+        "RATE_LIMITED",
+        "UPSTREAM_ERROR",
+        "NO_ROUTE"
+      ],
+      "next_fields": [
+        "data.distance_m",
+        "data.duration_s",
+        "data.legs"
+      ]
+    },
+    "search_gas_stations": {
+      "provider": "opinet",
+      "description": "안전 주행 구간에서 선택한 한 WGS84 검색점 주변의 주유소 후보를 조회한다.\n\n        경도·위도는 도, 반경은 1~5000m, 유종은 gasoline/diesel이다. 기본 경로·안전\n        구간 검증은 호출자가 선행한다. 좌표를 KATEC로 변환해 Opinet을 1회 요청한다.\n        data.items는 주유소 ID·이름·원/L 가격(미제공 null)·WGS84 위치·검색점 거리다.\n        ID로 중복 제거 후 가격순으로 정렬하며 ID는 get_station_details에 전달한다.\n        0건은 EMPTY_RESULT, 잘못된 입력은 INVALID_INPUT, 필수 필드/좌표 오류는\n        INVALID_RESPONSE다. 외부 인증·타임아웃 실패도 공통 계약을 유지한다.\n        DB 저장·LLM·자체 재계획은 없다. 검색점 거리로 실제 도달 가능성을 판정하지 않는다.\n        예: search_gas_stations(127.035,37.494,'gasoline',3000).\n        \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.items[].station_id, data.items[].longitude, data.items[].latitude",
+      "input_schema": {
+        "additionalProperties": false,
+        "description": "한 경로 검색점의 WGS84 좌표·유종·반경 계약.",
+        "properties": {
+          "longitude": {
+            "description": "WGS84 경도(도)",
+            "maximum": 180,
+            "minimum": -180,
+            "title": "Longitude",
+            "type": "number"
+          },
+          "latitude": {
+            "description": "WGS84 위도(도)",
+            "maximum": 90,
+            "minimum": -90,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "fuel_type": {
+            "description": "gasoline=휘발유, diesel=경유",
+            "enum": [
+              "gasoline",
+              "diesel"
+            ],
+            "title": "Fuel Type",
+            "type": "string"
+          },
+          "radius_m": {
+            "default": 5000,
+            "description": "검색점 반경(m), 1~5000",
+            "maximum": 5000,
+            "minimum": 1,
+            "title": "Radius M",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "longitude",
+          "latitude",
+          "fuel_type"
+        ],
+        "title": "CandidateSearch",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "CandidatesOutput": {
+            "description": "Opinet 주유소 ID와 다음 상세·경로 조회에 전달할 정규화 후보.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/StationCandidate"
+                },
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "title": "CandidatesOutput",
+            "type": "object"
+          },
+          "StationCandidate": {
+            "additionalProperties": false,
+            "description": "출발지 도달 판정 전의 후보. center_distance_m은 검색점 기준 거리다.",
+            "properties": {
+              "longitude": {
+                "description": "WGS84 경도(도)",
+                "maximum": 180,
+                "minimum": -180,
+                "title": "Longitude",
+                "type": "number"
+              },
+              "latitude": {
+                "description": "WGS84 위도(도)",
+                "maximum": 90,
+                "minimum": -90,
+                "title": "Latitude",
+                "type": "number"
+              },
+              "station_id": {
+                "title": "Station Id",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "fuel_type": {
+                "enum": [
+                  "gasoline",
+                  "diesel"
+                ],
+                "title": "Fuel Type",
+                "type": "string"
+              },
+              "price_krw_per_l": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Krw Per L"
+              },
+              "center_distance_m": {
+                "minimum": 0,
+                "title": "Center Distance M",
+                "type": "number"
+              }
+            },
+            "required": [
+              "longitude",
+              "latitude",
+              "station_id",
+              "name",
+              "fuel_type",
+              "price_krw_per_l",
+              "center_distance_m"
+            ],
+            "title": "StationCandidate",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CandidatesOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[CandidatesOutput]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE",
+        "CONFIG_ERROR",
+        "AUTH_FAILED",
+        "TIMEOUT",
+        "RATE_LIMITED",
+        "UPSTREAM_ERROR",
+        "EMPTY_RESULT"
+      ],
+      "next_fields": [
+        "data.items[].station_id",
+        "data.items[].longitude",
+        "data.items[].latitude"
+      ]
+    },
+    "get_station_details": {
+      "provider": "opinet",
+      "description": "후보의 Opinet ID를 받아 상세정보를 한 번 조회한다. 후보 검색을 다시 실행하지 않는다.\n\n        station_id는 search_gas_stations의 station_id, 유종은 gasoline/diesel이다.\n        data는 이름·주소·브랜드·WGS84 위치·선택 유종 가격(원/L)·가격 기준시각(KST)\n        및 확인 가능한 시설이다. 가격/시각 누락은 null, 시설 누락은 null이다.\n        잘못된 입력은 INVALID_INPUT, 없는 ID는 NOT_FOUND, 잘못된 필드는 INVALID_RESPONSE다.\n        HTTP 1회 외 저장·LLM·재시도·재계획 부작용은 없다. 이 결과로 가격을 평가하되\n        실제 도달 가능성은 별도 경로 조회로 확인한다.\n        예: get_station_details('A0010207','gasoline').\n        \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.station_id, data.price_krw_per_l, data.price_observed_at",
+      "input_schema": {
+        "additionalProperties": false,
+        "description": "후보 조회에서 받은 ID로만 상세를 조회하는 독립 입력.",
+        "properties": {
+          "station_id": {
+            "description": "Opinet 후보의 UNI_ID",
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Station Id",
+            "type": "string"
+          },
+          "fuel_type": {
+            "description": "상세 가격에서 선택할 유종: gasoline/diesel",
+            "enum": [
+              "gasoline",
+              "diesel"
+            ],
+            "title": "Fuel Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "station_id",
+          "fuel_type"
+        ],
+        "title": "StationLookup",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "StationDetails": {
+            "additionalProperties": false,
+            "description": "가격 시각과 원본에서 확인한 주소·브랜드·시설만 포함하는 상세 정보.",
+            "properties": {
+              "longitude": {
+                "description": "WGS84 경도(도)",
+                "maximum": 180,
+                "minimum": -180,
+                "title": "Longitude",
+                "type": "number"
+              },
+              "latitude": {
+                "description": "WGS84 위도(도)",
+                "maximum": 90,
+                "minimum": -90,
+                "title": "Latitude",
+                "type": "number"
+              },
+              "station_id": {
+                "title": "Station Id",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "fuel_type": {
+                "enum": [
+                  "gasoline",
+                  "diesel"
+                ],
+                "title": "Fuel Type",
+                "type": "string"
+              },
+              "price_krw_per_l": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Krw Per L"
+              },
+              "price_observed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Observed At"
+              },
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "brand": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Brand"
+              },
+              "facilities": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": "Facilities",
+                "type": "object"
+              }
+            },
+            "required": [
+              "longitude",
+              "latitude",
+              "station_id",
+              "name",
+              "fuel_type",
+              "price_krw_per_l",
+              "price_observed_at",
+              "address",
+              "brand",
+              "facilities"
+            ],
+            "title": "StationDetails",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/StationDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[StationDetails]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE",
+        "CONFIG_ERROR",
+        "AUTH_FAILED",
+        "TIMEOUT",
+        "RATE_LIMITED",
+        "UPSTREAM_ERROR",
+        "NOT_FOUND"
+      ],
+      "next_fields": [
+        "data.station_id",
+        "data.price_krw_per_l",
+        "data.price_observed_at"
+      ]
+    },
+    "search_rest_area_info": {
+      "provider": "rest_area",
+      "description": "WGS84 좌표 주변 휴게소 보조정보를 전체 페이지에서 검색한다. 주유소 매칭은 미확인이다.\n\n        경도·위도(도), 반경 1~50000m, 선택 노선명·방향은 원본 필드와 정확 일치한다.\n        페이지당 1000건, 최대 10페이지로 조회하고 거리순 정렬한 data.items와 처리 건수를\n        반환한다. 시설은 Y/N/미확인을 True/False/null로, 기준일은 원본값으로 유지한다.\n        거리 계산은 반경 필터용이며 경로 접근 가능성·같은 주유소임을 보장하지 않는다.\n        match_status는 항상 unverified다. 0건은 EMPTY_RESULT, 전체 페이지를 받지 못하면\n        실패이며 부분 결과를 완전 결과로 위장하지 않는다. 보조 Tool 실패만으로 추천을\n        중단하지 않는 것은 호출자 책임이다. HTTP 외 저장·LLM·재계획은 없다.\n        예: search_rest_area_info(128.806648,37.758206,3000,direction='하행').\n        \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.items[].match_status, data.items[].reference_date",
+      "input_schema": {
+        "additionalProperties": false,
+        "description": "전체 휴게소 중 반경·선택 노선/방향으로 참고 정보를 찾는 입력.",
+        "properties": {
+          "longitude": {
+            "description": "WGS84 경도(도)",
+            "maximum": 180,
+            "minimum": -180,
+            "title": "Longitude",
+            "type": "number"
+          },
+          "latitude": {
+            "description": "WGS84 위도(도)",
+            "maximum": 90,
+            "minimum": -90,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "radius_m": {
+            "default": 5000,
+            "description": "직선 검색거리(m), 최대 50000",
+            "maximum": 50000,
+            "minimum": 1,
+            "title": "Radius M",
+            "type": "integer"
+          },
+          "route_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "노선명 정확 일치 필터",
+            "title": "Route Name"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "방향 정확 일치 필터",
+            "title": "Direction"
+          }
+        },
+        "required": [
+          "longitude",
+          "latitude"
+        ],
+        "title": "RestAreaSearch",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "RestAreaInfo": {
+            "additionalProperties": false,
+            "description": "주유소와 동일 시설임을 입증하지 않은 주변 휴게소 참고 정보.",
+            "properties": {
+              "longitude": {
+                "description": "WGS84 경도(도)",
+                "maximum": 180,
+                "minimum": -180,
+                "title": "Longitude",
+                "type": "number"
+              },
+              "latitude": {
+                "description": "WGS84 위도(도)",
+                "maximum": 90,
+                "minimum": -90,
+                "title": "Latitude",
+                "type": "number"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "route_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Route Name"
+              },
+              "direction": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Direction"
+              },
+              "distance_m": {
+                "minimum": 0,
+                "title": "Distance M",
+                "type": "number"
+              },
+              "facilities": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": "Facilities",
+                "type": "object"
+              },
+              "reference_date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Reference Date"
+              },
+              "match_status": {
+                "const": "unverified",
+                "default": "unverified",
+                "title": "Match Status",
+                "type": "string"
+              },
+              "source": {
+                "default": "전국휴게소정보표준데이터",
+                "title": "Source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "longitude",
+              "latitude",
+              "name",
+              "route_name",
+              "direction",
+              "distance_m",
+              "facilities",
+              "reference_date"
+            ],
+            "title": "RestAreaInfo",
+            "type": "object"
+          },
+          "RestAreasOutput": {
+            "description": "주유소와 동일 시설이라고 단정하지 않는 휴게소 참고 정보.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/RestAreaInfo"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "catalog_count": {
+                "minimum": 0,
+                "title": "Catalog Count",
+                "type": "integer"
+              },
+              "skipped_invalid_count": {
+                "minimum": 0,
+                "title": "Skipped Invalid Count",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "items",
+              "catalog_count",
+              "skipped_invalid_count"
+            ],
+            "title": "RestAreasOutput",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RestAreasOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[RestAreasOutput]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE",
+        "CONFIG_ERROR",
+        "AUTH_FAILED",
+        "TIMEOUT",
+        "RATE_LIMITED",
+        "UPSTREAM_ERROR",
+        "EMPTY_RESULT"
+      ],
+      "next_fields": [
+        "data.items[].match_status",
+        "data.items[].reference_date"
+      ]
+    },
+    "assess_candidate_routes": {
+      "provider": "local",
+      "description": "동일 옵션의 기본·출발→주유소·단일 경유 경로로 안전성과 우회 상한을 판정한다.\n\n    세 dict는 각각 probe_route의 성공 data다. 단일 경유 응답은 구간이 정확히 두 개여야\n    한다. 도달거리는 독립 접근 경로와 경유 첫 구간 거리 중 큰 값(m)을 사용한다.\n    안전거리는 양수 km, 선택 상한은 0 이상 유한 분/km다. 경계값과 같으면 통과한다.\n    우회비용은 경유-기본의 차이며 교통 변동으로 음수일 때 실제 차이는 raw 필드에\n    보존하고 상한 판정에는 0을 쓴다. 도달 불가·시간/거리 초과 사유를 함께 반환한다.\n    가격 정렬·재계획·HTTP·저장은 없다. 잘못된 입력/응답은 ValueError다.\n    예: 안전거리 10km, 실제 접근 11km는 낮은 가격과 무관하게 eligible=False다.\n    \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.eligible, data.reason_codes, data.reach_distance_m",
+      "input_schema": {
+        "$defs": {
+          "DrivingRoute": {
+            "additionalProperties": false,
+            "description": "원본 제공사 구조를 제거한 전체 경로와 경유 전후 구간 비용.",
+            "properties": {
+              "distance_m": {
+                "description": "자동차 경로 거리(m)",
+                "minimum": 0,
+                "title": "Distance M",
+                "type": "integer"
+              },
+              "duration_s": {
+                "description": "자동차 경로 예상 시간(초)",
+                "minimum": 0,
+                "title": "Duration S",
+                "type": "integer"
+              },
+              "legs": {
+                "description": "순서가 보존된 경로 구간 비용",
+                "items": {
+                  "$ref": "#/$defs/RouteLeg"
+                },
+                "minItems": 1,
+                "title": "Legs",
+                "type": "array"
+              }
+            },
+            "required": [
+              "distance_m",
+              "duration_s",
+              "legs"
+            ],
+            "title": "DrivingRoute",
+            "type": "object"
+          },
+          "RouteLeg": {
+            "additionalProperties": false,
+            "description": "한 자동차 경로 구간의 거리(m)와 예상 소요시간(초).",
+            "properties": {
+              "distance_m": {
+                "description": "자동차 경로 거리(m)",
+                "minimum": 0,
+                "title": "Distance M",
+                "type": "integer"
+              },
+              "duration_s": {
+                "description": "자동차 경로 예상 시간(초)",
+                "minimum": 0,
+                "title": "Duration S",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "distance_m",
+              "duration_s"
+            ],
+            "title": "RouteLeg",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "명시적 실제 자동차 비용 세 종류와 안전·우회 상한의 평가 입력.",
+        "properties": {
+          "base": {
+            "$ref": "#/$defs/DrivingRoute",
+            "description": "출발→목적지 기본 경로 비용"
+          },
+          "approach": {
+            "$ref": "#/$defs/DrivingRoute",
+            "description": "출발→주유소 접근 경로 비용"
+          },
+          "via": {
+            "$ref": "#/$defs/DrivingRoute",
+            "description": "출발→주유소→목적지 경로 비용, 두 구간 필수"
+          },
+          "safe_range_km": {
+            "description": "안전 주행거리(km)",
+            "exclusiveMinimum": 0,
+            "title": "Safe Range Km",
+            "type": "number"
+          },
+          "max_detour_min": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "허용 추가 시간(분)",
+            "title": "Max Detour Min"
+          },
+          "max_detour_km": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "허용 추가 거리(km)",
+            "title": "Max Detour Km"
+          }
+        },
+        "required": [
+          "base",
+          "approach",
+          "via",
+          "safe_range_km"
+        ],
+        "title": "AssessmentRequest",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "AssessmentOutput": {
+            "description": "비용 판정·제외 이유와 교통 변동으로 발생할 수 있는 원래 차이.",
+            "properties": {
+              "eligible": {
+                "title": "Eligible",
+                "type": "boolean"
+              },
+              "reason_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Reason Codes",
+                "type": "array"
+              },
+              "reach_distance_m": {
+                "minimum": 0,
+                "title": "Reach Distance M",
+                "type": "number"
+              },
+              "detour_distance_m": {
+                "minimum": 0,
+                "title": "Detour Distance M",
+                "type": "number"
+              },
+              "detour_duration_s": {
+                "minimum": 0,
+                "title": "Detour Duration S",
+                "type": "number"
+              },
+              "raw_detour_distance_m": {
+                "title": "Raw Detour Distance M",
+                "type": "number"
+              },
+              "raw_detour_duration_s": {
+                "title": "Raw Detour Duration S",
+                "type": "number"
+              },
+              "negative_delta_observed": {
+                "title": "Negative Delta Observed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "eligible",
+              "reason_codes",
+              "reach_distance_m",
+              "detour_distance_m",
+              "detour_duration_s",
+              "raw_detour_distance_m",
+              "raw_detour_duration_s",
+              "negative_delta_observed"
+            ],
+            "title": "AssessmentOutput",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AssessmentOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[AssessmentOutput]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE"
+      ],
+      "next_fields": [
+        "data.eligible",
+        "data.reason_codes",
+        "data.reach_distance_m"
+      ]
+    },
+    "rank_candidates": {
+      "provider": "local",
+      "description": "유종·실제 접근·우회 상한·가격을 다시 검사한 뒤 평가한 후보 안에서 한 곳을 선택한다.\n\n    입력은 상세·경로 비용이 있는 후보와 명시적 안전거리(km), 선택 우회 상한(분/km)이다.\n    기존 eligible 플래그를 신뢰하지 않으며, 알려진 제약 판정 사유는 현재 수치로 다시\n    계산한다. 제공사 실패 사유는 유지한다. 상세/비용/가격 누락·ID 불일치도 제외한다.\n    기본 정렬은 가격→추가 시간→추가 거리→ID, 시간 우선이면 추가 시간→추가 거리→가격→ID다.\n    가중치·가상 주유량·추가 연료비를 만들지 않는다. 상한과 같은 값은 허용하며,\n    후보가 없으면 recommended=None이다. 반환에는 모든 제외 사유와 정렬 기준이 있다.\n    입력 검증 실패는 ValidationError다. HTTP·LLM·DB·재계획 부작용은 없다.\n    예: 싼 후보의 실제 접근이 145km이고 안전거리가 144km면 가격과 관계없이 제외한다.\n    \n\n등록 Tool의 반환은 공통 JSON 객체다: ok/tool_name/data/error/meta. 원 함수의 반환은 출력 스키마에 맞춰 data에 넣는다. 입력 오류는 INVALID_INPUT, 출력 계약 오류는 INVALID_RESPONSE다. 예외 원문은 노출하지 않는다. 다음 단계 필드: data.recommended, data.excluded_candidates, data.scope",
+      "input_schema": {
+        "$defs": {
+          "CandidateEvaluation": {
+            "additionalProperties": false,
+            "description": "조회·경로 평가 한 건. 비용 미확인이나 제공사 실패도 같은 구조로 보존한다.",
+            "properties": {
+              "station_id": {
+                "description": "Opinet 주유소 ID",
+                "minLength": 1,
+                "title": "Station Id",
+                "type": "string"
+              },
+              "station": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StationDetails"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "실제 상세 조회 결과"
+              },
+              "eligible": {
+                "default": false,
+                "description": "입력의 과거 판정값; 추천 시 다시 검사함",
+                "title": "Eligible",
+                "type": "boolean"
+              },
+              "reason_codes": {
+                "description": "조회 실패·제외 사유",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Reason Codes",
+                "type": "array"
+              },
+              "reach_distance_m": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "실제 접근 거리(m)",
+                "title": "Reach Distance M"
+              },
+              "detour_distance_m": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "추가 거리(m)",
+                "title": "Detour Distance M"
+              },
+              "detour_duration_s": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "추가 시간(초)",
+                "title": "Detour Duration S"
+              },
+              "raw_detour_distance_m": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "보정 전 경유-기본 거리(m)",
+                "title": "Raw Detour Distance M"
+              },
+              "raw_detour_duration_s": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "보정 전 경유-기본 시간(초)",
+                "title": "Raw Detour Duration S"
+              },
+              "negative_delta_observed": {
+                "default": false,
+                "description": "음수 차이 관찰 여부",
+                "title": "Negative Delta Observed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "station_id"
+            ],
+            "title": "CandidateEvaluation",
+            "type": "object"
+          },
+          "StationDetails": {
+            "additionalProperties": false,
+            "description": "가격 시각과 원본에서 확인한 주소·브랜드·시설만 포함하는 상세 정보.",
+            "properties": {
+              "longitude": {
+                "description": "WGS84 경도(도)",
+                "maximum": 180,
+                "minimum": -180,
+                "title": "Longitude",
+                "type": "number"
+              },
+              "latitude": {
+                "description": "WGS84 위도(도)",
+                "maximum": 90,
+                "minimum": -90,
+                "title": "Latitude",
+                "type": "number"
+              },
+              "station_id": {
+                "title": "Station Id",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "fuel_type": {
+                "enum": [
+                  "gasoline",
+                  "diesel"
+                ],
+                "title": "Fuel Type",
+                "type": "string"
+              },
+              "price_krw_per_l": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Krw Per L"
+              },
+              "price_observed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Observed At"
+              },
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "brand": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Brand"
+              },
+              "facilities": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": "Facilities",
+                "type": "object"
+              }
+            },
+            "required": [
+              "longitude",
+              "latitude",
+              "station_id",
+              "name",
+              "fuel_type",
+              "price_krw_per_l",
+              "price_observed_at",
+              "address",
+              "brand",
+              "facilities"
+            ],
+            "title": "StationDetails",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "가격 가중치 없이 비교할 명시적 제약과 후보별 실제 평가 데이터.",
+        "properties": {
+          "candidates": {
+            "description": "ID가 중복되지 않는 평가·제외 후보 목록",
+            "items": {
+              "$ref": "#/$defs/CandidateEvaluation"
+            },
+            "maxItems": 1000,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "fuel_type": {
+            "description": "사용자가 요구한 유종",
+            "enum": [
+              "gasoline",
+              "diesel"
+            ],
+            "title": "Fuel Type",
+            "type": "string"
+          },
+          "safe_range_km": {
+            "description": "안전 잔량을 남기는 추정 거리(km)",
+            "exclusiveMinimum": 0,
+            "title": "Safe Range Km",
+            "type": "number"
+          },
+          "max_detour_min": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "허용 추가 시간(분)",
+            "title": "Max Detour Min"
+          },
+          "max_detour_km": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "허용 추가 거리(km)",
+            "title": "Max Detour Km"
+          },
+          "sort_by": {
+            "default": "price",
+            "description": "기본 price=가격 우선, detour_time=추가 시간 우선",
+            "enum": [
+              "price",
+              "detour_time"
+            ],
+            "title": "Sort By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidates",
+          "fuel_type",
+          "safe_range_km"
+        ],
+        "title": "RecommendationRequest",
+        "type": "object"
+      },
+      "output_schema": {
+        "$defs": {
+          "CandidateEvaluation": {
+            "additionalProperties": false,
+            "description": "조회·경로 평가 한 건. 비용 미확인이나 제공사 실패도 같은 구조로 보존한다.",
+            "properties": {
+              "station_id": {
+                "description": "Opinet 주유소 ID",
+                "minLength": 1,
+                "title": "Station Id",
+                "type": "string"
+              },
+              "station": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StationDetails"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "실제 상세 조회 결과"
+              },
+              "eligible": {
+                "default": false,
+                "description": "입력의 과거 판정값; 추천 시 다시 검사함",
+                "title": "Eligible",
+                "type": "boolean"
+              },
+              "reason_codes": {
+                "description": "조회 실패·제외 사유",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Reason Codes",
+                "type": "array"
+              },
+              "reach_distance_m": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "실제 접근 거리(m)",
+                "title": "Reach Distance M"
+              },
+              "detour_distance_m": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "추가 거리(m)",
+                "title": "Detour Distance M"
+              },
+              "detour_duration_s": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "추가 시간(초)",
+                "title": "Detour Duration S"
+              },
+              "raw_detour_distance_m": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "보정 전 경유-기본 거리(m)",
+                "title": "Raw Detour Distance M"
+              },
+              "raw_detour_duration_s": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "보정 전 경유-기본 시간(초)",
+                "title": "Raw Detour Duration S"
+              },
+              "negative_delta_observed": {
+                "default": false,
+                "description": "음수 차이 관찰 여부",
+                "title": "Negative Delta Observed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "station_id"
+            ],
+            "title": "CandidateEvaluation",
+            "type": "object"
+          },
+          "RecommendationResult": {
+            "description": "평가한 집합 안의 추천·정렬·제외 근거. 전체 경로 최저가를 주장하지 않는다.",
+            "properties": {
+              "recommended": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CandidateEvaluation"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ranked_candidates": {
+                "items": {
+                  "$ref": "#/$defs/CandidateEvaluation"
+                },
+                "title": "Ranked Candidates",
+                "type": "array"
+              },
+              "excluded_candidates": {
+                "items": {
+                  "$ref": "#/$defs/CandidateEvaluation"
+                },
+                "title": "Excluded Candidates",
+                "type": "array"
+              },
+              "sort_by": {
+                "enum": [
+                  "price",
+                  "detour_time"
+                ],
+                "title": "Sort By",
+                "type": "string"
+              },
+              "ranking_fields": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Ranking Fields",
+                "type": "array"
+              },
+              "scope": {
+                "const": "evaluated_candidates_only",
+                "default": "evaluated_candidates_only",
+                "title": "Scope",
+                "type": "string"
+              }
+            },
+            "required": [
+              "recommended",
+              "ranked_candidates",
+              "excluded_candidates",
+              "sort_by",
+              "ranking_fields"
+            ],
+            "title": "RecommendationResult",
+            "type": "object"
+          },
+          "StationDetails": {
+            "additionalProperties": false,
+            "description": "가격 시각과 원본에서 확인한 주소·브랜드·시설만 포함하는 상세 정보.",
+            "properties": {
+              "longitude": {
+                "description": "WGS84 경도(도)",
+                "maximum": 180,
+                "minimum": -180,
+                "title": "Longitude",
+                "type": "number"
+              },
+              "latitude": {
+                "description": "WGS84 위도(도)",
+                "maximum": 90,
+                "minimum": -90,
+                "title": "Latitude",
+                "type": "number"
+              },
+              "station_id": {
+                "title": "Station Id",
+                "type": "string"
+              },
+              "name": {
+                "title": "Name",
+                "type": "string"
+              },
+              "fuel_type": {
+                "enum": [
+                  "gasoline",
+                  "diesel"
+                ],
+                "title": "Fuel Type",
+                "type": "string"
+              },
+              "price_krw_per_l": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Krw Per L"
+              },
+              "price_observed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Price Observed At"
+              },
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "brand": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Brand"
+              },
+              "facilities": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": "Facilities",
+                "type": "object"
+              }
+            },
+            "required": [
+              "longitude",
+              "latitude",
+              "station_id",
+              "name",
+              "fuel_type",
+              "price_krw_per_l",
+              "price_observed_at",
+              "address",
+              "brand",
+              "facilities"
+            ],
+            "title": "StationDetails",
+            "type": "object"
+          },
+          "ToolError": {
+            "description": "사용자에게 노출 가능한 오류 분류와 재시도·재계획 가능 여부.",
+            "properties": {
+              "code": {
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "title": "Message",
+                "type": "string"
+              },
+              "retryable": {
+                "default": false,
+                "title": "Retryable",
+                "type": "boolean"
+              },
+              "replan_allowed": {
+                "default": false,
+                "title": "Replan Allowed",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ToolError",
+            "type": "object"
+          },
+          "ToolMeta": {
+            "description": "호출 식별·지연시간·완료 시각. 데이터 자체의 기준시각과는 별개다.",
+            "properties": {
+              "provider": {
+                "title": "Provider",
+                "type": "string"
+              },
+              "request_id": {
+                "title": "Request Id",
+                "type": "string"
+              },
+              "elapsed_ms": {
+                "minimum": 0,
+                "title": "Elapsed Ms",
+                "type": "number"
+              },
+              "fetched_at": {
+                "format": "date-time",
+                "title": "Fetched At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "request_id",
+              "elapsed_ms",
+              "fetched_at"
+            ],
+            "title": "ToolMeta",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RecommendationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ToolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/$defs/ToolMeta"
+          }
+        },
+        "required": [
+          "ok",
+          "tool_name",
+          "data",
+          "error",
+          "meta"
+        ],
+        "title": "ToolResult[RecommendationResult]",
+        "type": "object"
+      },
+      "error_codes": [
+        "INVALID_INPUT",
+        "INVALID_RESPONSE"
+      ],
+      "next_fields": [
+        "data.recommended",
+        "data.excluded_candidates",
+        "data.scope"
+      ]
+    }
+  }
+}

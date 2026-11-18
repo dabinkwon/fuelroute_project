@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
-> **현재 상태:** GMS·외부 API 3종과 안전 구간 후보 검색·실제 도달·우회비용 연결 검증 완료<br>
-> **구현 상태:** 기본 서버·개별 조회 Tool·경로 검색점·제약 평가 구현. 전체 Agent 연결은 후속
+> **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
+> **구현 상태:** 명시적 입력의 추천 CLI 실호출 성공. 전체 LangGraph·API·화면 연결은 후속
 
 ## 단계별 진행 기록
 
@@ -14,6 +14,7 @@
 | 3. 프론트·배포 설정 | 서비스 소개 HTML/CSS, Netlify 설정, 기존 배포 이력 | 정적 파일·대표 URL·배포 설정 확인 | `5f4c195` |
 | 4. GMS·외부 API 연동 | GMS 검증, Opinet·Kakao·휴게소 조회, 좌표 변환, 공통 오류 처리 | 모의 테스트 45개 통과, 기존 실호출 기록 보존 | `609bd11` |
 | 5. 경로 기반 후보 평가 | 검색점 보간, 안전 구간 후보 검색, 실제 도달·우회비용 판정, CLI | 테스트 84개 통과. 기존 실호출에서 후보 16곳 중 3곳 평가 | `1a6a8e9` |
+| 6. 추천·재계획·Tool 계약 | 제약 우선 정렬, 최대 2회 재계획·캐시, 일곱 Tool 등록·스키마 출력 | 테스트 110개·Ruff 통과, 추천 실호출 성공. [검증 기록](docs/verification/2026-11-18-recommendation.json) | 작업 트리 반영, 미커밋 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -131,6 +132,10 @@ project-root/
 │   ├── coordinates.py  # WGS84 ↔ KATEC TM128, 검색용 직선거리
 │   ├── routing.py      # 도로 누적거리와 검색점 보간
 │   ├── route_spike.py  # 후보 연결·실제 도달거리·우회비용 검증
+│   ├── recommendation.py # 제약 재판정·가격/시간 우선 추천
+│   ├── planning.py     # 최대 2회 재계획·캐시·평가 예산
+│   ├── route_contracts.py # 정규화한 거리·시간·구간 비용
+│   ├── tool_registry.py # 일곱 Tool 등록·입출력·실패 계약
 │   ├── tools.py        # 후보·ID 상세·휴게소 정규화 조회, LangChain 등록
 │   ├── gms.py          # GMS 응답·구조화 출력·Tool 왕복 검증
 │   └── probes.py       # 외부 데이터 API의 독립 호출 검증
@@ -173,7 +178,7 @@ Linux/macOS의 Bash에서는 가상환경 활성화 명령을 `source .venv/bin/
 python -m uvicorn fuelroute.main:app --reload
 ```
 
-`http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 현재 `/health`만 구현되어 있으며 Chat·추천·계획 CRUD는 설계 단계다.
+`http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 현재 HTTP 경로는 `/health`만 구현했다. 추천은 아래 CLI에서 실행하며 Chat·추천 HTTP API·계획 CRUD 연결은 후속 단계다.
 
 ### API별 독립 검증
 
@@ -222,6 +227,22 @@ python -m fuelroute route-spike --origin 128.6014 35.8714 --destination 126.9780
 
 실제 검증에서 주유소 16곳 중 3곳을 평가했고 15분 상한을 만족했다. 같은 실제 거리·시간에 5분 상한을 적용하는 로컬 재판정에서는 3곳 모두 제외됐다. [연결 실험 기록](docs/verification/2026-11-18-route-spike.json)과 [API 한도·이용조건](docs/API_USAGE.md)을 참고한다. 후보가 없거나 모두 제외되면 실험 결과의 `status=no_eligible_candidates`로 명시하며, 하위 조회 실패는 호출 기록에 보존한다.
 
+### 추천·재계획 실행
+
+```bash
+python -m fuelroute recommend --origin 128.6014 35.8714 --destination 126.9780 37.5665 --current-fuel-l 15 --reserve-fuel-l 3 --efficiency-kmpl 12 --fuel-type gasoline --max-detour-min 15 --max-replans 2 --max-evaluations 9 --sort-by price
+# HTTP·LLM 호출 없이 일곱 Tool의 입력·출력·실패 계약 확인
+python -m fuelroute tool-schemas
+```
+
+안전·유종·우회 상한을 먼저 적용한 뒤 기본 가격→추가 시간→추가 거리→ID로 정렬한다. `--sort-by detour_time`이면 추가 시간→추가 거리→가격→ID 순서다. 임의 가중치는 사용하지 않는다. 후보 평가 순서는 검색 가격→ID이며 두 정렬 옵션 모두 **평가한 후보 집합** 안에서 비교한다.
+
+추천이 없으면 이미 조회한 미평가 후보를 먼저 사용하고 없을 때 앞쪽 검색점 한 곳을 추가한다. 재계획은 최대 2회이며 `--max-replans 0`이면 최초 회차만 실행한다. `--max-candidates`는 회차당 기본 3곳(1~10), `--max-evaluations`는 전체 기본 9곳(1~30)이다. 연료·우회 상한을 완화하지 않으며 인증·설정·호출 제한 오류는 중단한다.
+
+동일 실행의 경로·상세·검색 결과를 캐시하고 종료 시 폐기한다. 기본 최대 호출은 Opinet 14회·Kakao 19회·GMS 0회다. 상한을 늘리면 호출 수도 늘어난다. 적합 후보가 없으면 `status=no_recommendation`과 종료 사유·제외 근거를 반환한다. 전체 경로 최저가를 보장하지 않는다.
+
+실제 추천에서는 후보 16곳 중 3곳을 평가해 불정주유소를 선택했다. Opinet 6회·Kakao 7회로 최초 회차에서 종료했다. 재계획·캐시·오류 분기는 모의 응답으로 검증했다. [추천 검증 기록](docs/verification/2026-11-18-recommendation.json), [Tool 계약](docs/TOOL_CONTRACTS.md), [전체 JSON schema](docs/TOOL_CONTRACTS.json)를 참고한다.
+
 ### 로컬 검증
 
 ```bash
@@ -237,6 +258,7 @@ python -m pip check
 - [`docs/PRD.md`](docs/PRD.md) — 서비스 기획, 기능 요구사항, MVP 범위
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 기술 설계안, 핵심 계산, 외부 API 의존성
 - [`docs/API_USAGE.md`](docs/API_USAGE.md) — 계정 한도, 공개 이용조건·출처, 현재 적용 범위
+- [`docs/TOOL_CONTRACTS.md`](docs/TOOL_CONTRACTS.md) — 일곱 Tool 실행 계약과 기계 판독용 JSON schema
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 개발 작업의 우선순위·완료 기준·상태와 AI 구현·검증 기록
 - [`docs/TASKS.md`](docs/TASKS.md) — 내가 앞으로 직접 해야 할 일
 - [`docs/daily/2026-11-18.md`](docs/daily/2026-11-18.md) — 내가 실제로 실행한 일과 확인한 결과
@@ -257,7 +279,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-현재는 **안전 구간 후보 검색과 실제 도달·우회비용 연결 검증을 마치고 추천·재계획 정책을 준비하는 단계**다.
+현재는 **추천·유한한 재계획 실행기와 Tool 계약을 구현하고 전체 LangGraph 연결을 준비하는 단계**다.
 
 완료된 내용:
 
@@ -277,14 +299,15 @@ python -m pip check
 - SQLite 저장 설계의 세션 삭제·계획 보존·이벤트 수정 금지 검증
 - 공개 API 이용조건·출처·현재 계정 한도와 실험별 호출 상한 기록
 - 도로별 거리 기반 검색점 보간, 안전 구간 후보 검색, 실제 접근·경유 비용 평가
-- 오프라인 테스트 84개, Ruff 검사 통과
+- 제약 우선 추천 정렬, 최대 2회 재계획·실행별 캐시·평가 예산 구현
+- 일곱 Tool의 상세 설명·입출력·실패 코드·다음 필드를 등록하고 CLI에서 명세 출력
+- 실제 추천 성공, 오프라인 테스트 110개·Ruff 검사 통과
 
 아직 완료되지 않은 내용:
 
-- 검색점 전략·후보 평가 범위의 고도화와 최종 추천 정책
+- 검색점 전략·후보 평가 범위의 고도화
 - 같은 주유소·진행 방향임을 입증하는 휴게소 매칭 고도화
 - 공개 데이터 재배포 범위를 확대할 때의 상세 이용허락 조건 재확인 및 공유 일일 한도 집계
-- 추천 우선순위와 비용 계산식 최종 확정
 - 전체 LangGraph 흐름, SQLite Repository·CRUD, UI 연동 구현
 
 개발은 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)의 상태와 완료 기준을 따른다. 사용자에게 직접 필요한 작업은 TASKS에 기록한다.

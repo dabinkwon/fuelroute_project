@@ -73,10 +73,11 @@ class Settings(BaseSettings):
     def missing(self, provider: str) -> list[str]:
         """지정 제공사의 호출에 필요한 미설정 환경변수 이름만 반환한다.
 
-        provider는 gms/opinet/kakao/rest_area 중 하나다. 반환 목록이 비면 설정은
-        존재하지만 인증 성공을 뜻하지 않는다. 미지원 이름은 KeyError, 부작용은 없다.
+        provider는 gms/opinet/kakao/rest_area 또는 키가 필요 없는 local이다. 반환 목록이
+        비어도 인증 성공을 뜻하지 않는다. 미지원 이름은 KeyError, 부작용은 없다.
         """
         required = {
+            "local": (),
             "gms": ("gms_api_key", "gms_base_url", "gms_model"),
             "opinet": ("opinet_api_key",),
             "kakao": ("kakao_rest_api_key",),

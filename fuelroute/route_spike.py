@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolResult
 from fuelroute.probes import Coordinate, ProbeFailure, probe_route, run_probe
+from fuelroute.route_contracts import DrivingRoute
 from fuelroute.routing import build_route_path, generate_search_points
 from fuelroute.services import FuelConditions, calculate_safe_range
 from fuelroute.tools import FuelTools
@@ -51,24 +52,17 @@ def _checked_cost(data: dict) -> tuple[_Cost, list[_Cost]]:
 
     거리·시간은 0 이상 정수 m/s이고 원본 요약과 같아야 한다. 0m 접근 경로는 유효하다.
     잘못된 구조·타입·구간 거리 합계는 ValueError이며 외부 호출·저장은 없다.
-    반환 비용과 구간 목록은 안전거리·우회 상한 계산에만 사용한다.
+    반환 비용과 구간 목록은 안전거리·우회 상한 계산에만 사용한다. Tool 레지스트리의
+    정규화된 DrivingRoute dict도 같은 검증을 거쳐 사용할 수 있다.
     """
     try:
-        route = data["response"]["routes"][0]
-        summary = route["summary"]
-        cost = _Cost.model_validate(data)
-        sections = [
-            _Cost(distance_m=part["distance"], duration_s=part["duration"])
-            for part in route["sections"]
-        ]
-        if (
-            route.get("result_code") != 0
-            or summary["distance"] != cost.distance_m
-            or summary["duration"] != cost.duration_s
-            or not sections
-            or sum(part.distance_m for part in sections) != cost.distance_m
-        ):
-            raise ValueError("경로 비용과 구간 합계 불일치")
+        normalized = (
+            DrivingRoute.from_probe_data(data)
+            if "response" in data
+            else DrivingRoute.model_validate(data)
+        )
+        cost = _Cost(distance_m=normalized.distance_m, duration_s=normalized.duration_s)
+        sections = [_Cost(**part.model_dump()) for part in normalized.legs]
         return cost, sections
     except (KeyError, IndexError, TypeError, AttributeError) as exc:
         raise ValueError("경로 비용의 필수 구조를 확인하세요.") from exc

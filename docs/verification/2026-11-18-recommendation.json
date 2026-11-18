@@ -1,0 +1,531 @@
+{
+  "date": "2026-11-18",
+  "implementation": "TASK-010/011/012",
+  "live": {
+    "verification_type": "real_api_call",
+    "command": "python -m fuelroute recommend --origin 128.6014 35.8714 --destination 126.9780 37.5665 --current-fuel-l 15 --reserve-fuel-l 3 --efficiency-kmpl 12 --fuel-type gasoline --max-detour-min 15",
+    "input": {
+      "origin": [
+        128.6014,
+        35.8714
+      ],
+      "destination": [
+        126.978,
+        37.5665
+      ],
+      "current_fuel_l": 15,
+      "reserve_fuel_l": 3,
+      "avg_efficiency_kmpl": 12,
+      "fuel_type": "gasoline",
+      "max_detour_min": 15,
+      "max_replans": 2,
+      "max_evaluations": 9,
+      "max_candidates": 3,
+      "sort_by": "price"
+    },
+    "gms_calls": 0,
+    "result": {
+      "ok": true,
+      "tool_name": "recommend_route",
+      "data": {
+        "status": "recommended",
+        "recommendation": {
+          "recommended": {
+            "station_id": "A0025644",
+            "station": {
+              "longitude": 128.14957858305732,
+              "latitude": 36.64089251721979,
+              "station_id": "A0025644",
+              "name": "불정주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1829.0,
+              "price_observed_at": "2026-11-18T14:50:17+09:00",
+              "address": "경북 문경시 문경대로 949",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": true,
+            "reason_codes": [],
+            "reach_distance_m": 115950.0,
+            "detour_distance_m": 6273.0,
+            "detour_duration_s": 664.0,
+            "raw_detour_distance_m": 6273.0,
+            "raw_detour_duration_s": 664.0,
+            "negative_delta_observed": false
+          },
+          "ranked_candidates": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-18T14:50:17+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 6273.0,
+              "detour_duration_s": 664.0,
+              "raw_detour_distance_m": 6273.0,
+              "raw_detour_duration_s": 664.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-18T14:39:45+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 597.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 597.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "excluded_candidates": [
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-18T13:46:30+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "DETOUR_TIME_EXCEEDED"
+              ],
+              "reach_distance_m": 95408.0,
+              "detour_distance_m": 2712.0,
+              "detour_duration_s": 912.0,
+              "raw_detour_distance_m": 2712.0,
+              "raw_detour_duration_s": 912.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "sort_by": "price",
+          "ranking_fields": [
+            "price_krw_per_l",
+            "detour_duration_s",
+            "detour_distance_m",
+            "station_id"
+          ],
+          "scope": "evaluated_candidates_only"
+        },
+        "safe_range_km": 144.0,
+        "base_distance_m": 292352,
+        "base_duration_s": 13517,
+        "replan_count": 0,
+        "stop_reason": "recommendation_found",
+        "rounds": [
+          {
+            "round": 0,
+            "trigger": "initial",
+            "new_search_points": [
+              {
+                "longitude": 127.98487014575099,
+                "latitude": 36.78585452014204,
+                "route_distance_m": 139000.0
+              },
+              {
+                "longitude": 128.1228518944379,
+                "latitude": 36.67863814734674,
+                "route_distance_m": 119000.0
+              },
+              {
+                "longitude": 128.20059875822358,
+                "latitude": 36.48058691730905,
+                "route_distance_m": 94000.0
+              }
+            ],
+            "evaluated_station_ids": [
+              "A0025644",
+              "A0023849",
+              "A0026341"
+            ],
+            "eligible_count": 2
+          }
+        ],
+        "unique_candidate_count": 16,
+        "duplicate_hits_removed": 0,
+        "unevaluated_candidate_count": 13,
+        "api_call_counts": {
+          "kakao": 7,
+          "opinet": 6
+        },
+        "cache_hits": {},
+        "calls": [
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": null
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "8f9fb774-67ee-409d-b465-693fdf4fcc68",
+              "elapsed_ms": 1671.998,
+              "fetched_at": "2026-11-18T08:38:54.011922Z"
+            }
+          },
+          {
+            "tool_name": "search_gas_stations",
+            "input": {
+              "longitude": 127.98487014575099,
+              "latitude": 36.78585452014204,
+              "route_distance_m": 139000.0,
+              "radius_m": 5000,
+              "fuel_type": "gasoline"
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "opinet",
+              "request_id": "edf16ae5-8e54-428e-b8eb-4cbcb290e97d",
+              "elapsed_ms": 195.735,
+              "fetched_at": "2026-11-18T08:38:54.210404Z"
+            }
+          },
+          {
+            "tool_name": "search_gas_stations",
+            "input": {
+              "longitude": 128.1228518944379,
+              "latitude": 36.67863814734674,
+              "route_distance_m": 119000.0,
+              "radius_m": 5000,
+              "fuel_type": "gasoline"
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "opinet",
+              "request_id": "e505374b-6286-4107-a826-ab060aace0f8",
+              "elapsed_ms": 137.333,
+              "fetched_at": "2026-11-18T08:38:54.350397Z"
+            }
+          },
+          {
+            "tool_name": "search_gas_stations",
+            "input": {
+              "longitude": 128.20059875822358,
+              "latitude": 36.48058691730905,
+              "route_distance_m": 94000.0,
+              "radius_m": 5000,
+              "fuel_type": "gasoline"
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "opinet",
+              "request_id": "c268b385-687f-40c1-ac71-a509fb3aac2d",
+              "elapsed_ms": 136.401,
+              "fetched_at": "2026-11-18T08:38:54.486063Z"
+            }
+          },
+          {
+            "tool_name": "get_station_details",
+            "input": {
+              "station_id": "A0025644",
+              "fuel_type": "gasoline"
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "opinet",
+              "request_id": "df8d89b2-8c80-4cfb-b1f7-b1d7fd5312e4",
+              "elapsed_ms": 176.47,
+              "fetched_at": "2026-11-18T08:38:54.663601Z"
+            }
+          },
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979
+              },
+              "via": null
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "23b101a4-7a30-452f-b43c-aeaa4ec23e19",
+              "elapsed_ms": 416.995,
+              "fetched_at": "2026-11-18T08:38:55.079626Z"
+            }
+          },
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979
+              }
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "abcdcafd-9277-4b84-8ba7-f7cf10e7b424",
+              "elapsed_ms": 1353.776,
+              "fetched_at": "2026-11-18T08:38:56.433693Z"
+            }
+          },
+          {
+            "tool_name": "get_station_details",
+            "input": {
+              "station_id": "A0023849",
+              "fuel_type": "gasoline"
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "opinet",
+              "request_id": "2c60d0e9-86fd-4643-8165-5ea93f751e1e",
+              "elapsed_ms": 62.455,
+              "fetched_at": "2026-11-18T08:38:56.496776Z"
+            }
+          },
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643
+              },
+              "via": null
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "de7e658c-4745-49e9-afaf-37ba7a9ea16d",
+              "elapsed_ms": 355.914,
+              "fetched_at": "2026-11-18T08:38:56.851044Z"
+            }
+          },
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643
+              }
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "91ff8c18-5257-4036-a54c-968ce2aaa48a",
+              "elapsed_ms": 1426.388,
+              "fetched_at": "2026-11-18T08:38:58.279129Z"
+            }
+          },
+          {
+            "tool_name": "get_station_details",
+            "input": {
+              "station_id": "A0026341",
+              "fuel_type": "gasoline"
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "opinet",
+              "request_id": "3e0dfcca-cdef-4e55-ba16-7988d7602a1f",
+              "elapsed_ms": 66.134,
+              "fetched_at": "2026-11-18T08:38:58.344771Z"
+            }
+          },
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282
+              },
+              "via": null
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "ddb44f2f-d78d-473d-9355-0c107d7cbe6d",
+              "elapsed_ms": 395.116,
+              "fetched_at": "2026-11-18T08:38:58.740454Z"
+            }
+          },
+          {
+            "tool_name": "probe_route",
+            "input": {
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282
+              }
+            },
+            "ok": true,
+            "error": null,
+            "meta": {
+              "provider": "kakao",
+              "request_id": "7290a49a-88f6-4780-b0b3-4c743bf8a336",
+              "elapsed_ms": 1134.277,
+              "fetched_at": "2026-11-18T08:38:59.874677Z"
+            }
+          }
+        ]
+      },
+      "error": null,
+      "meta": {
+        "provider": "kakao+opinet",
+        "request_id": "e4aa8b3e-9605-4a16-b237-1ed2c49afead",
+        "elapsed_ms": 7536.562,
+        "fetched_at": "2026-11-18T08:38:59.876678Z"
+      }
+    },
+    "next_fields": [
+      "data.recommendation.recommended",
+      "data.recommendation.excluded_candidates",
+      "data.replan_count",
+      "data.stop_reason"
+    ]
+  },
+  "local_policy_replay": {
+    "verification_type": "local_replay_of_previous_live_costs",
+    "source": "docs/verification/2026-11-18-route-spike.json",
+    "api_calls": 0,
+    "safe_range_km": 144,
+    "results": {
+      "price": {
+        "sort_by": "price",
+        "max_detour_min": 15,
+        "recommended_id": "A0025644",
+        "ranked_ids": [
+          "A0025644",
+          "A0026341",
+          "A0023849"
+        ],
+        "excluded": []
+      },
+      "detour_time": {
+        "sort_by": "detour_time",
+        "max_detour_min": 15,
+        "recommended_id": "A0026341",
+        "ranked_ids": [
+          "A0026341",
+          "A0025644",
+          "A0023849"
+        ],
+        "excluded": []
+      },
+      "strict": {
+        "sort_by": "price",
+        "max_detour_min": 5,
+        "recommended_id": null,
+        "ranked_ids": [],
+        "excluded": [
+          {
+            "station_id": "A0025644",
+            "reason_codes": [
+              "DETOUR_TIME_EXCEEDED"
+            ]
+          },
+          {
+            "station_id": "A0023849",
+            "reason_codes": [
+              "DETOUR_TIME_EXCEEDED"
+            ]
+          },
+          {
+            "station_id": "A0026341",
+            "reason_codes": [
+              "DETOUR_TIME_EXCEEDED"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "offline_verification": {
+    "tests_passed": 110,
+    "ruff": "passed",
+    "cli_schemas_match_static": true,
+    "mock_cases": [
+      "cached_candidates",
+      "earlier_search_point",
+      "replan_limit",
+      "evaluation_budget",
+      "empty_results",
+      "cache_reuse_and_isolation",
+      "auth_stop",
+      "rate_stop",
+      "invalid_input",
+      "invalid_response"
+    ],
+    "http_calls": 0,
+    "gms_calls": 0
+  },
+  "limits": [
+    "evaluated_candidates_only",
+    "live_success_required_no_replan",
+    "replan_failures_verified_with_mocks",
+    "full_langgraph_http_ui_not_implemented"
+  ]
+}

@@ -11,8 +11,10 @@ from pydantic import ValidationError
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolError, ToolMeta, ToolResult, utc_now
 from fuelroute.gms import probe_gms
+from fuelroute.planning import PlanningRequest, recommend_route
 from fuelroute.probes import Coordinate, OpinetSearch, probe_opinet, probe_rest_area, probe_route
 from fuelroute.route_spike import RouteSpikeRequest, run_route_spike
+from fuelroute.tool_registry import ToolRegistry
 from fuelroute.tools import FuelTools
 
 
@@ -21,11 +23,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     반환 parser는 argparse 기본 도움말과 타입 검사를 제공한다. KATEC x/y와
     WGS84 경도/위도를 다른 옵션으로 받는다. 외부 호출·파일 생성은 없다.
-    route-spike는 좌표·연료·검색/평가 상한을 받는 연결 실험이다. 예: doctor 또는 --help.
+    route-spike는 연결 실험, recommend는 유한한 재계획과 추천, tool-schemas는 정적 계약
+    출력이다. 예: doctor 또는 --help. 명령을 정의하는 과정에서 HTTP를 실행하지 않는다.
     """
     parser = argparse.ArgumentParser(description="FuelRoute 환경·API 독립 검증")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="설정된 변수/누락 항목만 확인 (호출·키 출력 없음)")
+    commands.add_parser("tool-schemas", help="일곱 Tool의 입력·출력 계약 출력 (호출 없음)")
     gms = commands.add_parser("gms", help="GMS 텍스트·조건 추출·Tool 왕복 검증")
     gms.add_argument("--mode", choices=["text", "conditions", "tool"], default="text")
     nearby = commands.add_parser("opinet-nearby", help="KATEC 직접 입력으로 Opinet 인증 확인")
@@ -68,6 +72,15 @@ def build_parser() -> argparse.ArgumentParser:
     spike.add_argument("--max-candidates", type=int, default=3)
     spike.add_argument("--max-detour-min", type=float)
     spike.add_argument("--max-detour-km", type=float)
+    recommend = commands.add_parser(
+        "recommend",
+        parents=[spike],
+        add_help=False,
+        help="캐시·최대 두 번의 재계획으로 평가 후보 중 추천",
+    )
+    recommend.add_argument("--max-replans", type=int, default=2)
+    recommend.add_argument("--max-evaluations", type=int, default=9)
+    recommend.add_argument("--sort-by", choices=["price", "detour_time"], default="price")
     return parser
 
 
@@ -77,7 +90,8 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
     doctor는 네트워크를 사용하지 않고, 나머지는 필요한 설정이 있을 때만 호출한다.
     HTTP 클라이언트는 명령 종료 시 닫는다. 외부 API 실패를 성공 종료로 감추지 않는다.
     예: opinet-detail은 검색 함수 없이 입력 ID로 상세 요청만 보낸다. route-spike는
-    명시적 호출 상한 안에서 경로·후보를 연결하며 LLM이나 DB를 사용하지 않는다.
+    명시적 호출 상한 안에서 경로·후보를 연결한다. recommend는 캐시·재계획을 포함하며
+    tool-schemas는 HTTP 없이 계약만 반환한다. 두 명령도 LLM이나 DB를 사용하지 않는다.
     """
     if args.command == "doctor":
         status = {
@@ -99,9 +113,19 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
     if args.command == "gms":
         return await probe_gms(settings, args.mode)
     async with httpx.AsyncClient() as client:
+        if args.command == "tool-schemas":
+            return ToolResult(
+                ok=True,
+                tool_name="tool_schemas",
+                error=None,
+                data={"contract_version": 1, "tools": ToolRegistry(settings, client).contracts()},
+                meta=ToolMeta(
+                    provider="local", request_id="tool-schemas", elapsed_ms=0, fetched_at=utc_now()
+                ),
+            )
         tools = FuelTools(settings, client)
-        if args.command == "route-spike":
-            request = RouteSpikeRequest(
+        if args.command in {"route-spike", "recommend"}:
+            values = dict(
                 origin=Coordinate(longitude=args.origin[0], latitude=args.origin[1]),
                 destination=Coordinate(longitude=args.destination[0], latitude=args.destination[1]),
                 current_fuel_l=args.current_fuel_l,
@@ -114,7 +138,14 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
                 max_detour_min=args.max_detour_min,
                 max_detour_km=args.max_detour_km,
             )
-            return await run_route_spike(request, settings, client)
+            if args.command == "recommend":
+                values.update(
+                    max_replans=args.max_replans,
+                    max_evaluations=args.max_evaluations,
+                    sort_by=args.sort_by,
+                )
+                return await recommend_route(PlanningRequest(**values), settings, client)
+            return await run_route_spike(RouteSpikeRequest(**values), settings, client)
         if args.command == "stations":
             return await tools.search_gas_stations(
                 args.point[0], args.point[1], args.fuel_type, args.radius_m
