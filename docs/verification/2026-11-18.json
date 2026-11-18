@@ -1,0 +1,794 @@
+{
+  "date_kst": "2026-11-18",
+  "scope": "today API verification, independent Tools and design validation; deployment unchanged",
+  "results": {
+    "gms_text": {
+      "ok": true,
+      "tool_name": "probe_gms_text",
+      "meta": {
+        "provider": "gms",
+        "request_id": "d7300167-426b-4cea-b9e8-1c7bef78f352",
+        "elapsed_ms": 907.664,
+        "fetched_at": "2026-11-18T05:46:51.995980Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "model": "gpt-5.4-mini",
+        "mode": "text",
+        "content": "FuelRoute 연결 확인",
+        "usage": {
+          "input_tokens": 23,
+          "output_tokens": 7,
+          "total_tokens": 30,
+          "input_token_details": {
+            "audio": 0,
+            "cache_read": 0
+          },
+          "output_token_details": {
+            "audio": 0,
+            "reasoning": 0
+          }
+        }
+      }
+    },
+    "gms_conditions": {
+      "ok": true,
+      "tool_name": "probe_gms_conditions",
+      "meta": {
+        "provider": "gms",
+        "request_id": "013d04db-8fab-4a22-afc8-93ace695a7ca",
+        "elapsed_ms": 2501.578,
+        "fetched_at": "2026-11-18T05:46:54.499795Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "model": "gpt-5.4-mini",
+        "mode": "conditions",
+        "complete": {
+          "current_fuel_l": 15.0,
+          "reserve_fuel_l": 3.0,
+          "avg_efficiency_kmpl": 12.0
+        },
+        "missing": {
+          "current_fuel_l": null,
+          "reserve_fuel_l": null,
+          "avg_efficiency_kmpl": null
+        }
+      }
+    },
+    "gms_tool": {
+      "ok": true,
+      "tool_name": "probe_gms_tool",
+      "meta": {
+        "provider": "gms",
+        "request_id": "e464b23d-5c80-4ab5-b339-c38c56d56ff7",
+        "elapsed_ms": 2718.689,
+        "fetched_at": "2026-11-18T05:46:57.221430Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "model": "gpt-5.4-mini",
+        "mode": "tool",
+        "tool_name": "calculate_safe_range",
+        "arguments": {
+          "current_fuel_l": 15.0,
+          "reserve_fuel_l": 3.0,
+          "avg_efficiency_kmpl": 12.0
+        },
+        "safe_range_km": 144.0,
+        "content": "`calculate_safe_range` 결과: **144.0 km**\n\n계산 기준:\n- 현재 연료: 15L\n- 안전 잔량: 3L\n- 실제 주행에 사용할 수 있는 연료: 15 - 3 = **12L**\n- 연비: 12 km/L\n- 안전 주행 가능 거리: 12 × 12 = **144 km**\n\n단위 설명:\n- 입력 연료 단위는 **L(리터)**\n- 연비 단위는 **km/L(리터당 킬로미터)**\n- 결과 단위는 **km(킬로미터)** 입니다.",
+        "usage": {
+          "input_tokens": 94,
+          "output_tokens": 139,
+          "total_tokens": 233,
+          "input_token_details": {
+            "audio": 0,
+            "cache_read": 0
+          },
+          "output_token_details": {
+            "audio": 0,
+            "reasoning": 0
+          }
+        }
+      }
+    },
+    "opinet_gasoline": {
+      "ok": true,
+      "tool_name": "probe_opinet_nearby",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "7d0945be-9597-4846-a93b-496a618685ef",
+        "elapsed_ms": 250.554,
+        "fetched_at": "2026-11-18T05:49:19.553180Z"
+      },
+      "error": null,
+      "count": 55,
+      "sample": {
+        "items": [
+          {
+            "UNI_ID": "A0000894",
+            "POLL_DIV_CD": "SOL",
+            "OS_NM": "㈜방배동주유소",
+            "PRICE": 1829,
+            "DISTANCE": 4771.9,
+            "GIS_X_COOR": 310668.2,
+            "GIS_Y_COOR": 542255.0
+          }
+        ]
+      },
+      "input": {
+        "katec_x_m": 314681.7,
+        "katec_y_m": 544837.1,
+        "radius_m": 5000,
+        "fuel_type": "gasoline"
+      }
+    },
+    "opinet_detail": {
+      "ok": true,
+      "tool_name": "probe_opinet_detail",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "0e4f53d7-6a32-4d1c-99db-f7a8ef49e141",
+        "elapsed_ms": 66.636,
+        "fetched_at": "2026-11-18T05:49:19.621473Z"
+      },
+      "error": null,
+      "count": 1,
+      "sample": {
+        "items": [
+          {
+            "UNI_ID": "A0000894",
+            "POLL_DIV_CO": "SOL",
+            "GPOLL_DIV_CO": "   ",
+            "OS_NM": "㈜방배동주유소",
+            "VAN_ADR": "서울 서초구 방배동 475-17",
+            "NEW_ADR": "서울 서초구 효령로 29",
+            "TEL": "02-581-5179",
+            "SIGUNCD": "0121",
+            "LPG_YN": "N",
+            "MAINT_YN": "N",
+            "CAR_WASH_YN": "Y",
+            "KPETRO_YN": "N",
+            "CVS_YN": "N",
+            "GOOD_YN": "N",
+            "GOOD_YN5": "N",
+            "GIS_X_COOR": 310668.2,
+            "GIS_Y_COOR": 542255.0,
+            "OIL_PRICE": [
+              {
+                "PRODCD": "B034",
+                "PRICE": 2246,
+                "TRADE_DT": "20261114",
+                "TRADE_TM": "080711"
+              },
+              {
+                "PRODCD": "B027",
+                "PRICE": 1829,
+                "TRADE_DT": "20261114",
+                "TRADE_TM": "080711"
+              },
+              {
+                "PRODCD": "D047",
+                "PRICE": 1833,
+                "TRADE_DT": "20261114",
+                "TRADE_TM": "080711"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "opinet_diesel": {
+      "ok": true,
+      "tool_name": "probe_opinet_nearby",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "75ee6eb7-ce1c-4986-8da8-b6639310a256",
+        "elapsed_ms": 172.032,
+        "fetched_at": "2026-11-18T05:49:19.783490Z"
+      },
+      "error": null,
+      "count": 55,
+      "sample": {
+        "items": [
+          {
+            "UNI_ID": "A0010172",
+            "POLL_DIV_CD": "GSC",
+            "OS_NM": "㈜삼표에너지 아시아주유소",
+            "PRICE": 1828,
+            "DISTANCE": 3948.6,
+            "GIS_X_COOR": 318621.2,
+            "GIS_Y_COOR": 545112.4
+          }
+        ]
+      },
+      "input": {
+        "katec_x_m": 314681.7,
+        "katec_y_m": 544837.1,
+        "radius_m": 5000,
+        "fuel_type": "diesel"
+      }
+    },
+    "kakao_short": {
+      "ok": true,
+      "tool_name": "probe_route",
+      "meta": {
+        "provider": "kakao",
+        "request_id": "27624403-f972-4d6a-a745-107d69bc94a2",
+        "elapsed_ms": 155.634,
+        "fetched_at": "2026-11-18T05:47:19.867493Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "distance_m": 1991,
+        "duration_s": 427,
+        "road_count": 4,
+        "vertexes_sample": [
+          127.10763122680424,
+          37.40241072822385,
+          127.10675008536649,
+          37.4024220962682
+        ],
+        "provider_returned_coordinates": {
+          "origin": {
+            "name": "",
+            "x": 127.10763058573032,
+            "y": 37.40246478787756
+          },
+          "destination": {
+            "name": "",
+            "x": 127.11055204255132,
+            "y": 37.394196904517194
+          },
+          "waypoints": []
+        },
+        "serialized_provider_response_utf8_bytes": 3431,
+        "size_note": "Re-serialized compact JSON size, not HTTP wire bytes"
+      }
+    },
+    "kakao_via": {
+      "ok": true,
+      "tool_name": "probe_route",
+      "meta": {
+        "provider": "kakao",
+        "request_id": "9f44bec8-031b-47ee-8839-75b6b3e5cdb4",
+        "elapsed_ms": 67.391,
+        "fetched_at": "2026-11-18T05:47:19.940031Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "distance_m": 2072,
+        "duration_s": 604,
+        "road_count": 7,
+        "vertexes_sample": [
+          127.10763122680424,
+          37.40241072822385,
+          127.10863660151416,
+          37.40240029023456
+        ],
+        "provider_returned_coordinates": {
+          "origin": {
+            "name": "",
+            "x": 127.10763058573032,
+            "y": 37.40246478787756
+          },
+          "destination": {
+            "name": "",
+            "x": 127.11055204255132,
+            "y": 37.394196904517194
+          },
+          "waypoints": [
+            {
+              "name": "",
+              "x": 127.10859898981217,
+              "y": 37.39699355463836
+            }
+          ]
+        },
+        "serialized_provider_response_utf8_bytes": 4645,
+        "size_note": "Re-serialized compact JSON size, not HTTP wire bytes"
+      }
+    },
+    "kakao_long": {
+      "ok": true,
+      "tool_name": "probe_route",
+      "meta": {
+        "provider": "kakao",
+        "request_id": "eb53bedb-7628-4dd8-84b4-abac20a22db6",
+        "elapsed_ms": 1756.582,
+        "fetched_at": "2026-11-18T05:47:21.698650Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "distance_m": 292235,
+        "duration_s": 14525,
+        "road_count": 84,
+        "vertexes_sample": [
+          128.60113601009004,
+          35.87142441217717,
+          128.60113601009004,
+          35.87142441217717
+        ],
+        "provider_returned_coordinates": {
+          "origin": {
+            "name": "",
+            "x": 128.6013904943125,
+            "y": 35.87139609890403
+          },
+          "destination": {
+            "name": "",
+            "x": 126.97799195888547,
+            "y": 37.56649735000978
+          },
+          "waypoints": []
+        },
+        "serialized_provider_response_utf8_bytes": 95149,
+        "size_note": "Re-serialized compact JSON size, not HTTP wire bytes"
+      }
+    },
+    "rest_area_page1": {
+      "ok": true,
+      "tool_name": "probe_rest_area",
+      "meta": {
+        "provider": "rest_area",
+        "request_id": "01be0b3e-c594-49eb-aad1-5127090d4788",
+        "elapsed_ms": 76.227,
+        "fetched_at": "2026-11-18T05:48:19.762502Z"
+      },
+      "error": null,
+      "count": 10,
+      "sample": {
+        "items": [
+          {
+            "entrpsNm": "강릉(강릉)",
+            "roadKnd": "고속국도",
+            "roadRouteNo": "50",
+            "roadRouteNm": "영동선",
+            "roadRouteDrc": "하행",
+            "latitude": "37.758206",
+            "longitude": "128.806648",
+            "restAreaType": "일반휴게소",
+            "operOpenHhmm": "00:00",
+            "operCloseHhmm": "23:59",
+            "ocpatAr": "85218",
+            "prkplceCo": "244",
+            "crrpwrkYn": "N",
+            "oltYn": "Y",
+            "lpgYn": "Y",
+            "elctyYn": "Y",
+            "busTrnsitYn": "N",
+            "shltrYn": "Y",
+            "toiletYn": "Y",
+            "parmacyYn": "N",
+            "nrsgYn": "Y",
+            "shopYn": "Y",
+            "rstrtYn": "Y",
+            "etcCvntl": "",
+            "rprsntvRstrt": "",
+            "phoneNumber": "033-648-8850",
+            "referenceDate": "2026-09-17",
+            "insttCode": "B500004",
+            "insttNm": "한국도로공사"
+          }
+        ]
+      }
+    },
+    "tool_candidates": {
+      "ok": true,
+      "tool_name": "search_gas_stations",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "f7dd8d04-3441-45a2-899d-1163bbc45f20",
+        "elapsed_ms": 247.103,
+        "fetched_at": "2026-11-18T05:54:37.252951Z"
+      },
+      "error": null,
+      "count": 56,
+      "sample": {
+        "items": [
+          {
+            "longitude": 126.98777394264805,
+            "latitude": 37.47811629969099,
+            "station_id": "A0000894",
+            "name": "㈜방배동주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1829.0,
+            "center_distance_m": 4555.5
+          }
+        ]
+      },
+      "input": {
+        "longitude": 127.035092567,
+        "latitude": 37.494343243,
+        "radius_m": 5000,
+        "fuel_type": "gasoline"
+      }
+    },
+    "tool_details": {
+      "ok": true,
+      "tool_name": "get_station_details",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "7f8296f9-e5a8-423c-9bda-18b626d98bc5",
+        "elapsed_ms": 60.003,
+        "fetched_at": "2026-11-18T05:54:37.314232Z"
+      },
+      "error": null,
+      "count": null,
+      "sample": {
+        "longitude": 126.98777394264805,
+        "latitude": 37.47811629969099,
+        "station_id": "A0000894",
+        "name": "㈜방배동주유소",
+        "fuel_type": "gasoline",
+        "price_krw_per_l": 1829.0,
+        "price_observed_at": "2026-11-14T08:07:11+09:00",
+        "address": "서울 서초구 효령로 29",
+        "brand": "SOL",
+        "facilities": {
+          "MAINT_YN": false,
+          "CAR_WASH_YN": true,
+          "CVS_YN": false
+        }
+      },
+      "input": {
+        "station_id": "A0000894",
+        "fuel_type": "gasoline"
+      }
+    },
+    "tool_rest_area": {
+      "ok": true,
+      "tool_name": "search_rest_area_info",
+      "meta": {
+        "provider": "rest_area",
+        "request_id": "db83f1e3-60f4-4137-8ebd-22ca0437ab87",
+        "elapsed_ms": 161.685,
+        "fetched_at": "2026-11-18T05:55:03.851427Z"
+      },
+      "error": null,
+      "count": 1,
+      "sample": {
+        "items": [
+          {
+            "longitude": 128.806648,
+            "latitude": 37.758206,
+            "name": "강릉(강릉)",
+            "route_name": "영동선",
+            "direction": "하행",
+            "distance_m": 0.0,
+            "facilities": {
+              "oltYn": true,
+              "toiletYn": true,
+              "rstrtYn": true,
+              "shopYn": true,
+              "nrsgYn": true
+            },
+            "reference_date": "2026-09-17",
+            "match_status": "unverified",
+            "source": "전국휴게소정보표준데이터"
+          }
+        ],
+        "catalog_count": 215,
+        "skipped_invalid_count": 0
+      },
+      "input": {
+        "longitude": 128.806648,
+        "latitude": 37.758206,
+        "radius_m": 3000,
+        "direction": "하행"
+      }
+    },
+    "tool_candidates_empty": {
+      "ok": false,
+      "tool_name": "search_gas_stations",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "9316e540-d2d7-417f-9ae9-0cf05bb7cd48",
+        "elapsed_ms": 135.66,
+        "fetched_at": "2026-11-18T05:54:37.658014Z"
+      },
+      "error": {
+        "code": "EMPTY_RESULT",
+        "message": "조회 결과가 없습니다.",
+        "retryable": false,
+        "replan_allowed": true
+      },
+      "count": null,
+      "sample": null,
+      "input": {
+        "longitude": 130.8,
+        "latitude": 37.5,
+        "radius_m": 100,
+        "fuel_type": "gasoline"
+      }
+    },
+    "tool_candidates_invalid": {
+      "ok": false,
+      "tool_name": "search_gas_stations",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "88048f5d-0144-443a-9d86-e9eea87560d5",
+        "elapsed_ms": 0.055,
+        "fetched_at": "2026-11-18T05:54:37.658014Z"
+      },
+      "error": {
+        "code": "INVALID_INPUT",
+        "message": "입력 타입·범위·필수값을 확인하세요.",
+        "retryable": false,
+        "replan_allowed": false
+      },
+      "count": null,
+      "sample": null
+    },
+    "tool_details_not_found": {
+      "ok": false,
+      "tool_name": "get_station_details",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "ed8b878d-3984-42a4-bd47-5ed40b8c48f5",
+        "elapsed_ms": 60.446,
+        "fetched_at": "2026-11-18T05:54:37.720493Z"
+      },
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "조회 결과가 없습니다.",
+        "retryable": false,
+        "replan_allowed": true
+      },
+      "count": null,
+      "sample": null,
+      "input": {
+        "station_id": "A0000000",
+        "fuel_type": "gasoline"
+      }
+    },
+    "tool_rest_empty": {
+      "ok": false,
+      "tool_name": "search_rest_area_info",
+      "meta": {
+        "provider": "rest_area",
+        "request_id": "f7a540ea-22cb-46e6-afac-df910ff5a6a2",
+        "elapsed_ms": 91.221,
+        "fetched_at": "2026-11-18T05:54:37.813691Z"
+      },
+      "error": {
+        "code": "EMPTY_RESULT",
+        "message": "해당 반경·노선·방향의 휴게소 정보가 없습니다.",
+        "retryable": false,
+        "replan_allowed": false
+      },
+      "count": null,
+      "sample": null
+    },
+    "opinet_invalid_auth_observation": {
+      "ok": false,
+      "tool_name": "probe_opinet_nearby",
+      "meta": {
+        "provider": "opinet",
+        "request_id": "acbc7050-c632-47d7-8942-f197bfc32bc0",
+        "elapsed_ms": 36.491,
+        "fetched_at": "2026-11-18T05:54:37.850631Z"
+      },
+      "error": {
+        "code": "EMPTY_RESULT",
+        "message": "조회 결과가 없습니다.",
+        "retryable": false,
+        "replan_allowed": true
+      },
+      "count": null,
+      "sample": null
+    }
+  },
+  "coordinate_reference": {
+    "source": "https://tmap-skopenapi.readme.io/reference/%EC%9E%90%EB%8F%99%EC%B0%A8-%EA%B2%BD%EB%A1%9C%EC%95%88%EB%82%B4",
+    "tolerance_m": 5,
+    "points": [
+      {
+        "wgs84": [
+          126.98217734415019,
+          37.56468648536046
+        ],
+        "reference_katec": [
+          310278.5350755865,
+          551869.0243206669
+        ],
+        "calculated_katec": [
+          310277.0168405936,
+          551868.0381024044
+        ],
+        "difference_m": 1.8104
+      },
+      {
+        "wgs84": [
+          129.07579349764512,
+          35.17883196265564
+        ],
+        "reference_katec": [
+          498181.0591427401,
+          287188.0233151837
+        ],
+        "calculated_katec": [
+          498183.30075535865,
+          287189.92640267865
+        ],
+        "difference_m": 2.9405
+      },
+      {
+        "wgs84": [
+          127.38454163183215,
+          36.35127257501252
+        ],
+        "reference_katec": [
+          344955.1840998584,
+          416909.51311973063
+        ],
+        "calculated_katec": [
+          344955.61965396814,
+          416909.10391449207
+        ],
+        "difference_m": 0.5976
+      }
+    ]
+  },
+  "event_sample_note": "Events derived from recorded ToolResult timestamps for schema validation; runtime Logging Agent not yet implemented",
+  "event_samples": [
+    {
+      "id": "event-1",
+      "session_id": "verification-session",
+      "sequence": 1,
+      "event_type": "TOOL_REQUESTED",
+      "step": "candidate_search",
+      "tool_name": "search_gas_stations",
+      "request_id": "f7dd8d04-3441-45a2-899d-1163bbc45f20",
+      "elapsed_ms": null,
+      "payload": {
+        "source": "recorded standalone call"
+      },
+      "created_at": "2026-11-18T05:54:37.005848+00:00"
+    },
+    {
+      "id": "event-2",
+      "session_id": "verification-session",
+      "sequence": 2,
+      "event_type": "TOOL_SUCCEEDED",
+      "step": "candidate_search",
+      "tool_name": "search_gas_stations",
+      "request_id": "f7dd8d04-3441-45a2-899d-1163bbc45f20",
+      "elapsed_ms": 247.103,
+      "payload": {
+        "result_count": 56
+      },
+      "created_at": "2026-11-18T05:54:37.252951+00:00"
+    },
+    {
+      "id": "event-3",
+      "session_id": "verification-session",
+      "sequence": 3,
+      "event_type": "TOOL_REQUESTED",
+      "step": "candidate_search",
+      "tool_name": "search_gas_stations",
+      "request_id": "9316e540-d2d7-417f-9ae9-0cf05bb7cd48",
+      "elapsed_ms": null,
+      "payload": {
+        "source": "recorded standalone call"
+      },
+      "created_at": "2026-11-18T05:54:37.522354+00:00"
+    },
+    {
+      "id": "event-4",
+      "session_id": "verification-session",
+      "sequence": 4,
+      "event_type": "TOOL_FAILED",
+      "step": "candidate_search",
+      "tool_name": "search_gas_stations",
+      "request_id": "9316e540-d2d7-417f-9ae9-0cf05bb7cd48",
+      "elapsed_ms": 135.66,
+      "payload": {
+        "error_code": "EMPTY_RESULT"
+      },
+      "created_at": "2026-11-18T05:54:37.658014+00:00"
+    }
+  ],
+  "storage_validation": {
+    "schema_executed": true,
+    "events_deleted_with_session": true,
+    "plan_retained_without_session": true,
+    "note": "in-memory schema validation; no runtime CRUD or recommendation generated"
+  },
+  "limitations": [
+    "Opinet invalid key also returned HTTP 200 with RESULT.OIL=[]; empty results alone cannot prove authentication success.",
+    "Kakao Local coordinate API is disabled (403); no activation required because local pyproj conversion is independently verified.",
+    "Daily quotas for the three external data APIs and the rest-area API account validity were reported by the user. Public usage terms were reviewed in ../API_USAGE.md; per-second/per-minute limits and overage policies are not inferred."
+  ],
+  "coordinate_route_integration": {
+    "source_case": "kakao_long routes[0].sections[0].roads[0].vertexes[:2]",
+    "input": {
+      "longitude": 128.60113601009004,
+      "latitude": 35.87142441217717,
+      "fuel_type": "gasoline",
+      "radius_m": 5000
+    },
+    "katec_xy_m": [
+      454480.12055385753,
+      363662.2255183946
+    ],
+    "candidate_count": 104,
+    "search_meta": {
+      "provider": "opinet",
+      "request_id": "fed08bca-c618-40cf-9ee7-fba412328ac3",
+      "elapsed_ms": 292.597,
+      "fetched_at": "2026-11-18T06:00:53.787156Z"
+    },
+    "detail_ok": true,
+    "detail_sample": {
+      "longitude": 128.59991219385762,
+      "latitude": 35.886297194770954,
+      "station_id": "A0033247",
+      "name": "미니주유소",
+      "fuel_type": "gasoline",
+      "price_krw_per_l": 1783.0,
+      "price_observed_at": "2026-11-18T04:39:14+09:00",
+      "address": "대구 북구 침산남로 224",
+      "brand": "RTO",
+      "facilities": {
+        "MAINT_YN": false,
+        "CAR_WASH_YN": false,
+        "CVS_YN": false
+      }
+    },
+    "detail_meta": {
+      "provider": "opinet",
+      "request_id": "538476e0-c26d-40dc-95d7-0507018d5bdc",
+      "elapsed_ms": 64.252,
+      "fetched_at": "2026-11-18T06:00:53.851703Z"
+    }
+  },
+  "verification": {
+    "pytest_passed": 64,
+    "ruff_check": "passed",
+    "network": "actual calls recorded separately from mock/fixture regression tests"
+  },
+  "user_reported_account_status": {
+    "gms": {
+      "reported_date_kst": "2026-11-18",
+      "source": "user_report",
+      "used_credits": 36,
+      "remaining_credits": 30000,
+      "console_independently_verified": false,
+      "note": "Credit balance only; total grant, request rate limits and usage terms are not inferred."
+    },
+    "kakao": {
+      "reported_date_kst": "2026-11-18",
+      "source": "user_report",
+      "console_independently_verified": false,
+      "api": "car_directions",
+      "daily_request_limit": 10000,
+      "note": "Applies to car directions only; quotas for other Kakao APIs are not inferred."
+    },
+    "rest_area": {
+      "reported_date_kst": "2026-11-18",
+      "source": "user_report",
+      "console_independently_verified": false,
+      "api": "tn_pubr_public_rest_area_api",
+      "daily_request_limit": 10000,
+      "account_type": "development",
+      "valid_until_date": "2028-11-18",
+      "note": "Expiry date reported by the user; exact expiry time was not provided."
+    },
+    "opinet": {
+      "reported_date_kst": "2026-11-18",
+      "source": "user_report",
+      "console_independently_verified": false,
+      "account_type": "general",
+      "daily_request_limit": 300,
+      "quota_increase_approved": false
+    }
+  },
+  "followup_route_spike_report": "2026-11-18-route-spike.json"
+}
