@@ -86,7 +86,7 @@ HTTP_TIMEOUT_SECONDS=20
 - `fuelroute/tools.py`: `search_gas_stations`, `get_station_details`, `search_rest_area_info`를 공통 응답·입력 설명과 함께 등록했다. WGS84↔KATEC 변환, 가격·시각 정규화, 휴게소 전체 페이지·반경/방향 필터를 실제 응답으로 확인했다. 휴게소와 동일 주유소임을 추측하지 않는다.
 - 설치 버전은 `requirements.txt`, 개발 도구는 `requirements-dev.txt`, 전체 Windows/Python 3.11.9 환경은 `requirements.lock.txt`에 기록했다.
 
-실제 요청 근거: [Opinet 반경 검색](https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=3), [Opinet ID 상세](https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=1), [Kakao 길찾기](https://developers.kakaomobility.com/en/guide/navi-api/directions), [휴게소 표준데이터](https://www.data.go.kr/data/15025446/standard.do). 2026-11-18 사용자 확인값인 계정별 호출 한도·휴게소 API 활용기간은 [개인 실행 기록](daily/2026-11-18.md)과 [검증 기록](verification/2026-11-18.json)에 남겼다. 공개 이용조건·현재 적용 범위는 [API_USAGE](API_USAGE.md)에 기록했다. 개별 계약과 상용 재배포 권한 확보를 뜻하지 않는다.
+실제 요청 근거: [Opinet 반경 검색](https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=3), [Opinet ID 상세](https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=1), [Kakao 길찾기](https://developers.kakaomobility.com/en/guide/navi-api/directions), [휴게소 표준데이터](https://www.data.go.kr/data/15025446/standard.do). 2026-11-18 사용자 확인값인 계정별 호출 한도·휴게소 API 활용기간은 [TASKS 완료 기록](TASKS.md#completed-2026-11-18)과 [검증 기록](verification/2026-11-18.json)에 남겼다. 공개 이용조건·현재 적용 범위는 [API_USAGE](API_USAGE.md)에 기록했다. 개별 계약과 상용 재배포 권한 확보를 뜻하지 않는다.
 
 ---
 
@@ -860,13 +860,15 @@ async def search_gas_stations(
 
 오늘은 각 함수의 타입·스키마·설명·공통 응답을 정의하고 Python/CLI에서 개별 호출한다. 상세 조회는 앞서 확보한 ID를 입력 fixture로 전달할 수 있어야 하며, 함수 내부에서 후보 조회나 Agent 전체 실행을 다시 시작하지 않는다. 경로 조회도 별도 함수로 검증해 후보 검색의 입력을 공급한다.
 
-각 TODO에 입력 예시, 호출 방법, 마스킹된 실제 성공 응답, 실패 응답, 다음 단계로 넘길 필드를 남긴다. 실패는 재현용 fixture로 확인할 수 있지만, fixture 검증을 실제 인증·호출 성공으로 기록하지 않는다. 개발 작업의 정의·완료 상태와 AI의 구현·검증 결과는 [`DEVELOPMENT.md`](DEVELOPMENT.md)에 기록한다. 상세 실호출 근거는 [검증 JSON](verification/2026-11-18.json)에 연결한다. 사용자가 앞으로 직접 해야 할 일은 TASKS, 사용자가 직접 실행했다고 확인한 일은 daily에서 관리한다.
+각 TODO에 입력 예시, 호출 방법, 마스킹된 실제 성공 응답, 실패 응답, 다음 단계로 넘길 필드를 남긴다. 실패는 재현용 fixture로 확인할 수 있지만, fixture 검증을 실제 인증·호출 성공으로 기록하지 않는다. 기존 개발 TASK 이력과 AI의 상세 구현·검증 결과는 [`DEVELOPMENT.md`](DEVELOPMENT.md)에 기록한다. 상세 실호출 근거는 [검증 JSON](verification/2026-11-18.json)에 연결한다. 날짜별 할 일·완료 체크·사용자가 직접 확인한 값은 [TASKS](TASKS.md)에서 함께 관리한다.
 
 ---
 
 ## 14.4 최종 Tool 레지스트리 — 구현 완료
 
 `ToolRegistry`는 안전거리 계산·기본/접근/경유 경로·후보·상세·보조정보·비용 평가·추천 정렬의 일곱 Tool을 등록한다. Python 원 함수와 등록 Tool의 반환을 구분하고 공통 JSON 응답·입력/출력 검증·실패 코드·다음 단계 필드를 명시한다. [실행 계약](TOOL_CONTRACTS.md), [전체 JSON schema](TOOL_CONTRACTS.json)를 따른다. `python -m fuelroute tool-schemas`로 HTTP 없이 같은 명세를 출력한다.
+
+PDF p.9·14 대조에 따라 모델에 노출할 조회 Tool과 실행 흐름이 직접 처리할 계산·저장을 구분한다. 등록된 안전거리·비용 평가·정렬은 검증용 순수 계산 함수이며 외부 API/로컬 서버 API Tool과 같은 분류로 취급하지 않는다. 전체 Agent 연결 시 필요한 외부 조회만 모델에 노출하고 계산·판정·정렬·계획 저장·로그 수집은 코드에서 직접 수행하는 작업을 TASKS에 배정했다. 기존 등록 스키마를 바꾸거나 Agent 연결이 이미 완료됐다고 기록하지 않는다.
 
 경로 Tool은 `DrivingRoute`의 거리(m)·시간(초)·구간 비용만 반환한다. 구간 거리 합과 전체 거리의 일치를 검증하고 원본 상세 좌표는 모델에 전달하지 않는다. `FuelTools.registered_tools`는 기존 세 조회 Tool만 제공하는 호환 진입점으로 유지한다. 전체 Agent의 Tool 선택과 결과 설명 연결은 후속 단계다.
 

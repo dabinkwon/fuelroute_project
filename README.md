@@ -58,7 +58,7 @@ git push github master
 
 카카오 앱 대표 도메인은 서비스 대표 주소이며 입력할 값은 위 HTTPS 주소다. 대표 도메인과 JavaScript SDK 도메인 등록은 별도 설정이며, REST API 인증키는 계속 Backend 환경변수로 관리한다. [카카오 앱 설정 공식 안내](https://developers.kakao.com/docs/ko/app-setting/app)
 
-이전 Sites 배포와 `frontend/.openai/hosting.json`, 로컬 `artifacts/sites-fuelroute-checkout/`은 이력으로 유지한다. 현재 프론트 배포 대상은 Netlify이며, 재배포할 때는 같은 Netlify 사이트 ID를 사용한다. `.env`와 Python Backend는 프론트 배포 산출물에 포함하지 않는다.
+이전 Sites 배포와 `frontend/.openai/hosting.json`은 이력으로 유지한다. 로컬 `artifacts`의 Sites 복제본은 2026-11-19 사용자 요청으로 정리했다. 현재 프론트 배포 대상은 Netlify이며, 재배포할 때는 같은 Netlify 사이트 ID를 사용한다. `.env`와 Python Backend는 프론트 배포 산출물에 포함하지 않는다.
 
 인증 없는 HTTPS 요청으로 HTML·CSS의 HTTP 200과 본문 내용을 확인했다. Netlify의 기본 호스팅 주석·스크립트가 HTML에 추가되며 CSS는 로컬 파일과 동일하다. 이 환경에서는 브라우저 시각 검사를 수행하지 않았다.
 
@@ -161,9 +161,7 @@ project-root/
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   ├── DEVELOPMENT.md   # 개발 작업·구현 및 검증 기록
-│   ├── TASKS.md         # 내가 앞으로 직접 해야 할 일
-│   └── daily/
-│       ├── 2026-11-18.md # 내가 실제로 실행한 일·결과
+│   └── TASKS.md         # 날짜별 할 일·완료 체크·직접 확인값
 ```
 
 `.env`와 `.venv`는 로컬에 생성되어 있으며 Git에서 제외한다. 다음 단계에서 LangGraph 전체 흐름, SQLite Repository와 화면 연동을 확장한다. 오늘은 배포 설정·프론트 화면을 변경하지 않았다.
@@ -230,7 +228,7 @@ python -m fuelroute rest-search --point 128.806648 37.758206 --radius-m 3000 --d
 
 `stations`는 WGS84 좌표를 KATEC로 변환하고 `data.items`에 ID·가격·위치를 반환한다. `station-detail`은 해당 ID로 상세·가격 기준시각을 반환한다. `rest-search`는 전체 휴게소 페이지를 읽고 반경·노선·방향을 필터한다. 휴게소 `match_status=unverified`는 가까운 참고 정보라는 뜻이며 같은 주유소라는 의미가 아니다. 전체 Agent 추천 흐름은 후속 단계다.
 
-실제 응답의 값·필드·실패 사례는 [`2026-11-18 검증 기록`](docs/verification/2026-11-18.json)에 남겼다. 원본 상세 응답은 비밀값을 제거한 로컬 `artifacts/today/`에서 확인할 수 있다. Opinet은 잘못된 키에도 빈 배열을 반환했으므로 0건만으로 인증 성공이나 실패를 단정할 수 없다.
+실제 응답의 값·필드·실패 사례는 [`2026-11-18 검증 기록`](docs/verification/2026-11-18.json)에 남겼다. 로컬 상세 원본과 임시 스크립트가 있던 `artifacts`는 2026-11-19 사용자 요청으로 삭제했으며, Git에 기록한 검증 자료는 유지한다. Opinet은 잘못된 키에도 빈 배열을 반환했으므로 0건만으로 인증 성공이나 실패를 단정할 수 없다.
 
 ### 경로→후보→실제 도달·우회비용 연결 실험
 
@@ -276,9 +274,8 @@ python -m pip check
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 기술 설계안, 핵심 계산, 외부 API 의존성
 - [`docs/API_USAGE.md`](docs/API_USAGE.md) — 계정 한도, 공개 이용조건·출처, 현재 적용 범위
 - [`docs/TOOL_CONTRACTS.md`](docs/TOOL_CONTRACTS.md) — 일곱 Tool 실행 계약과 기계 판독용 JSON schema
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 개발 작업의 우선순위·완료 기준·상태와 AI 구현·검증 기록
-- [`docs/TASKS.md`](docs/TASKS.md) — 내가 앞으로 직접 해야 할 일
-- [`docs/daily/2026-11-18.md`](docs/daily/2026-11-18.md) — 내가 실제로 실행한 일과 확인한 결과
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 기존 개발 TASK 정의·완료 이력과 상세 구현·검증 근거
+- [`docs/TASKS.md`](docs/TASKS.md) — 날짜별 개발·직접 확인할 일, 완료 체크와 확인값
 
 기획 선택 이유는 PRD에, 기술 선택 이유와 변경 이력은 ARCHITECTURE에 함께 기록한다.
 
@@ -290,9 +287,9 @@ python -m pip check
 
 ## 날짜별 작업 기록
 
-2026-11-18의 개인 실행 기록에는 키 입력, GMS 크레딧·API 한도 확인, 배포 확인·카카오 대표 도메인 등록을 기록했다. [해당 날짜의 기록](docs/daily/2026-11-18.md)에서 확인할 수 있다.
+날짜별 개발·직접 확인할 일과 완료 기록은 [TASKS.md](docs/TASKS.md)에서 함께 관리한다. 완료한 항목은 같은 위치에 체크하고 결과·근거를 남긴다. 별도 daily는 사용하지 않는다. 기존 키 입력, GMS 크레딧·API 한도 확인, 배포 확인·카카오 대표 도메인 등록 기록은 [2026-11-18 완료 항목](docs/TASKS.md#completed-2026-11-18)으로 통합했다.
 
-앞으로 직접 해야 할 일은 [TASKS.md](docs/TASKS.md)에 적고, 완료하면 실제 실행 날짜의 `docs/daily/YYYY-MM-DD.md`로 옮긴다. AI가 수행한 코드 구현·API 호출·테스트와 남은 개발 작업은 [DEVELOPMENT.md](docs/DEVELOPMENT.md)에서 관리한다.
+**개발 종료일은 사용자 확정으로 2026-11-20이다.** 11월 18일 F3001~F3004, 19일 F3005~F3014, 20일 F3015~F3019를 완료하고 최종 검증·제출물 정리도 20일 안에 마친다. [TASKS](docs/TASKS.md)는 날짜별 F 번호·완료 체크·짧은 결과를, [DEVELOPMENT](docs/DEVELOPMENT.md)는 실제 변경한 코드·이유·검증·문제 해결의 상세 이력을 기록한다. 두 파일을 유지하되 현재 진행 상태는 TASKS에서만 체크한다. 선택 심화·추가 배포는 필수 완료 후 기한 안에 여유가 있을 때만 진행한다.
 
 ## 현재 개발 상태
 
@@ -327,4 +324,4 @@ python -m pip check
 - 공개 데이터 재배포 범위를 확대할 때의 상세 이용허락 조건 재확인 및 공유 일일 한도 집계
 - 전체 LangGraph 흐름, SQLite Repository·CRUD, UI 연동 구현
 
-개발은 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)의 상태와 완료 기준을 따른다. 사용자에게 직접 필요한 작업은 TASKS에 기록한다.
+다음에 수행할 일과 완료 체크는 [`docs/TASKS.md`](docs/TASKS.md)의 날짜별 목록을 따른다. 기존 개발 TASK 이력과 상세 구현·검증 근거는 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)에 보존한다.

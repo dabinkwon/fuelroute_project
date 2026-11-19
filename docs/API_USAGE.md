@@ -6,7 +6,7 @@
 |---|---|---|
 | Opinet 일반 API | 300회/일, 별도 상향 없음 | 사용자 확인값 및 [일반 API 안내](https://www.opinet.co.kr/user/custapi/custApiInfo.do) |
 | Kakao Mobility 자동차 길찾기 | 10,000회/일 | 사용자 확인값 및 [공개 쿼터 안내](https://developers.kakao.com/docs/ko/getting-started/quota) |
-| 전국휴게소정보표준데이터 | 개발계정, 10,000회/일, 2028-11-18까지 | [사용자가 전달한 확인값](daily/2026-11-18.md) |
+| 전국휴게소정보표준데이터 | 개발계정, 10,000회/일, 2028-11-18까지 | [사용자가 전달한 확인값](TASKS.md#completed-2026-11-18) |
 
 ## Opinet
 
