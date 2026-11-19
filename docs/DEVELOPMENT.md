@@ -683,7 +683,7 @@ README·TASKS의 완료/커밋 상태와 요구사항·설계·API 사용 안내
 
 ## 24. F3008 제약 판단과 근거 보완 — 2026-11-19
 
-**구현·검증 완료 / 2026-11-19 사용자 확인 후 폴더 구조 변경과 분리해 커밋한다.** F3007 기능별 커밋을 마친 뒤 별도 `judge` 노드로 실제 비용·입력 제약을 재검사하고 `enrich`에서 확정 후보만 보조 조회하도록 연결했다.
+**구현·검증 완료 / 2026-11-19 사용자 확인 후 `d11e437`에 커밋했다.** F3007 기능별 커밋을 마친 뒤 별도 `judge` 노드로 실제 비용·입력 제약을 재검사하고 `enrich`에서 확정 후보만 보조 조회하도록 연결했다.
 
 | 파일 | 변경 이유·동작 |
 |---|---|
@@ -708,4 +708,43 @@ README·TASKS의 완료/커밋 상태와 요구사항·설계·API 사용 안내
 - 실제 GMS `gpt-5.4-mini` **1회**로2026-11-19 23:00 출발→2026-11-20 04:00 도착·정차10분 추출을 확인했다. 새 길찾기/Opinet/휴게소/Local 호출은0회다.
 - 커밋된 F3007 실제 응답을 로컬 재판정했다. 같은 비용에서 명시 익일 일정은충족, 상한03:15로 변경하면전체 제외, 정차시간을 지우면해당 값만 입력 보완이었다. 이는 새 실시간 조회나 미래 예측이 아니다. [근거 JSON](verification/2026-11-19-constraint-judgement.json)에 원 응답 파일/커밋/SHA256·실제 추출 메타·재판정 결과를 구분했다.
 
-다음 개발 작업은 **F3009 — 그래프 재계획**이다. 사용자가 기능별 커밋을 요청했으며 F3008 변경을 폴더 재구성과 분리해 보존한다. 원본 경로·키 파일·DB·프론트 배포·이벤트 저장·최종 자연어 응답은 추가하지 않았다.
+다음 개발 작업은 **F3009 — 그래프 재계획**이다. 사용자가 기능별 커밋을 요청해 F3008 변경을 `d11e437`에 폴더 재구성과 분리해 보존했다. 원본 경로·키 파일·DB·프론트 배포·이벤트 저장·최종 자연어 응답은 추가하지 않았다.
+
+
+<a id="package-layout"></a>
+
+## 25. 기능별 패키지 재구성 — 2026-11-19
+
+사용자가 검토한 구조에 따라 기존 구현을 책임별 폴더로 옮겼다. F3008 제약 판단 기능은 먼저 `d11e437`에 기록했고 이번 구조 변경은 별도 커밋으로 기록한다. 이 절 이전의 파일명과 검증 JSON은 해당 구현·호출 당시의 이력이다. 현재 코드를 찾을 때는 아래 이동표를 사용한다.
+
+| 기존 파일/책임 | 현재 위치 |
+|---|---|
+| `agent.py` | `agent/graph.py`; 요청 입력 모델은 `schemas/analysis.py` |
+| `request_analysis.py` | `agent/analysis.py`; 추출·주행 조건·분석 결과·필드 이름은 `schemas/analysis.py` |
+| `task_plan.py` | `agent/planning.py`; 계획 모델은 `schemas/planning.py` |
+| `execution.py` | `agent/execution.py`; 호출·실행·작업 결과는 `schemas/execution.py` |
+| `planning.py` | `agent/replanning.py`; 요청은 `schemas/requests.py`, 핵심 중단 코드는 `core/errors.py` |
+| `agent_gms.py` | 프롬프트는 `agent/llm.py`, 구조화 SDK 호출·오류·클라이언트 종료는 `clients/gms.py` |
+| `services.py` | `calculations/driving_range.py`; 입력 검증 모델은 `schemas/driving.py` |
+| `coordinates.py`, `routing.py` | `calculations/coordinates.py`, `calculations/route_points.py`; 공유 좌표/검색점은 `schemas/coordinates.py`, `schemas/routes.py` |
+| `route_spike.py` | 순수 비용 평가 `calculations/detour.py`, 진단 흐름 `cli/route_spike.py`, 입력 `schemas/requests.py` |
+| `recommendation.py`, `judgement.py` | `calculations/ranking.py`, `calculations/constraints.py`; 모델은 `schemas/recommendation.py`, `schemas/judgement.py` |
+| `route_contracts.py` | `schemas/routes.py` |
+| `probes.py` | `clients/{opinet,kakao_routes,rest_area,http}.py`, `core/{errors,redaction,results}.py`, 좌표/검색 모델은 `schemas/` |
+| `geocoding.py` | `clients/kakao_local.py`; 공유 위치 모델은 `schemas/locations.py` |
+| `tools.py`, `tool_registry.py` | `tools/fuel_tools.py`, `tools/registry.py`; 공유 모델은 `schemas/` |
+| `config.py`, `contracts.py` | `core/config.py`, `core/contracts.py` |
+| `main.py`, `__main__.py`, `gms.py` | `api/app.py`, `cli/commands.py`, `cli/gms_probe.py`; 루트 `__main__.py`는 CLI 시작만 수행 |
+
+### 변경 이유와 유지한 동작
+
+계산 코드가 좌표 모델 때문에 API 검증 모듈을 가져오거나 판정 코드가 실행 결과 타입 때문에 Agent 실행기를 가져오는 의존성을 없앴다. 하위 공통 계약과 상위 실행 흐름을 나눠 순환 import를 예방하고 이후 기능도 같은 폴더 안에서 개발하도록 AGENTS에 규칙을 추가했다.
+
+함수의 계산·필터·제외·재계획 정책과 상세 한국어 설명을 보존했다. 모델의 이름·필드·타입·필수값·기본값·Tool 설명과 JSON 계약도 유지했다. 기존 CLI 명령은 그대로이며 서버의 Bash 명령만 `python -m uvicorn fuelroute.api.app:app --reload`로 갱신했다. 테스트의 import와 대체 함수 주입 경로도 새 소유 모듈에 맞췄다.
+
+### 검증
+
+- 기존 **288개** 테스트를 유지하고 하위 계층 의존성 검사 **4개**를 추가했으며 전체 **292개**가 `pytest -W error`로 통과했다. 상위 실행 모듈·HTTP·LLM SDK가 계산/모델/공통 계층에 들어오지 못하도록 AST로 검사한다.
+- 일곱 Tool의 실제 직렬화 계약을 기존 `docs/TOOL_CONTRACTS.json`과 대조해 설명·스키마·필수값·출력이 완전히 같음을 확인했다.
+- 이동 전후 최상위 클래스·함수 **127개**의 AST를 대조해 본문 보존을 확인했다. 예외는 `FuelTools.registered_tools` 내부 지연 import의 새 경로뿐이다. 모듈 **49개** import, FastAPI TestClient `/health` **200**, 가상환경 Python의 CLI 도움말/doctor/Tool 명세/run 도움말을 확인했고 Ruff·포맷·의존성 검사를 통과했다. 보조 검사에서 bare `python` 자식 프로세스가 시스템 Python을 선택해 pyproj를 찾지 못한 것은 `sys.executable`로 가상환경을 지정해 해결했다. Git Bash에서 가상환경 활성화 후 사용하는 실행 명령은 그대로다.
+- 이번 작업에서는 새 외부 API 호출·배포·원격 push를 수행하지 않았다. 과거 실호출 근거 JSON과 원본 응답의 해시를 변경하지 않는다. 다음 기능은 F3009 그래프 재계획으로 유지한다.

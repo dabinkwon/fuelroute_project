@@ -7,12 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from fuelroute.__main__ import main
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolError, ToolMeta, ToolResult, utc_now
-from fuelroute.gms import safe_range_tool
-from fuelroute.main import app
-from fuelroute.services import calculate_safe_range
+from fuelroute.api.app import app
+from fuelroute.calculations.driving_range import calculate_safe_range
+from fuelroute.cli.commands import main
+from fuelroute.cli.gms_probe import safe_range_tool
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolError, ToolMeta, ToolResult, utc_now
 
 
 def test_env_precedence_and_no_secret_output(tmp_path, monkeypatch, capsys) -> None:

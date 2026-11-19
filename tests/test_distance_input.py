@@ -7,16 +7,19 @@ from datetime import date
 import httpx
 import pytest
 
-from fuelroute.__main__ import main
-from fuelroute.agent import plan_request
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolError, ToolMeta, ToolResult, utc_now
-from fuelroute.planning import PlanningRequest, recommend_route
-from fuelroute.request_analysis import ExtractedRequest, RequestAnalysis, analyze_conditions
-from fuelroute.route_spike import RouteSpikeRequest, run_route_spike
-from fuelroute.services import calculate_safe_range
-from fuelroute.task_plan import STEP_SPECS, PlanProposal
-from fuelroute.tool_registry import ToolRegistry
+from fuelroute.agent.analysis import analyze_conditions
+from fuelroute.agent.graph import plan_request
+from fuelroute.agent.planning import STEP_SPECS
+from fuelroute.agent.replanning import recommend_route
+from fuelroute.calculations.driving_range import calculate_safe_range
+from fuelroute.cli.commands import main
+from fuelroute.cli.route_spike import run_route_spike
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolError, ToolMeta, ToolResult, utc_now
+from fuelroute.schemas.analysis import ExtractedRequest, RequestAnalysis
+from fuelroute.schemas.planning import PlanProposal
+from fuelroute.schemas.requests import PlanningRequest, RouteSpikeRequest
+from fuelroute.tools.registry import ToolRegistry
 
 TODAY = date(2026, 11, 19)
 USER = (
@@ -188,7 +191,7 @@ def test_cli_km_input_dispatches_without_liters_or_efficiency(
         )
 
     target = "recommend_route" if command == "recommend" else "run_route_spike"
-    monkeypatch.setattr("fuelroute.__main__." + target, fake)
+    monkeypatch.setattr("fuelroute.cli.commands." + target, fake)
     assert (
         main(
             [
@@ -252,9 +255,9 @@ def test_existing_executors_use_km_range_for_actual_search_boundary(
             meta=meta,
         )
 
-    monkeypatch.setattr("fuelroute.planning.probe_route", route)
-    monkeypatch.setattr("fuelroute.route_spike.probe_route", route)
-    monkeypatch.setattr("fuelroute.tools.FuelTools.search_gas_stations", empty)
+    monkeypatch.setattr("fuelroute.agent.replanning.probe_route", route)
+    monkeypatch.setattr("fuelroute.cli.route_spike.probe_route", route)
+    monkeypatch.setattr("fuelroute.tools.fuel_tools.FuelTools.search_gas_stations", empty)
 
     async def scenario() -> None:
         """키는 합성값이며 내부 계산·검색점·공통 결과만 확인한다. 네트워크는 호출하지 않는다."""

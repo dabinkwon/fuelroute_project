@@ -10,11 +10,11 @@ import httpx
 import pytest
 from openai import APIStatusError, APITimeoutError
 
-from fuelroute.__main__ import main
-from fuelroute.agent import analyze_request, make_graph
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolResult
-from fuelroute.request_analysis import ExtractedRequest
+from fuelroute.agent.graph import analyze_request, make_graph
+from fuelroute.cli.commands import main
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolResult
+from fuelroute.schemas.analysis import ExtractedRequest
 
 TODAY = date(2026, 11, 19)
 USER = (
@@ -253,7 +253,7 @@ def test_gms_analyzer_configuration_errors_and_client_cleanup(monkeypatch, failu
         calls.append(kwargs)
         return fake
 
-    monkeypatch.setattr("fuelroute.agent_gms.ChatOpenAI", factory)
+    monkeypatch.setattr("fuelroute.clients.gms.ChatOpenAI", factory)
     settings = Settings(
         _env_file=None,
         gms_api_key="private-test-key",

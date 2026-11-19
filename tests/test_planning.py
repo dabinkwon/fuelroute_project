@@ -6,10 +6,11 @@ from collections import Counter
 import httpx
 import pytest
 
-import fuelroute.planning as planning
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolError, ToolMeta, ToolResult, utc_now
-from fuelroute.planning import PlanningRequest, recommend_route
+import fuelroute.agent.replanning as planning
+from fuelroute.agent.replanning import recommend_route
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolError, ToolMeta, ToolResult, utc_now
+from fuelroute.schemas.requests import PlanningRequest
 
 
 def outcome(

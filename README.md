@@ -21,6 +21,8 @@
 | 10. km 기본 입력 전환 | 계기판 주행 가능 거리·안전 여유, 연비 없는 계산, 분석·계획·기존 실행기·Tool·CLI 연결 | 테스트 215개·Ruff·의존성 검사 통과, 기존 GMS 3회 검증. [km 전환 기록](docs/DEVELOPMENT.md#km-input) | `feef6ba` |
 | 11. F3007 조회 실행기 | 계획 순서·공통 결과 통합, 개별 실패 격리, 내부 경로·캐시·보조정보 처리 | 테스트247개·Ruff 통과 | `ac88022` |
 | 12. F3007 Agent·CLI 연결 | 분석→계획→실행 노드와 `run` 명령, 지명 해석·입력 보완·핵심 실패 연결 | 테스트255개·Ruff·의존성 검사 통과, 기존 실호출 근거 보존. [실행 기록](docs/DEVELOPMENT.md#f3007-implementation) | `1d55b4d` |
+| 13. F3008 제약 판단 | 실제 도달·우회·가격·유종 재판정, 명시 날짜·시각·정차시간과 도착 상한 비교 | 테스트288개·Ruff 통과, 기존 GMS1회 추출·기록 응답 재판정. [판정 기록](docs/DEVELOPMENT.md#f3008-judgement) | `d11e437` |
+| 14. 기능별 폴더 재구성 | Agent·계산·API 클라이언트·Tool·스키마·공통 기반·HTTP·CLI 분리 | 기존288개와 계층 의존성4개 검사, 공개 Tool 계약 보존. [이동 기록](docs/DEVELOPMENT.md#package-layout) | 폴더 재구성 커밋 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -134,7 +136,7 @@ FuelRoute는 단순 주변 최저가 검색이 아니라 **도달 가능성 → 
 
 ## 프로젝트 구조
 
-현재 구조:
+현재 구조다. 새 기능은 같은 책임의 폴더 아래에 추가하며, 입력·출력 모델은 `schemas/`에서 공유한다. 상세 이동표는 [개발 기록](docs/DEVELOPMENT.md#package-layout)에 있다.
 
 ```text
 project-root/
@@ -148,28 +150,27 @@ project-root/
 ├── netlify.toml         # Netlify: frontend/dist만 배포
 ├── frontend/           # Netlify에 배포한 정적 소개 화면
 ├── fuelroute/
-│   ├── main.py         # FastAPI /health
-│   ├── __main__.py     # python -m fuelroute 검증 CLI
-│   ├── agent.py        # State·make_graph와 F3005 분석·F3006 계획 노드
-│   ├── agent_gms.py    # GMS 구조화 요청 분석·작업 순서 제안
-│   ├── request_analysis.py # 원문 근거·단위·필수값 검증
-│   ├── geocoding.py    # Kakao Local 주소·장소 검색과 모호성 처리
-│   ├── task_plan.py    # F3006 계획 스키마·입력 보존·의존 순서 검증
-│   ├── execution.py    # F3007 계획 순서 실행·타입 있는 결과·호출 이력
-│   ├── judgement.py    # F3008 제약 재판정·날짜/시각·정차시간·근거
-│   ├── config.py       # .env와 OS 환경변수
-│   ├── contracts.py    # ToolResult 공통 성공·실패
-│   ├── services.py     # 안전 주행거리 계산
-│   ├── coordinates.py  # WGS84 ↔ KATEC TM128, 검색용 직선거리
-│   ├── routing.py      # 도로 누적거리와 검색점 보간
-│   ├── route_spike.py  # 후보 연결·실제 도달거리·우회비용 검증
-│   ├── recommendation.py # 제약 재판정·가격/시간 우선 추천
-│   ├── planning.py     # 최대 2회 재계획·캐시·평가 예산
-│   ├── route_contracts.py # 정규화한 거리·시간·구간 비용
-│   ├── tool_registry.py # 일곱 Tool 등록·입출력·실패 계약
-│   ├── tools.py        # 후보·ID 상세·휴게소 정규화 조회, LangChain 등록
-│   ├── gms.py          # GMS 응답·구조화 출력·Tool 왕복 검증
-│   └── probes.py       # 외부 데이터 API의 독립 호출 검증
+│   ├── __main__.py          # python -m fuelroute 진입점
+│   ├── agent/               # 요청 분석·계획·LangGraph·실행 흐름
+│   │   ├── graph.py         # State·분석→계획→실행→판정→보조 연결
+│   │   ├── analysis.py      # 원문·단위·누락 조건 검증
+│   │   ├── planning.py      # F3006 계획 구성·의존 순서 검증
+│   │   ├── execution.py     # F3007 한 회차 실행·결과 통합
+│   │   ├── replanning.py    # 명시적 입력의 기존 재계획 실행기
+│   │   └── llm.py           # GMS 요청 분석·계획 프롬프트
+│   ├── calculations/        # 외부 호출 없는 계산·판정
+│   │   ├── driving_range.py # 안전 주행거리
+│   │   ├── coordinates.py   # WGS84↔KATEC
+│   │   ├── route_points.py  # 경로 검증·검색점 보간
+│   │   ├── detour.py        # 실제 접근거리·우회 비용
+│   │   ├── ranking.py       # 가격/시간 우선 추천
+│   │   └── constraints.py   # F3008 제약·시간 상한 판정
+│   ├── clients/             # GMS·Kakao·Opinet·휴게소 API·공통 HTTP
+│   ├── tools/               # fuel_tools.py 정규화 조회·registry.py 등록
+│   ├── schemas/             # 분석·계획·실행·판정·경로 등 공유 모델
+│   ├── core/                # 설정·공통 응답·오류·비밀값 정제
+│   ├── api/app.py           # FastAPI /health
+│   └── cli/                 # 명령 처리·GMS 검증·경로 진단
 ├── tests/              # 실제 키를 사용하지 않는 단위·HTTP 모의 테스트
 ├── docs/
 │   ├── PRD.md
@@ -204,7 +205,7 @@ Linux/macOS의 Bash에서는 가상환경 활성화 명령을 `source .venv/bin/
 기본 서버:
 
 ```bash
-python -m uvicorn fuelroute.main:app --reload
+python -m uvicorn fuelroute.api.app:app --reload
 ```
 
 `http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 현재 HTTP 경로는 `/health`만 구현했다. 추천은 아래 CLI에서 실행하며 Chat·추천 HTTP API·계획 CRUD 연결은 후속 단계다.
@@ -229,7 +230,7 @@ python -m fuelroute rest-area --page 1 --rows 10
 
 성공은 종료 코드 `0`, 설정·입력·API 실패는 `1`과 공통 JSON 응답으로 표시한다. GMS 조건 추출·Tool 검증은 여러 번의 LLM 호출을 발생시킨다. 자동 재시도는 하지 않는다. 결과는 기본적으로 파일에 저장하지 않는다.
 
-`probes.py`는 인증·원본 필드 확인용이고 `tools.py`는 정규화된 개별 조회용이다. 실제 호출 성공 기록과 HTTP 모의 테스트 결과를 구분한다. 주유소와 휴게소가 같은 시설인지는 아직 확인하지 않으며 보조정보로만 표시한다.
+`clients/`는 제공사 통신·응답 검사, `tools/fuel_tools.py`는 정규화된 개별 조회를 담당한다. GMS 왕복·경로 연결 진단은 `cli/`에서 실행한다. 실제 호출 성공 기록과 HTTP 모의 테스트 결과를 구분한다. 주유소와 휴게소가 같은 시설인지는 아직 확인하지 않으며 보조정보로만 표시한다.
 
 ### 구현한 세 조회 Tool의 개별 호출
 
@@ -306,7 +307,7 @@ F3007은 `START→analyze→resolve_locations→build_plan→execute_plan→END`
 
 <a id="f3008-judgement"></a>
 
-### F3008 제약 판단·근거 — 사용자 확인·커밋 대기
+### F3008 제약 판단·근거 — 구현·검증·커밋 완료
 
 ```bash
 python -m fuelroute run --message '대구에서 서울로 휘발유 주유 추천해줘. 주행 가능180km, 안전 여유36km이고 우회15분 이내면 좋아. 2026년11월19일 오후11시 출발해서 2026년11월20일 오전4시까지 도착하고 싶어. 주유와 정차에10분 예상해.' --reference-date 2026-11-19
@@ -371,7 +372,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-현재는 **F3008 제약 판정·근거 보완을 구현·검증하고 사용자 확인을 기다리는 단계**다. F3007은 기능별 커밋을 마쳤으며 다음 개발 작업은 F3009 그래프 재계획이다.
+현재는 **F3008 제약 판정·근거 보완을 `d11e437`에 커밋하고 기능별 폴더 재구성을 검증한 단계**다. 다음 개발 작업은 F3009 그래프 재계획이다.
 
 완료된 내용:
 

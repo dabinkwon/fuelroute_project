@@ -10,8 +10,8 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from openai import AuthenticationError
 
-from fuelroute.config import Settings
-from fuelroute.gms import ExtractedConditions, probe_gms
+from fuelroute.cli.gms_probe import ExtractedConditions, probe_gms
+from fuelroute.core.config import Settings
 
 
 @pytest.mark.parametrize("mode", ["text", "conditions", "tool"])
@@ -69,7 +69,7 @@ def test_gms_modes_pass_gms_configuration_and_close_clients(monkeypatch, mode: s
         selected.append(kwargs)
         return fake
 
-    monkeypatch.setattr("fuelroute.gms.ChatOpenAI", factory)
+    monkeypatch.setattr("fuelroute.cli.gms_probe.ChatOpenAI", factory)
     settings = Settings(
         _env_file=None,
         gms_api_key="test-gms-key",
@@ -106,7 +106,7 @@ def test_gms_auth_failure_is_sanitized(monkeypatch) -> None:
         root_async_client=SimpleNamespace(close=AsyncMock()),
         root_client=SimpleNamespace(close=Mock()),
     )
-    monkeypatch.setattr("fuelroute.gms.ChatOpenAI", lambda **kwargs: fake)
+    monkeypatch.setattr("fuelroute.cli.gms_probe.ChatOpenAI", lambda **kwargs: fake)
     settings = Settings(
         _env_file=None,
         gms_api_key="sensitive-key",
@@ -156,7 +156,7 @@ def test_consecutive_gms_probes_use_separate_http_clients(monkeypatch) -> None:
         assert (await probe_gms(settings)).ok
         assert (await probe_gms(settings)).ok
 
-    monkeypatch.setattr("fuelroute.gms.ChatOpenAI", factory)
+    monkeypatch.setattr("fuelroute.cli.gms_probe.ChatOpenAI", factory)
     asyncio.run(scenario())
     assert clients[0][0] is not clients[1][0]
     assert clients[0][1] is not clients[1][1]

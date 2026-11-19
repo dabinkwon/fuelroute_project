@@ -6,10 +6,10 @@ from datetime import date
 import httpx
 import pytest
 
-from fuelroute.agent import analyze_request
-from fuelroute.config import Settings
-from fuelroute.geocoding import resolve_location
-from fuelroute.request_analysis import ExtractedRequest
+from fuelroute.agent.graph import analyze_request
+from fuelroute.clients.kakao_local import resolve_location
+from fuelroute.core.config import Settings
+from fuelroute.schemas.analysis import ExtractedRequest
 
 USER = "대구에서 서울로 가는데 휘발유이고 현재 연료15L, 안전 잔량3L, 연비12km/L로 주유 추천해줘."
 

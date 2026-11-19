@@ -1,6 +1,6 @@
 # Tool 실행 계약 — 2026-11-19 km 입력 반영
 
-`ToolRegistry`는 아래 일곱 함수를 등록한다. 입력·출력의 전체 타입·단위·필수값·설명·실패 코드는 [TOOL_CONTRACTS.json](TOOL_CONTRACTS.json)이 기준이다. 다음 Bash 명령으로 같은 명세를 확인할 수 있다. HTTP·LLM 호출은 없다.
+`fuelroute/tools/registry.py`의 `ToolRegistry`는 아래 일곱 함수를 등록한다. 독립 조회는 `tools/fuel_tools.py`, 공유 입력·출력은 `schemas/`, 일반 코드 계산은 `calculations/`에서 구현한다. 입력·출력의 전체 타입·단위·필수값·설명·실패 코드는 [TOOL_CONTRACTS.json](TOOL_CONTRACTS.json)이 기준이다. 다음 Bash 명령으로 같은 명세를 확인할 수 있다. HTTP·LLM 호출은 없다.
 
 ## 원본 PDF와 실행 책임 구분
 

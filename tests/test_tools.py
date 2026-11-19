@@ -6,10 +6,10 @@ import httpx
 import pytest
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from fuelroute.config import Settings
-from fuelroute.coordinates import katec_to_wgs84, wgs84_to_katec
-from fuelroute.probes import probe_rest_area
-from fuelroute.tools import FuelTools
+from fuelroute.calculations.coordinates import katec_to_wgs84, wgs84_to_katec
+from fuelroute.clients.rest_area import probe_rest_area
+from fuelroute.core.config import Settings
+from fuelroute.tools.fuel_tools import FuelTools
 
 
 def settings() -> Settings:

@@ -4,7 +4,8 @@ from copy import deepcopy
 
 import pytest
 
-from fuelroute.recommendation import RecommendationRequest, rank_candidates
+from fuelroute.calculations.ranking import rank_candidates
+from fuelroute.schemas.recommendation import RecommendationRequest
 
 
 def candidate(station_id: str, price: float = 1800, seconds: float = 60) -> dict:

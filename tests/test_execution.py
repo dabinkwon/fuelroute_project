@@ -7,16 +7,19 @@ from datetime import date
 import httpx
 import pytest
 
-from fuelroute.__main__ import main
-from fuelroute.agent import execute_request, make_graph
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolResult
-from fuelroute.coordinates import wgs84_to_katec
-from fuelroute.execution import PlanExecution, execute_work_plan
-from fuelroute.geocoding import resolve_location
-from fuelroute.probes import ProbeFailure
-from fuelroute.request_analysis import ExtractedRequest, RequestAnalysis, analyze_conditions
-from fuelroute.task_plan import PlanProposal, WorkPlan, finalize_plan
+from fuelroute.agent.analysis import analyze_conditions
+from fuelroute.agent.execution import execute_work_plan
+from fuelroute.agent.graph import execute_request, make_graph
+from fuelroute.agent.planning import finalize_plan
+from fuelroute.calculations.coordinates import wgs84_to_katec
+from fuelroute.cli.commands import main
+from fuelroute.clients.kakao_local import resolve_location
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolResult
+from fuelroute.core.errors import ProbeFailure
+from fuelroute.schemas.analysis import ExtractedRequest, RequestAnalysis
+from fuelroute.schemas.execution import PlanExecution
+from fuelroute.schemas.planning import PlanProposal, WorkPlan
 
 TODAY = date(2026, 11, 19)
 USER = "출발(127,37)에서 목적(127.2,37)으로 휘발유 주유 추천해줘. 주행 가능180km, 안전 여유30km야."
@@ -618,8 +621,8 @@ def test_run_cli_dispatches_real_graph_and_returns_failure_exit_code(
                 client=client,
             )
 
-    monkeypatch.setattr("fuelroute.__main__.execute_request", entry)
-    monkeypatch.setattr("fuelroute.__main__.Settings", settings)
+    monkeypatch.setattr("fuelroute.cli.commands.execute_request", entry)
+    monkeypatch.setattr("fuelroute.cli.commands.Settings", settings)
     assert main(["run", "--message", USER, "--reference-date", "2026-11-19"]) == (1 if fatal else 0)
     result = json.loads(capsys.readouterr().out)
     assert result["ok"] is not fatal

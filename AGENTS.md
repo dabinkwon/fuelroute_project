@@ -44,7 +44,27 @@ FuelRoute는 계기판의 주행 가능 거리(km)에서 안전 여유(km)를 �
 | 외부 HTTP | `httpx` |
 | 저장소 | SQLite |
 | Frontend | HTML/CSS/JavaScript 또는 Vue.js; 아직 미정 |
-| 좌표 변환 | pyproj 3.7.2, Korean 1985(EPSG:4162) 기반 KATEC TM128; coordinates.py 참조 |
+| 좌표 변환 | pyproj 3.7.2, Korean 1985(EPSG:4162) 기반 KATEC TM128; calculations/coordinates.py 참조 |
+
+### 기능별 폴더 배치
+
+`fuelroute/` 바로 아래에 기능 모듈을 다시 늘리지 않는다. 새 코드는 아래 책임에 맞는 폴더에서 개발한다. 루트의 `__main__.py`는 CLI 시작만 담당한다.
+
+| 폴더 | 담당 책임 |
+|---|---|
+| `agent/` | LangGraph State·노드·요청 분석·작업 계획·실행·재계획·LLM 프롬프트 |
+| `calculations/` | 안전거리·좌표 변환·검색점 보간·우회 비용·정렬·제약 판정 등 순수 계산 |
+| `clients/` | GMS 구조화 호출·Kakao·Opinet·휴게소의 비동기 HTTP·제공사 응답 검사 |
+| `tools/` | 독립 조회의 정규화·Tool 등록·입출력 계약 적용 |
+| `schemas/` | 계층 사이에 공유하는 Pydantic 입력·출력·상태 데이터 |
+| `core/` | 설정·공통 응답·오류·비밀값 정제 |
+| `api/` | FastAPI 서버와 HTTP 라우터 |
+| `cli/` | 터미널 명령·GMS 검증·경로 연결 진단 실행기 |
+
+- `core`는 다른 업무 계층을 가져오지 않는다. `schemas`는 `core`와 다른 `schemas`만 참조한다.
+- `calculations`는 `core`·`schemas`·다른 계산 모듈만 참조하고 API·LLM·Agent·Tool 실행을 하지 않는다.
+- `clients`는 `core`·`schemas`·다른 클라이언트만 참조한다. Agent 실행 순서나 추천 정책을 넣지 않는다.
+- 공유 모델을 사용하려고 상위 실행 모듈을 import하지 말고 `schemas`에서 직접 가져온다. 계산식·API 정책 변경과 파일 이동은 별도 변경으로 구분해 검증·커밋한다.
 
 - HTTP 라우터, Agent 흐름, 외부 API 클라이언트·Tool, 계산 서비스, 저장소의 책임을 분리한다.
 - LLM은 요청 분석·계획·Tool 선택·결과 설명을 맡는다. 거리·연료·비용 계산과 제약 판정은 일반 코드로 구현한다.

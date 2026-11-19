@@ -6,22 +6,20 @@ from datetime import date, datetime, time, timezone
 import httpx
 import pytest
 
-from fuelroute.agent import execute_request
-from fuelroute.config import Settings
-from fuelroute.execution import CandidateRoutes, PlanExecution, WorkResults
-from fuelroute.judgement import apply_judgement, judge_execution, time_constraint
-from fuelroute.probes import ProbeFailure
-from fuelroute.recommendation import CandidateEvaluation, RecommendationRequest, rank_candidates
-from fuelroute.request_analysis import (
-    ExtractedRequest,
-    RequestAnalysis,
-    TripConditions,
-    analyze_conditions,
-)
-from fuelroute.route_contracts import DrivingRoute, RouteLeg
-from fuelroute.task_plan import PlanProposal, WorkPlan, finalize_plan
-from fuelroute.tool_registry import SafeRangeOutput
-from fuelroute.tools import StationDetails
+from fuelroute.agent.analysis import analyze_conditions
+from fuelroute.agent.graph import execute_request
+from fuelroute.agent.planning import finalize_plan
+from fuelroute.calculations.constraints import apply_judgement, judge_execution, time_constraint
+from fuelroute.calculations.ranking import rank_candidates
+from fuelroute.core.config import Settings
+from fuelroute.core.errors import ProbeFailure
+from fuelroute.schemas.analysis import ExtractedRequest, RequestAnalysis, TripConditions
+from fuelroute.schemas.driving import SafeRangeOutput
+from fuelroute.schemas.execution import CandidateRoutes, PlanExecution, WorkResults
+from fuelroute.schemas.planning import PlanProposal, WorkPlan
+from fuelroute.schemas.recommendation import CandidateEvaluation, RecommendationRequest
+from fuelroute.schemas.routes import DrivingRoute, RouteLeg
+from fuelroute.schemas.stations import StationDetails
 
 TODAY = date(2026, 11, 19)
 ORDER = [

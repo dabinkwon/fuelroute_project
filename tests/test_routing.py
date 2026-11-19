@@ -6,10 +6,12 @@ from copy import deepcopy
 import httpx
 import pytest
 
-from fuelroute.config import Settings
-from fuelroute.coordinates import wgs84_to_katec
-from fuelroute.route_spike import RouteSpikeRequest, assess_candidate_routes, run_route_spike
-from fuelroute.routing import build_route_path, generate_search_points
+from fuelroute.calculations.coordinates import wgs84_to_katec
+from fuelroute.calculations.detour import assess_candidate_routes
+from fuelroute.calculations.route_points import build_route_path, generate_search_points
+from fuelroute.cli.route_spike import run_route_spike
+from fuelroute.core.config import Settings
+from fuelroute.schemas.requests import RouteSpikeRequest
 
 
 def route_payload(

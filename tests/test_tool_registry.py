@@ -7,10 +7,10 @@ import httpx
 import pytest
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolResult
-from fuelroute.coordinates import wgs84_to_katec
-from fuelroute.tool_registry import ToolRegistry
+from fuelroute.calculations.coordinates import wgs84_to_katec
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolResult
+from fuelroute.tools.registry import ToolRegistry
 
 NAMES = {
     "calculate_safe_range",

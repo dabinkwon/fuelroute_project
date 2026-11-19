@@ -6,15 +6,13 @@ from urllib.parse import quote
 import httpx
 import pytest
 
-from fuelroute.config import Settings
-from fuelroute.probes import (
-    Coordinate,
-    OpinetSearch,
-    probe_opinet,
-    probe_rest_area,
-    probe_route,
-    redact,
-)
+from fuelroute.clients.kakao_routes import probe_route
+from fuelroute.clients.opinet import probe_opinet
+from fuelroute.clients.rest_area import probe_rest_area
+from fuelroute.core.config import Settings
+from fuelroute.core.redaction import redact
+from fuelroute.schemas.coordinates import Coordinate
+from fuelroute.schemas.stations import OpinetSearch
 
 
 def settings() -> Settings:

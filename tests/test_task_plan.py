@@ -11,15 +11,17 @@ import pytest
 from openai import APIStatusError, APITimeoutError
 from pydantic import ValidationError
 
-from fuelroute.__main__ import main
-from fuelroute.agent import make_graph, plan_request
-from fuelroute.agent_gms import llm_plan
-from fuelroute.config import Settings
-from fuelroute.contracts import ToolResult
-from fuelroute.geocoding import resolve_location
-from fuelroute.probes import ProbeFailure
-from fuelroute.request_analysis import ExtractedRequest, RequestAnalysis, analyze_conditions
-from fuelroute.task_plan import PlanProposal, finalize_plan
+from fuelroute.agent.analysis import analyze_conditions
+from fuelroute.agent.graph import make_graph, plan_request
+from fuelroute.agent.llm import llm_plan
+from fuelroute.agent.planning import finalize_plan
+from fuelroute.cli.commands import main
+from fuelroute.clients.kakao_local import resolve_location
+from fuelroute.core.config import Settings
+from fuelroute.core.contracts import ToolResult
+from fuelroute.core.errors import ProbeFailure
+from fuelroute.schemas.analysis import ExtractedRequest, RequestAnalysis
+from fuelroute.schemas.planning import PlanProposal
 
 TODAY = date(2026, 11, 19)
 USER = (
@@ -356,7 +358,7 @@ def test_gms_analysis_and_plan_use_separate_schemas_and_close_clients(
         models.append(model)
         return model
 
-    monkeypatch.setattr("fuelroute.agent_gms.ChatOpenAI", factory)
+    monkeypatch.setattr("fuelroute.clients.gms.ChatOpenAI", factory)
     settings = Settings(
         _env_file=None,
         gms_api_key="private-test-key",
@@ -421,7 +423,7 @@ def test_plan_cli_dispatch_and_invalid_date(
             reference_date=reference_date,
         )
 
-    monkeypatch.setattr("fuelroute.__main__.plan_request", fake)
+    monkeypatch.setattr("fuelroute.cli.commands.plan_request", fake)
     assert main(["plan", "--message", USER, "--reference-date", "2026-11-19"]) == 0
     assert json.loads(capsys.readouterr().out)["data"]["plan"]["status"] == "ready"
     assert calls == [(USER, TODAY)]

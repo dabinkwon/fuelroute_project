@@ -77,13 +77,13 @@ HTTP_TIMEOUT_SECONDS=20
 ### 구현한 기반과 남은 검증
 
 - `frontend/dist/`: 카카오 등록용 서비스 소개 프론트를 Sites에 선배포한 뒤 사용자 요청으로 Netlify에 배포했다. `netlify.toml`에서 정적 폴더만 지정한다. Backend 미연결이며 API 키를 사용하지 않는다. 배포 주소와 외부 공개 상태는 README에서 관리한다.
-- `fuelroute/config.py`: `.env`보다 OS 환경변수를 우선하고 빈 값을 미설정으로 처리한다. 키는 `SecretStr`로 보관하며 `doctor`는 누락 변수명만 출력한다.
-- `fuelroute/main.py`: 실제 구현된 Endpoint는 `GET /health`다. Chat·계획·로그 API는 아래 설계안대로 후속 구현한다.
-- `fuelroute/contracts.py`: `ToolResult[T]`의 성공/실패 필드 불변조건과 완료 시각의 시간대를 검증한다.
-- `fuelroute/services.py`: 연료 입력의 단위·범위·유한성을 검증하고 안전거리를 계산한다. LLM용 Tool에도 설명과 입력 스키마를 등록했다.
-- `fuelroute/gms.py`: GMS ChatOpenAI 텍스트·구조화 조건 추출·단일 로컬 Tool 왕복을 실제 계정에서 검증했다.
-- `fuelroute/probes.py`: Opinet KATEC 반경/ID 상세, Kakao 기본/경유 상세경로, 휴게소 한 페이지를 독립 조회한다. 원본 응답과 공통 메타를 반환하고 키는 마스킹한다. 요청별 타임아웃은 기본 20초, 자동 재시도는 0회다.
-- `fuelroute/tools.py`: `search_gas_stations`, `get_station_details`, `search_rest_area_info`를 공통 응답·입력 설명과 함께 등록했다. WGS84↔KATEC 변환, 가격·시각 정규화, 휴게소 전체 페이지·반경/방향 필터를 실제 응답으로 확인했다. 휴게소와 동일 주유소임을 추측하지 않는다.
+- `fuelroute/core/config.py`: `.env`보다 OS 환경변수를 우선하고 빈 값을 미설정으로 처리한다. 키는 `SecretStr`로 보관하며 `doctor`는 누락 변수명만 출력한다.
+- `fuelroute/api/app.py`: 실제 구현된 Endpoint는 `GET /health`다. Chat·계획·로그 API는 아래 설계안대로 후속 구현한다.
+- `fuelroute/core/contracts.py`: `ToolResult[T]`의 성공/실패 필드 불변조건과 완료 시각의 시간대를 검증한다.
+- `fuelroute/calculations/driving_range.py`와 `schemas/driving.py`: 연료 입력의 단위·범위·유한성을 검증하고 안전거리를 계산한다. LLM용 Tool에도 설명과 입력 스키마를 등록했다.
+- `fuelroute/cli/gms_probe.py`: GMS ChatOpenAI 텍스트·구조화 조건 추출·단일 로컬 Tool 왕복을 실제 계정에서 검증했다.
+- `fuelroute/clients/{opinet,kakao_routes,rest_area}.py`: Opinet KATEC 반경/ID 상세, Kakao 기본/경유 상세경로, 휴게소 한 페이지를 독립 조회한다. 원본 응답과 공통 메타를 반환하고 키는 마스킹한다. 요청별 타임아웃은 기본 20초, 자동 재시도는 0회다.
+- `fuelroute/tools/fuel_tools.py`와 `schemas/stations.py`: `search_gas_stations`, `get_station_details`, `search_rest_area_info`를 공통 응답·입력 설명과 함께 등록했다. WGS84↔KATEC 변환, 가격·시각 정규화, 휴게소 전체 페이지·반경/방향 필터를 실제 응답으로 확인했다. 휴게소와 동일 주유소임을 추측하지 않는다.
 - 설치 버전은 `requirements.txt`, 개발 도구는 `requirements-dev.txt`, 전체 Windows/Python 3.11.9 환경은 `requirements.lock.txt`에 기록했다.
 
 실제 요청 근거: [Opinet 반경 검색](https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=3), [Opinet ID 상세](https://www.opinet.co.kr/user/custapi/openApiInfoDtl.do?apiId=1), [Kakao 길찾기](https://developers.kakaomobility.com/en/guide/navi-api/directions), [휴게소 표준데이터](https://www.data.go.kr/data/15025446/standard.do). 2026-11-18 사용자 확인값인 계정별 호출 한도·휴게소 API 활용기간은 [TASKS 완료 기록](TASKS.md#completed-2026-11-18)과 [검증 기록](verification/2026-11-18.json)에 남겼다. 공개 이용조건·현재 적용 범위는 [API_USAGE](API_USAGE.md)에 기록했다. 개별 계약과 상용 재배포 권한 확보를 뜻하지 않는다.
@@ -132,6 +132,14 @@ HTTP_TIMEOUT_SECONDS=20
     ▼
 [Execution Log Repository]
 ```
+
+### 구현 파일의 책임 경계
+
+2026-11-19에 기존 기능을 유지하면서 `fuelroute/`를 책임별 패키지로 재구성했다. `agent/`는 실행 흐름, `calculations/`는 순수 계산, `clients/`는 제공사 통신, `tools/`는 정규화·등록, `schemas/`는 공유 계약, `core/`는 설정·오류·공통 결과, `api/`는 HTTP 진입점, `cli/`는 명령·진단을 맡는다.
+
+하위 의존성은 `core → core`, `schemas → core·schemas`, `calculations → core·schemas·calculations`, `clients → core·schemas·clients`로 제한한다. 공유 모델이 필요해 계산에서 Agent 실행기를 가져오는 구조를 피한다. `schemas/execution.py`의 결과를 `calculations/constraints.py`에서 판정하므로 판정은 HTTP·LLM 없이 독립 실행된다. 상위 Agent와 Tool은 이 계약·계산·클라이언트를 조합한다. 검증용 GMS 왕복 실행기는 `cli/gms_probe.py`에 유지한다.
+
+서버 진입점은 `fuelroute.api.app:app`이다. `python -m fuelroute` 명령·공개 JSON·일곱 Tool 설명/입출력 스키마와 API 호출 정책은 유지했다. [이동표·검증](DEVELOPMENT.md#package-layout)을 참고한다.
 
 ### 설계 원칙
 
@@ -611,7 +619,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 ### F3006 작업 계획 계약
 
-`task_plan.py`는 요청 분석 결과를 재검사하는 `prepare_plan`과 모델 제안을 검증하는 `finalize_plan`을 분리한다. 준비된 추천만 `agent_gms.llm_plan`으로 GMS를 1회 더 호출한다. 모델에는 검증 조건·기존 실행 기본값·허용 작업·실제 외부 조회 Tool의 설명/입력 스키마/다음 필드를 전달한다. 원본 위치 응답·인증정보는 전달하지 않는다. `calculate_safe_range`·제약 평가·정렬은 일반 코드 작업이며 모델의 외부 조회 Tool 목록에서는 제외한다.
+`agent/planning.py`는 요청 분석 결과를 재검사하는 `prepare_plan`과 모델 제안을 검증하는 `finalize_plan`을 분리한다. 준비된 추천만 `agent.llm.llm_plan`으로 GMS를 1회 더 호출한다. 모델에는 검증 조건·기존 실행 기본값·허용 작업·실제 외부 조회 Tool의 설명/입력 스키마/다음 필드를 전달한다. 원본 위치 응답·인증정보는 전달하지 않는다. `calculate_safe_range`·제약 평가·정렬은 일반 코드 작업이며 모델의 외부 조회 Tool 목록에서는 제외한다.
 
 | 필드 | 의미 |
 |---|---|
@@ -648,7 +656,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 ### F3008 판정 계약
 
-`run`은 실행 뒤 `judge→enrich`를 추가한다. `judgement.py`의 `judge_execution`은 분석/계획의 위치·유종·주행 조건과 실제 기본 경로의 출발/목적을 대조하고 비용을 재계산한다. 과거 `eligible`·안전거리·우회 캐시를 신뢰하지 않는다. 상세 가격/유종·독립 접근과 경유 첫 구간 중 큰 거리·동일 기본/경유 차이를 확인한다. 비용 미확인은0으로 보완하지 않고 불충족과 구분한다.
+`run`은 실행 뒤 `judge→enrich`를 추가한다. `calculations/constraints.py`의 `judge_execution`은 분석/계획의 위치·유종·주행 조건과 실제 기본 경로의 출발/목적을 대조하고 비용을 재계산한다. 과거 `eligible`·안전거리·우회 캐시를 신뢰하지 않는다. 상세 가격/유종·독립 접근과 경유 첫 구간 중 큰 거리·동일 기본/경유 차이를 확인한다. 비용 미확인은0으로 보완하지 않고 불충족과 구분한다.
 
 `TripJudgement`는 후보별 `ConstraintCheck`의 비교값·단위·출처와 호출 ID, 여유km·선택 연비가 있는 경우의 추정L·예상 도착을 반환한다. 상한과 같으면 통과하며 음수 우회는 원 값 보존 후 상한 비교에0을 쓴다. 실패/미확인 후보는 확정 추천에서 제외하고 평가한 집합 안에서 사용자 가격/시간 우선을 유지한다. `apply_judgement`는 결과 복사본의 안전거리·평가·정렬을 갱신한다.
 
@@ -712,7 +720,7 @@ END
 
 ## 재계획 실행 정책 — 확정·서비스 구현 완료
 
-`planning.py`의 `recommend_route`는 명시적 조건을 받는 실행기다. 위 전체 LangGraph는 후속 단계이며 현재 CLI에서 다음 정책을 검증했다.
+`agent/replanning.py`의 `recommend_route`는 명시적 조건을 받는 실행기다. 위 전체 LangGraph는 후속 단계이며 현재 CLI에서 다음 정책을 검증했다.
 
 - 재계획은 최대 2회, 최초 실행 포함 최대 3회차다. `max_replans=0`이면 최초 회차만 실행한다.
 - 검색 결과가 없거나 평가한 후보가 전부 제외되면 이미 조회한 미평가 후보를 먼저 사용한다. 미평가 후보가 없을 때만 안전 구간의 앞쪽 검색점을 회차당 한 곳 추가한다. 기본 139/119/94km 이후 추가 지점은 69/44km다.
@@ -821,7 +829,7 @@ Agent에 노출하는 함수에는 추가 규칙을 적용한다.
 
 ### 설명 예시 — 후보 검색
 
-아래는 구현한 후보 함수의 설명 계약 예시다. 실제 정규화 모델과 Tool 등록은 `fuelroute/tools.py`에 있다. 성공 데이터는 후보 목록을 `data.items`에 담는 공통 객체 형식을 사용한다.
+아래는 구현한 후보 함수의 설명 계약 예시다. 실제 정규화 모델과 Tool 등록은 `fuelroute/tools/fuel_tools.py`와 `schemas/stations.py`에 있다. 성공 데이터는 후보 목록을 `data.items`에 담는 공통 객체 형식을 사용한다.
 
 ```python
 async def search_gas_stations(
