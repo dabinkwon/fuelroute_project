@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolError, ToolResult
-from fuelroute.planning import FATAL_CODES
+from fuelroute.planning import FATAL_CODES, PlanningRequest
 from fuelroute.probes import Coordinate, ProbeFailure
 from fuelroute.recommendation import (
     CandidateEvaluation,
@@ -135,10 +135,18 @@ def _invalid_result(result: ToolResult[dict], message: str) -> ToolResult[dict]:
 class _PlanRunner:
     """한 요청의 상세 경로·캐시·후보 작업 상태만 보유하는 실행기. 요청 사이 공유하지 않는다."""
 
-    def __init__(self, plan: WorkPlan, settings: Settings, client: httpx.AsyncClient) -> None:
+    def __init__(
+        self,
+        plan: WorkPlan,
+        settings: Settings,
+        client: httpx.AsyncClient,
+        *,
+        defer_rest_info: bool = False,
+    ) -> None:
         """검증된 ready 계획과 호출자 소유 클라이언트를 보관한다. 생성 시 HTTP·DB는 없다.
 
-        상세 경로와 경로 캐시는 이 객체 안에서만 사용한다. 공개 output에는 원본 기하를
+        defer_rest_info=True이면 보조 조회를 후속 판정 뒤로 미룬다. 기본False는 기존 직접
+        실행 계약이다. 상세 경로와 캐시는 이 객체에서만 사용한다. 공개 output에는 기하를
         넣지 않는다. 입력 검사는 execute_work_plan이 먼저 수행하며 종료는 호출자 책임이다.
         """
         self.plan = plan
@@ -150,6 +158,7 @@ class _PlanRunner:
         self.evaluations: dict[str, CandidateEvaluation] = {}
         self.route_cache: dict[str, ToolResult[dict]] = {}
         self.action: Action = "base_route"
+        self.defer_rest_info = defer_rest_info
 
     def _record(
         self, result: ToolResult[dict], inputs: dict, station_id: str | None = None
@@ -431,26 +440,17 @@ class _PlanRunner:
 
         유일한 추천 후보가 있을 때 한 번 호출하며 내부 HTTP는 최대10페이지다. 노선/방향을
         추측하지 않고 match_status=unverified·시설null·기준일을 유지한다. 실패해도 추천을
-        제외하거나 재시도하지 않는다. 추천이 없으면False, 조회했다면True다. DB는 없다.
+        제외하거나 재시도하지 않는다. 추천이 없거나 후속 판정으로 미루면False다.
+        조회했다면True이며 DB는 없다.
         """
+        if self.defer_rest_info:
+            return False
         recommended = self.output.results.rank_candidates.recommended
         if recommended is None:
             return False
-        station = recommended.station
-        arguments = {
-            "longitude": station.longitude,
-            "latitude": station.latitude,
-            "radius_m": self.request.radius_m,
-        }
-        result = await self.registry.invoke("search_rest_area_info", arguments)
-        self._record(result, arguments, recommended.station_id)
-        if self._require(result, optional=True):
-            self.output.results.rest_area_info = RestAreasOutput.model_validate(result.data)
-        else:
-            self.output.warnings.append(
-                f"휴게소 보조정보 미확인({result.error.code}). "
-                "주유소와 동일 시설·방향임을 확인하지 않았습니다."
-            )
+        self.output = await enrich_rest_area(
+            self.output, self.request, self.registry.settings, self.registry.client
+        )
         return True
 
     async def run(self) -> PlanExecution:
@@ -514,6 +514,8 @@ async def execute_work_plan(
     plan: WorkPlan,
     settings: Settings,
     client: httpx.AsyncClient,
+    *,
+    defer_rest_info: bool = False,
 ) -> PlanExecution:
     """F3006 작업 계획을 검증하고 F3007 조회·전달·기존 계산 통합을 한 회차 수행한다.
 
@@ -524,7 +526,8 @@ async def execute_work_plan(
     변형 계획은 HTTP 전ProbeFailure(INVALID_INPUT), 핵심 제공사 실패는 반환error/stopped,
     개별 후보/보조 실패는 부분 결과에 보존한다. 자동 재시도/재계획·추가LLM·DB·이벤트는 없다.
     예: plan.status=needs_user_input이면 같은 상태와 빈 결과를 반환한다. 기존 계산/정렬은
-    재사용하지만 날짜/도착시각 적합성·최종 자연어 응답은 후속 단계다.
+    재사용한다. defer_rest_info=True는 F3008 판정 뒤 보조 조회를 하기 위한 옵션이며
+    기본False는 기존 직접 실행 계약을 유지한다. 최종 자연어 응답은 후속 단계다.
     """
     try:
         plan = WorkPlan.model_validate(plan.model_dump())
@@ -543,4 +546,71 @@ async def execute_work_plan(
             ),
             warnings=list(plan.warnings),
         )
-    return await _PlanRunner(plan, settings, client).run()
+    return await _PlanRunner(plan, settings, client, defer_rest_info=defer_rest_info).run()
+
+
+async def enrich_rest_area(
+    execution: PlanExecution,
+    request: PlanningRequest | None,
+    settings: Settings,
+    client: httpx.AsyncClient,
+) -> PlanExecution:
+    """확정 추천 후보의 보조정보만 조회해 실행 결과 복사본에 연결한다.
+
+    선행 제약 판정이 끝난 execution과 검증 요청을 받는다. 추천/요청/정상 실행이 없으면
+    HTTP0회다. 같은 ID의 기존 보조 호출은 성공·실패 모두 재사용해 재시도하지 않는다.
+    후보가 바뀌면 이전 후보의 보조정보는 지우고 새 좌표로 최대1논리조회(내부10페이지)를
+    수행한다. 실패는 추천을 유지하고 경고·공통 호출 결과에 남긴다. 입력/client를 닫거나
+    수정하지 않고 단계 처리·논리 호출 집계를 갱신한 복사본을 반환한다. DB·LLM·이벤트는 없다.
+    예:시간 제약 판정으로A가 제외되고B가 선택되면A의 휴게소를B에 붙이지 않는다.
+    """
+    output = execution.model_copy(deep=True)
+    recommendation = output.results.rank_candidates
+    selected = recommendation.recommended if recommendation else None
+    step = next((item for item in output.steps if item.action == "rest_area_info"), None)
+    output.results.rest_area_info = None
+    if selected is None or request is None or output.error:
+        if step:
+            step.status = "skipped"
+            step.message = "확정 추천 후보가 없어 보조 조회를 생략했습니다."
+        return output
+    previous = next(
+        (
+            call
+            for call in reversed(output.calls)
+            if call.action == "rest_area_info" and call.station_id == selected.station_id
+        ),
+        None,
+    )
+    if previous is not None:
+        result = previous.result
+    else:
+        station = selected.station
+        arguments = {
+            "longitude": station.longitude,
+            "latitude": station.latitude,
+            "radius_m": request.radius_m,
+        }
+        result = await ToolRegistry(settings, client).invoke("search_rest_area_info", arguments)
+        output.calls.append(
+            ToolCallRecord(
+                action="rest_area_info",
+                station_id=selected.station_id,
+                inputs=arguments,
+                result=result,
+            )
+        )
+    if result.ok:
+        output.results.rest_area_info = RestAreasOutput.model_validate(result.data)
+    else:
+        warning = (
+            f"휴게소 보조정보 미확인({result.error.code}). "
+            "주유소와 동일 시설·방향임을 확인하지 않았습니다."
+        )
+        if warning not in output.warnings:
+            output.warnings.append(warning)
+    if step:
+        step.status = "completed"
+        step.message = "확정 후보의 보조 조회를 처리했습니다."
+    output.tool_call_counts = dict(Counter(call.result.meta.provider for call in output.calls))
+    return output

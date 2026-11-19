@@ -1,4 +1,4 @@
-"""함수 주입으로 구성한 F3005 분석·F3006 계획·F3007 조회 실행 그래프."""
+"""함수 주입으로 구성한 F3005 분석·F3006 계획·F3007 실행·F3008 판정 그래프."""
 
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
@@ -12,8 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from fuelroute.agent_gms import llm_analyze, llm_plan
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolResult
-from fuelroute.execution import PlanExecution, execute_work_plan
+from fuelroute.execution import PlanExecution, enrich_rest_area, execute_work_plan
 from fuelroute.geocoding import LocationMatchSet, resolve_location
+from fuelroute.judgement import TripJudgement, apply_judgement, judge_execution
 from fuelroute.probes import Coordinate, ProbeFailure, run_probe
 from fuelroute.request_analysis import (
     ExtractedRequest,
@@ -27,16 +28,19 @@ Analyzer = Callable[[str], Awaitable[ExtractedRequest]]
 LocationResolver = Callable[[str], Awaitable[ToolResult[dict]]]
 Planner = Callable[[RequestAnalysis], Awaitable[PlanProposal]]
 Executor = Callable[[WorkPlan], Awaitable[PlanExecution]]
+Judge = Callable[[RequestAnalysis, WorkPlan, PlanExecution], TripJudgement]
+Enricher = Callable[[WorkPlan, PlanExecution], Awaitable[PlanExecution]]
 
 
 class State(TypedDict, total=False):
-    """원문·분석·계획·작업 결과와 실행 요약을 전달한다. Memory·이벤트는 후속 작업이다."""
+    """원문·분석·계획·작업 결과·실행·판정 근거를 전달한다. Memory·이벤트는 후속 작업이다."""
 
     user: str
     analysis: dict
     plan: dict
     results: dict
     execution: dict
+    judgement: dict
 
 
 class AnalysisInput(BaseModel):
@@ -54,6 +58,8 @@ def make_graph(
     *,
     llm_plan_fn: Planner | None = None,
     executor: Executor | None = None,
+    judge: Judge | None = None,
+    enricher: Enricher | None = None,
 ) -> CompiledStateGraph:
     """분석·선택 위치 검색·선택 계획 함수를 주입받아 실행 전 그래프를 만든다.
 
@@ -67,7 +73,9 @@ def make_graph(
     잘못된 요청은 ValidationError, 모델 출력/계획 순서 오류는 INVALID_RESPONSE다.
     executor가 있으면 계획 뒤 execute_plan을 연결하고 준비된 계획만 한 회차 실행한다.
     executor를 쓰려면 llm_plan_fn도 필요하다. 구성 오류는ValueError이며 실행 실패는
-    State.execution에 보존한다. Memory·DB·이벤트·최종 자연어 응답·자동 재계획은 없다.
+    State.execution에 보존한다. judge가 있으면 실행 뒤 순수 제약 판정과 선택 보조 조회를
+    연결한다. judge에는executor, enricher에는judge가 필요하다. Memory·DB·이벤트·최종
+    문장·자동 재계획은 없다. 추가 판정은 API/LLM을 사용하지 않는다.
     """
 
     async def analyze(state: State) -> dict:
@@ -88,6 +96,8 @@ def make_graph(
 
     if executor is not None and llm_plan_fn is None:
         raise ValueError("실행 노드에는 계획 함수가 필요합니다.")
+    if judge is not None and executor is None or enricher is not None and judge is None:
+        raise ValueError("판정에는 실행기, 보조 연결에는 판정 함수가 필요합니다.")
     graph = StateGraph(State)
     graph.add_node("analyze", analyze)
     graph.add_edge(START, "analyze")
@@ -146,7 +156,60 @@ def make_graph(
             }
 
         graph.add_node("execute_plan", execute_plan)
-        graph.add_edge("execute_plan", END)
+        graph.add_edge("execute_plan", "judge" if judge is not None else END)
+    if judge is not None:
+
+        def judge_plan(state: State) -> dict:
+            """실제 비용과 입력으로 F3008 제약을 재판정해 근거·확정 추천을 State에 보관한다.
+
+            분석/계획/실행 결과만 사용하며 호출·DB·추가LLM은 없다. 미확인 시간 입력은
+            보완 질문으로 반환하고 과거 판정값을 맹신하지 않는다. 출력 스키마 오류는
+            INVALID_RESPONSE, 입력/실행 모순은 판정 함수의 ProbeFailure로 전달한다.
+            반환 results/execution은 확정 판정을 반영해 이전 추천/보조정보를 잘못 붙이지 않는다.
+            """
+            analysis = RequestAnalysis.model_validate(state["analysis"])
+            plan = WorkPlan.model_validate(state["plan"])
+            execution = PlanExecution.model_validate(state["execution"])
+            try:
+                judgement = TripJudgement.model_validate(judge(analysis, plan, execution))
+            except ValidationError as exc:
+                raise ProbeFailure("INVALID_RESPONSE", "제약 판정 출력 계약을 확인하세요.") from exc
+            updated = apply_judgement(execution, judgement)
+            return {
+                "judgement": judgement.model_dump(mode="json"),
+                "results": updated.results.model_dump(mode="json"),
+                "execution": updated.model_dump(mode="json"),
+            }
+
+        graph.add_node("judge", judge_plan)
+        graph.add_edge("judge", "enrich" if enricher is not None else END)
+    if enricher is not None:
+
+        async def enrich_plan(state: State) -> dict:
+            """판정 뒤 확정 후보의 보조정보만 연결한다. 미확정/실패는 추가 조회하지 않는다.
+
+            선택 enricher는 열린 클라이언트를 소유한 상위 함수가 주입한다. 보조 실패는
+            추천을 유지하고 반환 호출/경고에 남긴다. 추가LLM·제약 완화·DB·재계획은 없다.
+            결과 타입 불일치는INVALID_RESPONSE이며 이전 세션의 상태를 재사용하지 않는다.
+            """
+            try:
+                result = PlanExecution.model_validate(
+                    await enricher(
+                        WorkPlan.model_validate(state["plan"]),
+                        PlanExecution.model_validate(state["execution"]),
+                    )
+                )
+            except ValidationError as exc:
+                raise ProbeFailure(
+                    "INVALID_RESPONSE", "보조정보 연결 출력 계약을 확인하세요."
+                ) from exc
+            return {
+                "results": result.results.model_dump(mode="json"),
+                "execution": result.model_dump(mode="json"),
+            }
+
+        graph.add_node("enrich", enrich_plan)
+        graph.add_edge("enrich", END)
     if location_resolver is None:
         graph.add_edge("analyze", finish)
     else:
@@ -337,8 +400,12 @@ async def _run_request(
                 resolver = kakao_resolver
 
             async def tools_execute(plan: WorkPlan) -> PlanExecution:
-                """같은 요청의 열린 클라이언트로 계획을 한 회차 실행한다. 소유권은 상위에 둔다."""
-                return await execute_work_plan(plan, settings, active_client)
+                """한 회차를 실행하고 보조 조회는 F3008 뒤로 미룬다. 클라이언트는 상위 소유다."""
+                return await execute_work_plan(plan, settings, active_client, defer_rest_info=True)
+
+            async def enrich(plan: WorkPlan, execution: PlanExecution) -> PlanExecution:
+                """확정 후보의 보조정보를 연결한다. 같은 ID의 과거 보조 호출은 재사용한다."""
+                return await enrich_rest_area(execution, plan.request, settings, active_client)
 
             graph = make_graph(
                 analyzer or gms_analyze,
@@ -346,13 +413,13 @@ async def _run_request(
                 resolver,
                 llm_plan_fn=(planner or gms_plan) if include_plan else None,
                 executor=(executor or tools_execute) if include_execution else None,
+                judge=judge_execution if include_execution else None,
+                enricher=enrich if include_execution else None,
             )
             output = await graph.ainvoke({"user": query.user})
             return output, [name for name in graph.get_graph().nodes if not name.startswith("__")]
 
-        needs_client = (analyzer is None and location_resolver is None) or (
-            include_execution and executor is None
-        )
+        needs_client = (analyzer is None and location_resolver is None) or (include_execution)
         if client is not None:
             output, nodes = await execute(client)
         elif needs_client:
@@ -382,6 +449,7 @@ async def _run_request(
                 results=output["results"],
                 execution=output["execution"],
                 executor_mode="injected" if executor else "tools",
+                judgement=output["judgement"],
             )
         return data
 
@@ -406,12 +474,14 @@ async def execute_request(
     executor: Executor | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> ToolResult[dict]:
-    """자연어를 분석·위치 해석·계획한 뒤 F3007 Tool 실행 결과까지 공통 응답으로 반환한다.
+    """자연어를 분석·위치 해석·계획·조회한 뒤 F3008 제약 판정과 보조정보를 반환한다.
 
     user는1~5000자이며 기본 기준일은 실행일KST다. 기본 GMS 분석1회+준비된 추천의 계획1회,
     위치 검색 최대4회 뒤 한 회차만 실행한다. 모델·resolver·executor·client는 오프라인
     주입이 가능하며 주입client는 닫지 않는다. 내부 생성한 클라이언트는 항상 닫는다.
-    성공 data의analysis/plan/results/execution에 결과·개별 실패·호출을 전달한다. 핵심
+    성공 data의analysis/plan/results/execution/judgement에 결과·개별 실패·호출·판정 근거를
+    전달한다. 시간 상한에는 명시 정차시간을 더하고 날짜/시각/정차가 미확인이면 필요한
+    입력을 묻는다. 제약 판정은 추가LLM/API가 없고 보조 조회는 확정 후보에만 한다. 핵심
     인증/설정/한도/경로 실패는 공통error(data=None), 보조 조회 실패는 추천과 함께 표시한다.
     기본 데이터 조회 상한은Opinet6회·Kakao7회·휴게소1논리호출(최대10HTTP)이며 캐시로 줄 수
     있다. 재시도·재계획·DB·Memory·이벤트·최종 문장 생성은 없다. 예:km 입력이 부족하면

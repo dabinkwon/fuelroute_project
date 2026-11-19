@@ -597,7 +597,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 # 10. Agent 구조 설계안
 
-## F3005~F3007 구현 상태 — 2026-11-19
+## F3005~F3008 구현 상태 — 2026-11-19
 
 첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. `analyze` 명령의 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. F3006의 `plan` 명령은 위치 해석 뒤 `build_plan→END`를 연결한다. 비추천 의도는 위치 검색 없이 `build_plan`에서 계획 생략을 기록한다. 분석·계획·위치 검색 함수를 각각 주입할 수 있다. 아래 전체 흐름 중 별도 판단·재계획·Memory·최종 응답은 후속 설계이며 현재 구현 범위와 구분한다.
 
@@ -645,6 +645,18 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 개별 상세/경로의 없음·타임아웃·잘못된 응답은 해당 후보의 제외 근거로 남기고 다른 후보를 진행한다. 기본 경로/검색의 치명적 실패와 핵심 인증/설정/한도/입력 오류는 중단한다. `execute_work_plan`은 `stopped/error`와 확보한 부분 결과를 보존한다. 외부 `execute_request`는 핵심 실패를 공통 `ok=false,data=null,error`로 전달하고 CLI는 종료1이다. 정상 처리 중의 개별 후보/보조 실패는 성공 데이터에 남긴다. 로깅 이벤트·저장은 아직 연결하지 않았다.
 
 검색 전체0건/전체 제외는 `no_recommendation,replan_needed=true`이고 자동 반복은 없다. 기존 안전/우회 판정과 정렬 함수를 재사용하며 전체 경로 최저가나 도착시각 충족을 주장하지 않는다. 추천 후보가 있을 때만 휴게소를 조회하고 보조 실패는 경고로 표시한다. `match_status=unverified`, 미확인 시설 `null`, 데이터 기준일을 보존한다. 판단 노드/시각 제약·그래프 재계획·Memory·최종 문장은 후속 F3008~F3011 범위다. [F3007 기록](DEVELOPMENT.md#f3007-implementation), [실호출 근거](verification/2026-11-19-tool-execution.json), [호출 상한](API_USAGE.md)을 따른다.
+
+### F3008 판정 계약
+
+`run`은 실행 뒤 `judge→enrich`를 추가한다. `judgement.py`의 `judge_execution`은 분석/계획의 위치·유종·주행 조건과 실제 기본 경로의 출발/목적을 대조하고 비용을 재계산한다. 과거 `eligible`·안전거리·우회 캐시를 신뢰하지 않는다. 상세 가격/유종·독립 접근과 경유 첫 구간 중 큰 거리·동일 기본/경유 차이를 확인한다. 비용 미확인은0으로 보완하지 않고 불충족과 구분한다.
+
+`TripJudgement`는 후보별 `ConstraintCheck`의 비교값·단위·출처와 호출 ID, 여유km·선택 연비가 있는 경우의 추정L·예상 도착을 반환한다. 상한과 같으면 통과하며 음수 우회는 원 값 보존 후 상한 비교에0을 쓴다. 실패/미확인 후보는 확정 추천에서 제외하고 평가한 집합 안에서 사용자 가격/시간 우선을 유지한다. `apply_judgement`는 결과 복사본의 안전거리·평가·정렬을 갱신한다.
+
+선택 시간 입력은 `trip_date`(출발/계획 날짜), `arrival_date`(명시 도착 날짜), `departure_time`, `arrival_deadline`, `refuel_stop_min`이다. 도착 상한이 없으면 시간 제약을 만들지 않는다. 도착 날짜만 있으면 시각을 묻고23:59로 채우지 않는다. 날짜 없는 정상 순서의 두 시각은 `same_day_clock`, 날짜 둘이 명시되면 KST datetime 차이인 `explicit_dates`로 비교한다. 역순 시각은 익일을 추측하지 않고 날짜를 요구한다. 주행 예상초+명시 정차초를 예산과 비교하고 정차시간 미언급은0으로 대신하지 않는다.
+
+기본 입력 준비는 `analysis.ready_for_planning`, 최종 제약 상태는 `judgement.status`다. 상태는 `recommended/no_recommendation/needs_user_input/unavailable/not_required`이며 입력 보완 질문은 `missing_fields/questions`에 있다. ETA는 주행 응답과 정차 예상값에 따른 추정치이고 미래 교통을 보장하지 않는다. 시간 판정 자체는 HTTP/LLM0회다.
+
+기본 그래프 실행기는 보조 조회를 미룬 뒤 확정 판정의 후보만 `enrich_rest_area`에 넘긴다. 다른 후보의 보조정보는 지우고 같은 ID의 과거 보조 호출은 성공/실패 모두 재사용한다. 직접 `execute_work_plan`의 기본값은 기존 한 회차 계약을 유지하며 판정 그래프가 `defer_rest_info=True`를 사용한다. 시간 제약으로 후보가 모두 제외되면 보조 HTTP0회다. 그래프 재계획·Memory·최종 문장·이벤트/저장은 후속 범위다. [F3008 기록](DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](verification/2026-11-19-constraint-judgement.json)를 따른다.
 
 ## 전체 Agent 연결 설계
 

@@ -48,6 +48,9 @@ class ExtractedRequest(BaseModel):
     trip_date: Mention[date] | None = Field(
         default=None, description="계획 날짜; 상대 날짜는 기준일 사용"
     )
+    arrival_date: Mention[date] | None = Field(
+        default=None, description="명시된 도착 날짜; 미언급이면 null, 익일을 임의 추측하지 않음"
+    )
     departure_time: Mention[str] | None = Field(default=None, description="출발 시각 HH:MM")
     arrival_deadline: Mention[str] | None = Field(default=None, description="도착 상한 시각 HH:MM")
     fuel_type: Mention[Literal["gasoline", "diesel"]] | None = Field(
@@ -67,6 +70,9 @@ class ExtractedRequest(BaseModel):
     avg_efficiency_kmpl: Mention[float] | None = Field(default=None, description="평균 연비(km/L)")
     max_detour_min: Mention[float] | None = Field(default=None, description="허용 추가 시간(분)")
     max_detour_km: Mention[float] | None = Field(default=None, description="허용 추가 거리(km)")
+    refuel_stop_min: Mention[float] | None = Field(
+        default=None, description="사용자가 예상한 주유·정차 시간(분), 0도 명시값이며 기본값 없음"
+    )
 
 
 class TripConditions(BaseModel):
@@ -78,6 +84,7 @@ class TripConditions(BaseModel):
     origin: Coordinate | None = None
     destination: Coordinate | None = None
     trip_date: date | None = None
+    arrival_date: date | None = None
     departure_time: time | None = None
     arrival_deadline: time | None = None
     fuel_type: Literal["gasoline", "diesel"] | None = None
@@ -89,6 +96,7 @@ class TripConditions(BaseModel):
     avg_efficiency_kmpl: float | None = None
     max_detour_min: float | None = None
     max_detour_km: float | None = None
+    refuel_stop_min: float | None = None
 
 
 class RequestAnalysis(BaseModel):
@@ -127,6 +135,8 @@ FIELD_LABELS = {
     "max_detour_min": "허용 추가 시간(분, 0 이상)",
     "max_detour_km": "허용 추가 거리(km, 0 이상)",
     "trip_date": "계획 날짜(YYYY-MM-DD)",
+    "arrival_date": "도착 날짜(YYYY-MM-DD, 자정 이후면 날짜를 명시)",
+    "refuel_stop_min": "예상 주유·정차 시간(분, 0 이상)",
     "departure_time": "출발 시각(HH:MM)",
     "arrival_deadline": "도착 상한 시각(HH:MM)",
     "sort_by": "가격/우회시간 우선 선호",
@@ -137,6 +147,7 @@ FUEL_FIELDS = ("current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl")
 REQUIRED_FIELDS = BASE_REQUIRED_FIELDS + DISTANCE_FIELDS
 NUMBER = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?")
 QUANTITY_UNITS = {
+    "refuel_stop_min": r"(?:분|min(?:ute)?s?)",
     "remaining_range_km": r"(?:km(?![a-z/])|킬로미터)",
     "reserve_range_km": r"(?:km(?![a-z/])|킬로미터)",
     "current_fuel_l": r"(?:l(?![a-z])|리터)",
@@ -224,7 +235,7 @@ def _grounded(field: str, mention: Mention, user: str, reference_date: date) -> 
         return False
     if field in {"origin", "destination"}:
         return _number_present(value.longitude, quote) and _number_present(value.latitude, quote)
-    if field == "trip_date":
+    if field in {"trip_date", "arrival_date"}:
         return _date_present(value, quote, reference_date)
     if field in {"departure_time", "arrival_deadline"}:
         return _time_present(value, quote)
@@ -281,6 +292,7 @@ def analyze_conditions(
         "reserve_fuel_l",
         "max_detour_min",
         "max_detour_km",
+        "refuel_stop_min",
     ):
         value = getattr(conditions, field)
         if value is not None and (
@@ -366,6 +378,8 @@ def refresh_analysis(analysis: RequestAnalysis) -> RequestAnalysis:
             "max_detour_min",
             "max_detour_km",
             "arrival_deadline",
+            "arrival_date",
+            "refuel_stop_min",
         ],
     }
     needs = bool(missing or invalid or unverified)

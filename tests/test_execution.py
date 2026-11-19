@@ -495,6 +495,41 @@ def test_execution_node_skips_injected_executor_for_unready_plan() -> None:
     assert output["execution"]["status"] == "needs_user_input" and "stale" not in output["results"]
 
 
+def test_time_judgement_prevents_unnecessary_rest_lookup_after_real_executor() -> None:
+    """실제 실행기에서 비용을 받은 뒤 시간 제약이 전부 실패하면 보조 조회를 하지 않는다."""
+    provider = Provider()
+    user = USER + " 출발15:00 도착15:01 주유0분"
+
+    async def analyze(message: str) -> ExtractedRequest:
+        """출발/도착 상한과 정차0분을 명시한 요청을 대역으로 추출한다."""
+        return extracted(
+            departure_time={"value": "15:00", "quote": "출발15:00"},
+            arrival_deadline={"value": "15:01", "quote": "도착15:01"},
+            refuel_stop_min={"value": 0, "quote": "주유0분"},
+        )
+
+    async def plan(analysis: RequestAnalysis) -> PlanProposal:
+        """정상 계획을 반환해 제약 판정 전후 조회 순서만 분리해 확인한다."""
+        return proposal()
+
+    async def scenario() -> None:
+        """모의 전송으로 실제 조회 실행과 판정을 연결하고 휴게소 HTTP0회를 확인한다."""
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+            result = await execute_request(
+                user,
+                settings(),
+                analyzer=analyze,
+                planner=plan,
+                reference_date=TODAY,
+                client=client,
+            )
+        assert result.ok and result.data["judgement"]["status"] == "no_recommendation"
+        assert result.data["results"]["rank_candidates"]["recommended"] is None
+        assert "rest" not in provider.calls
+
+    asyncio.run(scenario())
+
+
 def test_place_labels_resolve_before_the_full_execution_and_keep_area_warnings() -> None:
     """지명만 있는 요청이 위치 해석→계획→조회까지 연결되고 지역 수준 경고가 유지되는지 확인한다."""
     provider = Provider()

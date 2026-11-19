@@ -38,6 +38,8 @@ LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하�
 
 ## F3007의 계획 실행 연결
 
+현재 `run`은 조회 뒤 F3008 `judge`에서 제약 근거·확정 추천을 계산하고 `enrich`에서 보조정보를 연결한다. 이 두 단계는 모델에 노출하는 새 Tool이 아니며 기존 공개 Tool 스키마도 변경하지 않는다. 판정은 일반 코드, 보조 연결은 기존 `search_rest_area_info`를 사용한다. 직접 `execute_work_plan` 호출은 기존 한 회차 계약을 유지한다.
+
 `python -m fuelroute run --message ...`는 분석·계획 뒤 조회 네 종류를 실제 호출한다. 기본 경로의 검색용 기하는 `ToolRegistry.route_context(include_path=True)`가 같은 HTTP 응답에서 비용과 분리해 실행기 안에 보관한다. 등록 경로 Tool의 공개 출력 스키마는 그대로 `DrivingRoute`이며 원본 경로를 모델/공개 결과로 보내지 않는다.
 
 실행 결과의 `data.results`는 작업별 타입을 유지하며 `data.execution.calls`에 공개 입력과 공통 결과를 보관한다. 후보별 실패는 다른 후보와 격리하고 핵심 오류는 중단한다. 보조 조회 실패는 경고와 함께 추천을 유지한다. 호출 집계는 논리 Tool 시도 수이므로 실제 HTTP 요청 수와 구분한다. 한 회차 실행의 제약 판정·정렬은 기존 일반 코드 함수를 재사용하며 그래프 재계획·최종 설명·이벤트/저장·HTTP/화면 연결은 후속 단계다. [F3007 실호출](verification/2026-11-19-tool-execution.json)을 참고한다.

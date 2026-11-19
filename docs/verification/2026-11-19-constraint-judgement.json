@@ -1,0 +1,1877 @@
+{
+  "task": "F3008",
+  "verified_at": "2026-11-19T06:53:38.527321+00:00",
+  "source_evidence": {
+    "path": "docs/verification/2026-11-19-tool-execution.json",
+    "git_commit": "1d55b4d",
+    "sha256": "4ed3d2f31f355c06a6e0f7a48ca0eda1a10a02ee4e77728f558e76a922a53ad6",
+    "original_verified_at": "2026-11-19T06:15:27.141352+00:00"
+  },
+  "request": "대구(128.6014,35.8714)에서 서울(126.9780,37.5665)로 휘발유 주유 추천해줘. 계기판 주행 가능180km, 안전 여유36km이고 우회15분 이내면 좋아. 2026년11월19일 오후11시에 출발해서 2026년11월20일 오전4시까지 도착하고 싶어. 주유와 정차에10분 예상해.",
+  "model": "gpt-5.4-mini",
+  "gms_extraction": {
+    "ok": true,
+    "tool_name": "f3008_time_extraction",
+    "data": {
+      "model": "gpt-5.4-mini",
+      "extracted": {
+        "intent": "recommend",
+        "reason": "주유 추천 요청이고 출발/도착지, 출발 시각, 도착 상한, 주행 가능 거리, 안전 여유, 우회 시간, 주유·정차 예상 시간이 함께 제시됨",
+        "origin_label": {
+          "value": "대구",
+          "quote": "대구"
+        },
+        "destination_label": {
+          "value": "서울",
+          "quote": "서울"
+        },
+        "origin": {
+          "value": {
+            "longitude": 128.6014,
+            "latitude": 35.8714
+          },
+          "quote": "(128.6014,35.8714)"
+        },
+        "destination": {
+          "value": {
+            "longitude": 126.978,
+            "latitude": 37.5665
+          },
+          "quote": "(126.9780,37.5665)"
+        },
+        "trip_date": {
+          "value": "2026-11-19",
+          "quote": "2026년11월19일"
+        },
+        "arrival_date": {
+          "value": "2026-11-20",
+          "quote": "2026년11월20일"
+        },
+        "departure_time": {
+          "value": "23:00",
+          "quote": "오후11시"
+        },
+        "arrival_deadline": {
+          "value": "04:00",
+          "quote": "오전4시"
+        },
+        "fuel_type": {
+          "value": "gasoline",
+          "quote": "휘발유"
+        },
+        "sort_by": null,
+        "remaining_range_km": {
+          "value": 180.0,
+          "quote": "180km"
+        },
+        "reserve_range_km": {
+          "value": 36.0,
+          "quote": "36km"
+        },
+        "current_fuel_l": null,
+        "reserve_fuel_l": null,
+        "avg_efficiency_kmpl": null,
+        "max_detour_min": {
+          "value": 15.0,
+          "quote": "15분"
+        },
+        "max_detour_km": null,
+        "refuel_stop_min": {
+          "value": 10.0,
+          "quote": "10분"
+        }
+      },
+      "analysis": {
+        "intent": "recommend",
+        "reason": "주유 추천 요청이고 출발/도착지, 출발 시각, 도착 상한, 주행 가능 거리, 안전 여유, 우회 시간, 주유·정차 예상 시간이 함께 제시됨",
+        "conditions": {
+          "origin_label": "대구",
+          "destination_label": "서울",
+          "origin": {
+            "longitude": 128.6014,
+            "latitude": 35.8714
+          },
+          "destination": {
+            "longitude": 126.978,
+            "latitude": 37.5665
+          },
+          "trip_date": "2026-11-19",
+          "arrival_date": "2026-11-20",
+          "departure_time": "23:00:00",
+          "arrival_deadline": "04:00:00",
+          "fuel_type": "gasoline",
+          "sort_by": null,
+          "remaining_range_km": 180.0,
+          "reserve_range_km": 36.0,
+          "current_fuel_l": null,
+          "reserve_fuel_l": null,
+          "avg_efficiency_kmpl": null,
+          "max_detour_min": 15.0,
+          "max_detour_km": null,
+          "refuel_stop_min": 10.0
+        },
+        "condition_groups": {
+          "basis": [
+            "origin_label",
+            "destination_label",
+            "origin",
+            "destination",
+            "trip_date",
+            "departure_time"
+          ],
+          "preferences": [
+            "fuel_type"
+          ],
+          "constraints": [
+            "remaining_range_km",
+            "reserve_range_km",
+            "max_detour_min",
+            "arrival_deadline",
+            "arrival_date",
+            "refuel_stop_min"
+          ]
+        },
+        "missing_fields": [],
+        "invalid_fields": [],
+        "unverified_fields": [],
+        "needs_user_input": false,
+        "ready_for_planning": true,
+        "questions": [],
+        "range_input_mode": "distance",
+        "location_results": {},
+        "coordinate_sources": {
+          "origin": "user",
+          "destination": "user"
+        },
+        "warnings": []
+      }
+    },
+    "error": null,
+    "meta": {
+      "provider": "gms",
+      "request_id": "1634101d-2e75-4f6d-8b52-f72d38ac5240",
+      "elapsed_ms": 2828.753,
+      "fetched_at": "2026-11-19T06:53:38.527321Z"
+    }
+  },
+  "api_call_counts": {
+    "gms": 1,
+    "kakao_local": 0,
+    "kakao_mobility": 0,
+    "opinet": 0,
+    "rest_area": 0
+  },
+  "cases": [
+    {
+      "name": "explicit_overnight_dates",
+      "verification": "local_rejudgement_of_recorded_live_response",
+      "judgement": {
+        "status": "recommended",
+        "safe_range_km": 144.0,
+        "candidates": [
+          {
+            "station_id": "A0025644",
+            "status": "eligible",
+            "evaluation": {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T10:50:09+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 17795.0,
+              "detour_duration_s": 352.0,
+              "raw_detour_distance_m": 17795.0,
+              "raw_detour_duration_s": 352.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1829.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 115.95,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 17.795,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 5.866666666666666,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "passed",
+                "actual": 15549.0,
+                "limit": 18000.0,
+                "unit": "s",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.candidate_routes[A0025644].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 28.049999999999997,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": "2026-11-20T03:19:09+09:00",
+            "estimated_arrival_clock": "03:19:09",
+            "arrival_day_offset": 1,
+            "tool_request_ids": [
+              "ae4d1b1c-20a1-416d-8d87-635c2029504e",
+              "6a846e8f-c57b-4bfc-acd7-04dcc2550eec",
+              "638d7aca-897e-42a1-9c15-c60f5444c52e",
+              "7fb78b3e-e8d5-4b28-9080-e7302eaaf2ad"
+            ]
+          },
+          {
+            "station_id": "A0023849",
+            "status": "eligible",
+            "evaluation": {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:46:00+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 105805.0,
+              "detour_distance_m": 13109.0,
+              "detour_duration_s": 599.0,
+              "raw_detour_distance_m": 13109.0,
+              "raw_detour_duration_s": 599.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 105.805,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 13.109,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 9.983333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "passed",
+                "actual": 15796.0,
+                "limit": 18000.0,
+                "unit": "s",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.candidate_routes[A0023849].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 38.19499999999999,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": "2026-11-20T03:23:16+09:00",
+            "estimated_arrival_clock": "03:23:16",
+            "arrival_day_offset": 1,
+            "tool_request_ids": [
+              "20116ef8-4587-4d6a-b717-f17ac8ca64cd",
+              "e713c085-1ab4-4190-997d-6b64307ac3e0",
+              "1ccb7787-de9a-41cd-aecd-dbf2f94ac260"
+            ]
+          },
+          {
+            "station_id": "A0026341",
+            "status": "eligible",
+            "evaluation": {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:48:19+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 503.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 503.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 103.384,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 9.861,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 8.383333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "passed",
+                "actual": 15700.0,
+                "limit": 18000.0,
+                "unit": "s",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.candidate_routes[A0026341].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 40.616,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": "2026-11-20T03:21:40+09:00",
+            "estimated_arrival_clock": "03:21:40",
+            "arrival_day_offset": 1,
+            "tool_request_ids": [
+              "7cba0027-91d5-4255-a272-1db401b9c5bc",
+              "22214ae0-e7c6-45f2-a3e4-54a009376a63",
+              "bf0393a4-12c6-4114-8975-31deca46a024"
+            ]
+          }
+        ],
+        "recommendation": {
+          "recommended": {
+            "station_id": "A0025644",
+            "station": {
+              "longitude": 128.14957858305732,
+              "latitude": 36.64089251721979,
+              "station_id": "A0025644",
+              "name": "불정주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1829.0,
+              "price_observed_at": "2026-11-19T10:50:09+09:00",
+              "address": "경북 문경시 문경대로 949",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": true,
+            "reason_codes": [],
+            "reach_distance_m": 115950.0,
+            "detour_distance_m": 17795.0,
+            "detour_duration_s": 352.0,
+            "raw_detour_distance_m": 17795.0,
+            "raw_detour_duration_s": 352.0,
+            "negative_delta_observed": false
+          },
+          "ranked_candidates": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T10:50:09+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 17795.0,
+              "detour_duration_s": 352.0,
+              "raw_detour_distance_m": 17795.0,
+              "raw_detour_duration_s": 352.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:48:19+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 503.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 503.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:46:00+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": true,
+              "reason_codes": [],
+              "reach_distance_m": 105805.0,
+              "detour_distance_m": 13109.0,
+              "detour_duration_s": 599.0,
+              "raw_detour_distance_m": 13109.0,
+              "raw_detour_duration_s": 599.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "excluded_candidates": [],
+          "sort_by": "price",
+          "ranking_fields": [
+            "price_krw_per_l",
+            "detour_duration_s",
+            "detour_distance_m",
+            "station_id"
+          ],
+          "scope": "evaluated_candidates_only"
+        },
+        "time_constraint": {
+          "status": "ready",
+          "basis": "explicit_dates",
+          "available_s": 18000.0,
+          "stop_s": 600.0,
+          "departure_at": "2026-11-19T23:00:00+09:00",
+          "deadline_at": "2026-11-20T04:00:00+09:00",
+          "departure_clock_s": 82800.0,
+          "missing_fields": []
+        },
+        "missing_fields": [],
+        "questions": [],
+        "warnings": [
+          "계획 날짜의 미래 가격을 예측하지 않고 조회 시점의 가격·데이터를 사용합니다.",
+          "주행 가능 거리와 소요시간은 입력·조회 응답에 따른 추정치입니다.",
+          "도착 예상은 조회 주행시간과 입력 정차시간 기준입니다. 미래 교통·대기시간을 보장하지 않습니다."
+        ],
+        "replan_needed": false,
+        "scope": "evaluated_candidates_only"
+      }
+    },
+    {
+      "name": "tight_arrival_deadline",
+      "verification": "local_rejudgement",
+      "changed_inputs": {
+        "arrival_deadline": "03:15"
+      },
+      "judgement": {
+        "status": "no_recommendation",
+        "safe_range_km": 144.0,
+        "candidates": [
+          {
+            "station_id": "A0025644",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T10:50:09+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 17795.0,
+              "detour_duration_s": 352.0,
+              "raw_detour_distance_m": 17795.0,
+              "raw_detour_duration_s": 352.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1829.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 115.95,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 17.795,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 5.866666666666666,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 15549.0,
+                "limit": 15300.0,
+                "unit": "s",
+                "message": "상한을 초과했습니다.",
+                "sources": [
+                  "results.candidate_routes[A0025644].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 28.049999999999997,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": "2026-11-20T03:19:09+09:00",
+            "estimated_arrival_clock": "03:19:09",
+            "arrival_day_offset": 1,
+            "tool_request_ids": [
+              "ae4d1b1c-20a1-416d-8d87-635c2029504e",
+              "6a846e8f-c57b-4bfc-acd7-04dcc2550eec",
+              "638d7aca-897e-42a1-9c15-c60f5444c52e",
+              "7fb78b3e-e8d5-4b28-9080-e7302eaaf2ad"
+            ]
+          },
+          {
+            "station_id": "A0023849",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:46:00+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 105805.0,
+              "detour_distance_m": 13109.0,
+              "detour_duration_s": 599.0,
+              "raw_detour_distance_m": 13109.0,
+              "raw_detour_duration_s": 599.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 105.805,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 13.109,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 9.983333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 15796.0,
+                "limit": 15300.0,
+                "unit": "s",
+                "message": "상한을 초과했습니다.",
+                "sources": [
+                  "results.candidate_routes[A0023849].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 38.19499999999999,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": "2026-11-20T03:23:16+09:00",
+            "estimated_arrival_clock": "03:23:16",
+            "arrival_day_offset": 1,
+            "tool_request_ids": [
+              "20116ef8-4587-4d6a-b717-f17ac8ca64cd",
+              "e713c085-1ab4-4190-997d-6b64307ac3e0",
+              "1ccb7787-de9a-41cd-aecd-dbf2f94ac260"
+            ]
+          },
+          {
+            "station_id": "A0026341",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:48:19+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 503.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 503.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 103.384,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 9.861,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 8.383333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 15700.0,
+                "limit": 15300.0,
+                "unit": "s",
+                "message": "상한을 초과했습니다.",
+                "sources": [
+                  "results.candidate_routes[A0026341].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 40.616,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": "2026-11-20T03:21:40+09:00",
+            "estimated_arrival_clock": "03:21:40",
+            "arrival_day_offset": 1,
+            "tool_request_ids": [
+              "7cba0027-91d5-4255-a272-1db401b9c5bc",
+              "22214ae0-e7c6-45f2-a3e4-54a009376a63",
+              "bf0393a4-12c6-4114-8975-31deca46a024"
+            ]
+          }
+        ],
+        "recommendation": {
+          "recommended": null,
+          "ranked_candidates": [],
+          "excluded_candidates": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T10:50:09+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 17795.0,
+              "detour_duration_s": 352.0,
+              "raw_detour_distance_m": 17795.0,
+              "raw_detour_duration_s": 352.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:46:00+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 105805.0,
+              "detour_distance_m": 13109.0,
+              "detour_duration_s": 599.0,
+              "raw_detour_distance_m": 13109.0,
+              "raw_detour_duration_s": 599.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:48:19+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 503.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 503.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "sort_by": "price",
+          "ranking_fields": [
+            "price_krw_per_l",
+            "detour_duration_s",
+            "detour_distance_m",
+            "station_id"
+          ],
+          "scope": "evaluated_candidates_only"
+        },
+        "time_constraint": {
+          "status": "ready",
+          "basis": "explicit_dates",
+          "available_s": 15300.0,
+          "stop_s": 600.0,
+          "departure_at": "2026-11-19T23:00:00+09:00",
+          "deadline_at": "2026-11-20T03:15:00+09:00",
+          "departure_clock_s": 82800.0,
+          "missing_fields": []
+        },
+        "missing_fields": [],
+        "questions": [],
+        "warnings": [
+          "계획 날짜의 미래 가격을 예측하지 않고 조회 시점의 가격·데이터를 사용합니다.",
+          "주행 가능 거리와 소요시간은 입력·조회 응답에 따른 추정치입니다.",
+          "도착 예상은 조회 주행시간과 입력 정차시간 기준입니다. 미래 교통·대기시간을 보장하지 않습니다."
+        ],
+        "replan_needed": true,
+        "scope": "evaluated_candidates_only"
+      }
+    },
+    {
+      "name": "missing_stop_duration",
+      "verification": "local_rejudgement",
+      "changed_inputs": {
+        "refuel_stop_min": null
+      },
+      "judgement": {
+        "status": "needs_user_input",
+        "safe_range_km": 144.0,
+        "candidates": [
+          {
+            "station_id": "A0025644",
+            "status": "unverified",
+            "evaluation": {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T10:50:09+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "UNVERIFIED_ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 17795.0,
+              "detour_duration_s": 352.0,
+              "raw_detour_distance_m": 17795.0,
+              "raw_detour_duration_s": 352.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1829.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 115.95,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 17.795,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 5.866666666666666,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "unverified",
+                "actual": null,
+                "limit": 18000.0,
+                "unit": "s",
+                "message": "출발/도착 날짜·시각 또는 정차시간을 확인해야 합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025644].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 28.049999999999997,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": null,
+            "arrival_day_offset": null,
+            "tool_request_ids": [
+              "ae4d1b1c-20a1-416d-8d87-635c2029504e",
+              "6a846e8f-c57b-4bfc-acd7-04dcc2550eec",
+              "638d7aca-897e-42a1-9c15-c60f5444c52e",
+              "7fb78b3e-e8d5-4b28-9080-e7302eaaf2ad"
+            ]
+          },
+          {
+            "station_id": "A0023849",
+            "status": "unverified",
+            "evaluation": {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:46:00+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "UNVERIFIED_ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 105805.0,
+              "detour_distance_m": 13109.0,
+              "detour_duration_s": 599.0,
+              "raw_detour_distance_m": 13109.0,
+              "raw_detour_duration_s": 599.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 105.805,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 13.109,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 9.983333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "unverified",
+                "actual": null,
+                "limit": 18000.0,
+                "unit": "s",
+                "message": "출발/도착 날짜·시각 또는 정차시간을 확인해야 합니다.",
+                "sources": [
+                  "results.candidate_routes[A0023849].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 38.19499999999999,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": null,
+            "arrival_day_offset": null,
+            "tool_request_ids": [
+              "20116ef8-4587-4d6a-b717-f17ac8ca64cd",
+              "e713c085-1ab4-4190-997d-6b64307ac3e0",
+              "1ccb7787-de9a-41cd-aecd-dbf2f94ac260"
+            ]
+          },
+          {
+            "station_id": "A0026341",
+            "status": "unverified",
+            "evaluation": {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:48:19+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "UNVERIFIED_ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 503.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 503.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 103.384,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 9.861,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 8.383333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "unverified",
+                "actual": null,
+                "limit": 18000.0,
+                "unit": "s",
+                "message": "출발/도착 날짜·시각 또는 정차시간을 확인해야 합니다.",
+                "sources": [
+                  "results.candidate_routes[A0026341].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 40.616,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": null,
+            "arrival_day_offset": null,
+            "tool_request_ids": [
+              "7cba0027-91d5-4255-a272-1db401b9c5bc",
+              "22214ae0-e7c6-45f2-a3e4-54a009376a63",
+              "bf0393a4-12c6-4114-8975-31deca46a024"
+            ]
+          }
+        ],
+        "recommendation": {
+          "recommended": null,
+          "ranked_candidates": [],
+          "excluded_candidates": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T10:50:09+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "UNVERIFIED_ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 17795.0,
+              "detour_duration_s": 352.0,
+              "raw_detour_distance_m": 17795.0,
+              "raw_detour_duration_s": 352.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:46:00+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "UNVERIFIED_ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 105805.0,
+              "detour_distance_m": 13109.0,
+              "detour_duration_s": 599.0,
+              "raw_detour_distance_m": 13109.0,
+              "raw_detour_duration_s": 599.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T09:48:19+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "UNVERIFIED_ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 503.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 503.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "sort_by": "price",
+          "ranking_fields": [
+            "price_krw_per_l",
+            "detour_duration_s",
+            "detour_distance_m",
+            "station_id"
+          ],
+          "scope": "evaluated_candidates_only"
+        },
+        "time_constraint": {
+          "status": "needs_user_input",
+          "basis": "explicit_dates",
+          "available_s": 18000.0,
+          "stop_s": null,
+          "departure_at": "2026-11-19T23:00:00+09:00",
+          "deadline_at": "2026-11-20T04:00:00+09:00",
+          "departure_clock_s": 82800.0,
+          "missing_fields": [
+            "refuel_stop_min"
+          ]
+        },
+        "missing_fields": [
+          "refuel_stop_min"
+        ],
+        "questions": [
+          "예상 주유·정차 시간(분, 0 이상)을 확인해 알려주세요."
+        ],
+        "warnings": [
+          "계획 날짜의 미래 가격을 예측하지 않고 조회 시점의 가격·데이터를 사용합니다.",
+          "주행 가능 거리와 소요시간은 입력·조회 응답에 따른 추정치입니다.",
+          "도착 예상은 조회 주행시간과 입력 정차시간 기준입니다. 미래 교통·대기시간을 보장하지 않습니다."
+        ],
+        "replan_needed": false,
+        "scope": "evaluated_candidates_only"
+      }
+    }
+  ],
+  "scope": "시간 필드 추출만 실제 GMS1회. 비용/가격은 커밋된 F3007 실제 응답을 로컬 재판정하며 새 실시간 조회·미래 예측으로 해석하지 않음.",
+  "offline_verification": {
+    "completed_at": "2026-11-19T07:00:07.188312+00:00",
+    "new_tests_passed": 33,
+    "all_tests_passed": 288,
+    "checks": [
+      "python -m pytest -q --tb=short -W error",
+      "python -m ruff check .",
+      "python -m ruff format --check .",
+      "python -m pip check",
+      "git diff --check"
+    ],
+    "live_extraction_and_recorded_data_rejudgement_separate": true
+  }
+}

@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("analyze", "F3005 분석·위치 해석·누락/오류 확인 (GMS 1회)"),
         ("plan", "F3006 작업 순서 수립 (GMS 최대 2회, 실행 Tool 호출 없음)"),
-        ("run", "F3007 분석·계획·Tool 실행 한 회차 (GMS 최대 2회와 데이터 API 호출)"),
+        ("run", "F3007~F3008 조회 한 회차·제약 판정 (GMS 최대 2회와 데이터 API 호출)"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--message", required=True, help="주행 조건을 포함한 요청 원문")
