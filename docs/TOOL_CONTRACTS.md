@@ -6,7 +6,7 @@
 
 2026-11-19 대조한 요구사항 PDF p.9·14는 외부 API Tool과 로컬 서버 API Tool을 구분하며, 모델의 판단이 필요 없는 작업은 실행 흐름이 직접 수행하도록 한다. 현재 경로·후보·상세·휴게소 조회 네 개는 외부 API Tool이고, 안전거리·비용 평가·정렬 세 개는 순수 계산의 검증용 등록이다. `provider=local`은 HTTP를 사용하지 않는다는 뜻이며 로컬 서버 API Tool을 구현했다는 뜻은 아니다.
 
-전체 Agent를 연결할 때는 필요한 외부 조회 Tool만 모델에 노출하고 계산·제약 판정·정렬·계획 저장·로그 수집은 코드에서 직접 실행한다. 기존 일곱 개의 등록·독립 검증을 모델의 일곱 Tool 선택으로 자동 연결하지 않는다. 이 모델 노출 분리는 [2일차 TASKS](TASKS.md#plan-2026-11-19)의 미완료 작업이다. 로컬 서버 API Tool인 RAG·캘린더는 선택 심화에 해당한다.
+계획기에는 외부 조회 Tool 네 개의 설명·입력 스키마만 전달하고 F3007 실행기는 계산·제약 판정·정렬을 일반 코드로 직접 처리한다. 기존 일곱 개의 검증용 등록을 모델의 일곱 Tool 선택으로 연결하지 않는다. 저장·로그 수집은 후속 코드 작업이며 로컬 서버 API Tool인 RAG·캘린더는 선택 심화에 해당한다. [2일차 TASKS](TASKS.md#plan-2026-11-19)에서 전체 진행 상태를 관리한다.
 
 ## 명세와 독립 확인
 
@@ -35,3 +35,9 @@ python -m fuelroute tool-schemas
 LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하고 실행 wrapper가 Pydantic으로 같은 입력을 검사한다. `ainvoke(dict)`와 객체형 `ToolCall.args`를 사용한다. JSON 객체 대신 문자열을 넘기면 SDK가 wrapper 실행 전에 거절할 수 있다. `ToolMessage`를 받은 실행기는 본문의 `ok`를 확인해야 한다. 등록만으로 HTTP·LLM·DB 호출은 없고, `AsyncClient`의 종료는 호출자 책임이다. [LangChain 공식 Tool 문서](https://docs.langchain.com/oss/python/langchain/tools)
 
 실제 응답 기반 추천 연결과 기존 비용의 로컬 재판정은 [추천 검증 기록](verification/2026-11-18-recommendation.json)에 구분했다. 재계획·캐시·오류 분기는 모의 응답으로 검증했으며 전체 LangGraph·HTTP API·화면 연결은 후속 단계다.
+
+## F3007의 계획 실행 연결
+
+`python -m fuelroute run --message ...`는 분석·계획 뒤 조회 네 종류를 실제 호출한다. 기본 경로의 검색용 기하는 `ToolRegistry.route_context(include_path=True)`가 같은 HTTP 응답에서 비용과 분리해 실행기 안에 보관한다. 등록 경로 Tool의 공개 출력 스키마는 그대로 `DrivingRoute`이며 원본 경로를 모델/공개 결과로 보내지 않는다.
+
+실행 결과의 `data.results`는 작업별 타입을 유지하며 `data.execution.calls`에 공개 입력과 공통 결과를 보관한다. 후보별 실패는 다른 후보와 격리하고 핵심 오류는 중단한다. 보조 조회 실패는 경고와 함께 추천을 유지한다. 호출 집계는 논리 Tool 시도 수이므로 실제 HTTP 요청 수와 구분한다. 한 회차 실행의 제약 판정·정렬은 기존 일반 코드 함수를 재사용하며 그래프 재계획·최종 설명·이벤트/저장·HTTP/화면 연결은 후속 단계다. [F3007 실호출](verification/2026-11-19-tool-execution.json)을 참고한다.
