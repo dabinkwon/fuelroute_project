@@ -1,0 +1,497 @@
+{
+  "task": "F3006",
+  "verified_at": "2026-11-19T05:24:54.835713+00:00",
+  "model": "gpt-5.4-mini",
+  "api_call_counts": {
+    "gms": 6,
+    "kakao_local": 0,
+    "kakao_mobility": 0,
+    "opinet": 0,
+    "rest_area": 0
+  },
+  "recorded_scenario_gms_calls": 4,
+  "preliminary_verification": {
+    "scenario": "complete",
+    "gms_calls": 2,
+    "outcome": "분석·계획 응답 수신 후 검증 스크립트의 호출 계측 검사 실패. SDK가 httpx2 클라이언트를 사용해 계측기를 수정함.",
+    "detailed_response_saved": false
+  },
+  "scope": "분석·작업 순서 수립만 실제 호출. 명시적 좌표를 사용해 Local과 실행 Tool은 호출하지 않음.",
+  "scenarios": [
+    {
+      "scenario": "complete",
+      "verification": "live",
+      "command": "python -m fuelroute plan --message <request> --reference-date 2026-11-19",
+      "request": "대구(128.6014,35.8714)에서 서울(126.9780,37.5665)로 휘발유 주유 추천해줘. 현재 연료15L, 안전 잔량3L, 연비12km/L이고 우회15분 이내에서 싼 곳으로 추천해줘.",
+      "cli_exit_code": 0,
+      "calls": [
+        {
+          "stage": "analyze",
+          "provider": "gms",
+          "model": "gpt-5.4-mini",
+          "elapsed_ms": 2828.489,
+          "completed_at": "2026-11-19T05:24:46.611956+00:00"
+        },
+        {
+          "stage": "build_plan",
+          "provider": "gms",
+          "model": "gpt-5.4-mini",
+          "elapsed_ms": 3982.715,
+          "completed_at": "2026-11-19T05:24:50.595887+00:00"
+        }
+      ],
+      "api_call_count": 2,
+      "response": {
+        "ok": true,
+        "tool_name": "plan_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "주유 추천을 요청하며 출발지·목적지와 연료 조건, 우회 시간 제한, 가격 선호를 함께 제시했다.",
+            "conditions": {
+              "origin_label": "대구",
+              "destination_label": "서울",
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": "price",
+              "current_fuel_l": 15.0,
+              "reserve_fuel_l": 3.0,
+              "avg_efficiency_kmpl": 12.0,
+              "max_detour_min": 15.0,
+              "max_detour_km": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin_label",
+                "destination_label",
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type",
+                "sort_by"
+              ],
+              "constraints": [
+                "current_fuel_l",
+                "reserve_fuel_l",
+                "avg_efficiency_kmpl",
+                "max_detour_min"
+              ]
+            },
+            "missing_fields": [],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": false,
+            "ready_for_planning": true,
+            "questions": [],
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": []
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "build_plan",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "plan": {
+            "status": "ready",
+            "reason": "기본 경로와 안전 주행 가능 범위를 먼저 확정한 뒤, 경로 상 검색점과 후보 주유소를 찾고, 가격이 있는 후보만 세부정보·경유경로·제약판정 순으로 처리한 다음 정렬하고, 마지막에 추천 후보가 생긴 경우에만 보조 휴게소 정보를 확인하는 순서가 제약과 의존성을 가장 잘 맞춥니다.",
+            "request": {
+              "current_fuel_l": 15.0,
+              "reserve_fuel_l": 3.0,
+              "avg_efficiency_kmpl": 12.0,
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "fuel_type": "gasoline",
+              "radius_m": 5000,
+              "max_search_points": 3,
+              "max_candidates": 3,
+              "max_detour_min": 15.0,
+              "max_detour_km": null,
+              "max_replans": 2,
+              "max_evaluations": 9,
+              "sort_by": "price"
+            },
+            "steps": [
+              {
+                "action": "base_route",
+                "reason": "출발지와 목적지 사이의 기준 경로를 먼저 얻어 이후 모든 비교의 기준선을 마련한다.",
+                "kind": "external_tool",
+                "tool_name": "get_driving_route",
+                "depends_on": [],
+                "inputs_from": [
+                  "request.origin",
+                  "request.destination"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "safe_range",
+                "reason": "현재 연료와 예비 연료를 바탕으로 주유 없이 고려 가능한 범위를 먼저 계산해야 한다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [],
+                "inputs_from": [
+                  "request.current_fuel_l",
+                  "request.reserve_fuel_l",
+                  "request.avg_efficiency_kmpl"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "search_points",
+                "reason": "기준 경로와 안전 범위를 이용해 후보 검색에 사용할 경로상 검색점을 정한다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [
+                  "base_route",
+                  "safe_range"
+                ],
+                "inputs_from": [
+                  "base_route",
+                  "safe_range",
+                  "request.radius_m",
+                  "request.max_search_points"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "search_candidates",
+                "reason": "검색점 주변에서 유종에 맞는 주유소 후보를 모아 비교 대상 풀을 만든다.",
+                "kind": "external_tool",
+                "tool_name": "search_gas_stations",
+                "depends_on": [
+                  "search_points"
+                ],
+                "inputs_from": [
+                  "search_points",
+                  "request.fuel_type",
+                  "request.radius_m"
+                ],
+                "run_when": "per_search_point",
+                "failure_policy": "replan_if_empty"
+              },
+              {
+                "action": "station_details",
+                "reason": "상세 가격이 있는 후보만 남겨 경유 후보를 평가할 수 있도록 가격과 식별 정보를 확인한다.",
+                "kind": "external_tool",
+                "tool_name": "get_station_details",
+                "depends_on": [
+                  "search_candidates"
+                ],
+                "inputs_from": [
+                  "search_candidates.station_id",
+                  "request.fuel_type",
+                  "request.max_candidates"
+                ],
+                "run_when": "per_candidate",
+                "failure_policy": "exclude_candidate"
+              },
+              {
+                "action": "candidate_routes",
+                "reason": "가격이 확인된 후보에 대해서만 실제 경유 경로를 계산해 도달 가능성을 검증한다.",
+                "kind": "external_tool",
+                "tool_name": "get_driving_route",
+                "depends_on": [
+                  "station_details"
+                ],
+                "inputs_from": [
+                  "request.origin",
+                  "station_details",
+                  "request.destination"
+                ],
+                "run_when": "per_priced_candidate",
+                "failure_policy": "exclude_candidate"
+              },
+              {
+                "action": "evaluate_constraints",
+                "reason": "기본 경로와 안전 범위, 경유 경로를 함께 써서 제약 충족 여부를 판정한다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [
+                  "base_route",
+                  "safe_range",
+                  "candidate_routes"
+                ],
+                "inputs_from": [
+                  "base_route",
+                  "safe_range",
+                  "candidate_routes",
+                  "request"
+                ],
+                "run_when": "per_priced_candidate",
+                "failure_policy": "exclude_candidate"
+              },
+              {
+                "action": "rank_candidates",
+                "reason": "제약을 통과한 후보만 정렬 기준에 따라 순서를 매겨 추천 순위를 만든다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [
+                  "evaluate_constraints"
+                ],
+                "inputs_from": [
+                  "station_details",
+                  "evaluate_constraints",
+                  "request.sort_by"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "rest_area_info",
+                "reason": "추천 후보가 있을 때만 주변 보조정보를 확인해 참고 정보를 보강한다.",
+                "kind": "external_tool",
+                "tool_name": "search_rest_area_info",
+                "depends_on": [
+                  "rank_candidates"
+                ],
+                "inputs_from": [
+                  "rank_candidates.recommended",
+                  "request.radius_m"
+                ],
+                "run_when": "if_recommended",
+                "failure_policy": "optional"
+              }
+            ],
+            "warnings": []
+          },
+          "planner_mode": "gms"
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "91dca121-c478-4a7f-a72d-429289e1e3c1",
+          "elapsed_ms": 6978.577,
+          "fetched_at": "2026-11-19T05:24:50.598390Z"
+        }
+      }
+    },
+    {
+      "scenario": "missing_fuel",
+      "verification": "live",
+      "command": "python -m fuelroute plan --message <request> --reference-date 2026-11-19",
+      "request": "대구(128.6014,35.8714)에서 서울(126.9780,37.5665)로 휘발유 주유 추천해줘.",
+      "cli_exit_code": 0,
+      "calls": [
+        {
+          "stage": "analyze",
+          "provider": "gms",
+          "model": "gpt-5.4-mini",
+          "elapsed_ms": 2292.402,
+          "completed_at": "2026-11-19T05:24:53.035405+00:00"
+        }
+      ],
+      "api_call_count": 1,
+      "response": {
+        "ok": true,
+        "tool_name": "plan_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "주유 추천을 요청했고 출발지와 목적지가 함께 제시되었다.",
+            "conditions": {
+              "origin_label": "대구",
+              "destination_label": "서울",
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": null,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": null,
+              "max_detour_km": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin_label",
+                "destination_label",
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type"
+              ],
+              "constraints": []
+            },
+            "missing_fields": [
+              "current_fuel_l",
+              "reserve_fuel_l",
+              "avg_efficiency_kmpl"
+            ],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": true,
+            "ready_for_planning": false,
+            "questions": [
+              "현재 연료량(L)을 알려주세요.",
+              "안전 잔량(L, 현재 연료보다 적게)을 알려주세요.",
+              "평균 연비(km/L)을 알려주세요."
+            ],
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": []
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "build_plan",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "plan": {
+            "status": "needs_user_input",
+            "reason": "누락·오류·위치 모호성을 먼저 해결한 뒤 작업을 계획합니다.",
+            "request": null,
+            "steps": [],
+            "warnings": []
+          },
+          "planner_mode": "gms"
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "740e0b11-0a9e-496a-b6ba-a31139c1447d",
+          "elapsed_ms": 2437.202,
+          "fetched_at": "2026-11-19T05:24:53.035405Z"
+        }
+      }
+    },
+    {
+      "scenario": "greeting",
+      "verification": "live",
+      "command": "python -m fuelroute plan --message <request> --reference-date 2026-11-19",
+      "request": "안녕하세요",
+      "cli_exit_code": 0,
+      "calls": [
+        {
+          "stage": "analyze",
+          "provider": "gms",
+          "model": "gpt-5.4-mini",
+          "elapsed_ms": 1644.138,
+          "completed_at": "2026-11-19T05:24:54.830721+00:00"
+        }
+      ],
+      "api_call_count": 1,
+      "response": {
+        "ok": true,
+        "tool_name": "plan_request",
+        "data": {
+          "analysis": {
+            "intent": "greeting",
+            "reason": "인사 표현만 있어 인사로 분류됨",
+            "conditions": {
+              "origin_label": null,
+              "destination_label": null,
+              "origin": null,
+              "destination": null,
+              "trip_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": null,
+              "sort_by": null,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": null,
+              "max_detour_km": null
+            },
+            "condition_groups": {
+              "basis": [],
+              "preferences": [],
+              "constraints": []
+            },
+            "missing_fields": [],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": false,
+            "ready_for_planning": false,
+            "questions": [],
+            "location_results": {},
+            "coordinate_sources": {},
+            "warnings": []
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "build_plan",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "plan": {
+            "status": "not_required",
+            "reason": "인사·서비스 설명 등은 추천 작업 계획을 만들지 않습니다.",
+            "request": null,
+            "steps": [],
+            "warnings": []
+          },
+          "planner_mode": "gms"
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "6242b012-63c0-47fb-a2cd-e992274f4ffc",
+          "elapsed_ms": 1783.507,
+          "fetched_at": "2026-11-19T05:24:54.834717Z"
+        }
+      }
+    }
+  ],
+  "next_stage_fields": [
+    "data.plan.request",
+    "data.plan.steps",
+    "data.analysis.conditions",
+    "data.analysis.coordinate_sources"
+  ],
+  "issues": [],
+  "offline_verification": {
+    "completed_at": "2026-11-19T05:30:43.456760+00:00",
+    "new_task_tests_passed": 25,
+    "all_tests_passed": 189,
+    "checks": [
+      "python -m pytest -q",
+      "python -m ruff check .",
+      "python -m ruff format --check .",
+      "python -m pip check",
+      "git diff --check"
+    ],
+    "recorded_live_responses_match_current_contract": true
+  }
+}
