@@ -1,16 +1,21 @@
 """F3007의 실제 HTTP 어댑터·작업 순서·부분 실패·그래프/CLI 연결을 모의 전송으로 검증한다."""
 
 import asyncio
+import json
 from datetime import date
 
 import httpx
 import pytest
 
+from fuelroute.__main__ import main
+from fuelroute.agent import execute_request, make_graph
 from fuelroute.config import Settings
+from fuelroute.contracts import ToolResult
 from fuelroute.coordinates import wgs84_to_katec
 from fuelroute.execution import PlanExecution, execute_work_plan
+from fuelroute.geocoding import resolve_location
 from fuelroute.probes import ProbeFailure
-from fuelroute.request_analysis import ExtractedRequest, analyze_conditions
+from fuelroute.request_analysis import ExtractedRequest, RequestAnalysis, analyze_conditions
 from fuelroute.task_plan import PlanProposal, WorkPlan, finalize_plan
 
 TODAY = date(2026, 11, 19)
@@ -419,3 +424,167 @@ def test_missing_core_configuration_is_checked_before_any_provider_request() -> 
         assert result.error.code == "CONFIG_ERROR" and result.calls == []
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("mode", ["normal", "missing", "greeting", "fatal"])
+def test_full_graph_executes_or_skips_and_preserves_injected_client_ownership(mode: str) -> None:
+    """분석→계획→실행 그래프와 입력 보완/인사 생략·핵심 실패·client 소유권을 확인한다."""
+    provider = Provider("base_auth" if mode == "fatal" else "normal")
+
+    async def analyze(user: str) -> ExtractedRequest:
+        """테스트 상태에 맞는 모델 대역만 주입한다. GMS는 호출하지 않는다."""
+        if mode == "greeting":
+            return ExtractedRequest(intent="greeting", reason="인사")
+        return extracted(reserve_range_km=None) if mode == "missing" else extracted()
+
+    async def plan(analysis: RequestAnalysis) -> PlanProposal:
+        """준비된 추천에만 계획 함수를 호출하는지 확인한다."""
+        assert mode in {"normal", "fatal"}
+        return proposal()
+
+    async def scenario() -> None:
+        """실제 HTTP 어댑터를 모의 전송에 연결해 공개 API 결과와 클라이언트 수명을 검사한다."""
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+            result = await execute_request(
+                USER,
+                settings(),
+                analyzer=analyze,
+                planner=plan,
+                reference_date=TODAY,
+                client=client,
+            )
+            assert not client.is_closed
+        if mode == "fatal":
+            assert not result.ok and result.error.code == "AUTH_FAILED" and result.data is None
+        else:
+            assert result.ok and "execute_plan" in result.data["graph_nodes"]
+            assert (
+                result.data["execution"]["status"]
+                == {
+                    "normal": "recommended",
+                    "missing": "needs_user_input",
+                    "greeting": "not_required",
+                }[mode]
+            )
+            assert set(result.data["results"]) == set(ORDER)
+        if mode in {"missing", "greeting"}:
+            assert provider.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_execution_node_skips_injected_executor_for_unready_plan() -> None:
+    """미준비 입력은 그래프의 실행기를 호출하지 않고 이전 결과도 재사용하지 않는지 확인한다."""
+
+    async def analyze(user: str) -> ExtractedRequest:
+        """안전 여유 누락을 합성해 계획 보류 상태를 만든다."""
+        return extracted(reserve_range_km=None)
+
+    async def plan(analysis: RequestAnalysis) -> PlanProposal:
+        """계획 모델을 호출하면 테스트를 실패시킨다."""
+        raise AssertionError("Planning forbidden")
+
+    async def execute(plan: WorkPlan) -> PlanExecution:
+        """실행기를 호출하면 테스트를 실패시킨다."""
+        raise AssertionError("Execution forbidden")
+
+    graph = make_graph(analyze, TODAY, llm_plan_fn=plan, executor=execute)
+    output = asyncio.run(
+        graph.ainvoke({"user": USER, "results": {"stale": True}, "execution": {"stale": True}})
+    )
+    assert output["execution"]["status"] == "needs_user_input" and "stale" not in output["results"]
+
+
+def test_place_labels_resolve_before_the_full_execution_and_keep_area_warnings() -> None:
+    """지명만 있는 요청이 위치 해석→계획→조회까지 연결되고 지역 수준 경고가 유지되는지 확인한다."""
+    provider = Provider()
+    user = "대구에서 서울로 휘발유 주유 추천해줘. 주행 가능180km, 안전 여유30km야."
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        """Local 주소와 기존 세 데이터 API를 같은 모의 클라이언트에서 처리한다."""
+        if request.url.host == "dapi.kakao.com":
+            name = request.url.params["query"]
+            x = "127" if name == "대구" else "127.2"
+            return httpx.Response(
+                200,
+                json={
+                    "meta": {"total_count": 1, "is_end": True},
+                    "documents": [
+                        {"address_name": name, "address_type": "REGION", "x": x, "y": "37"}
+                    ],
+                },
+            )
+        return provider(request)
+
+    async def analyze(message: str) -> ExtractedRequest:
+        """좌표를 추측하지 않고 원문 지명과 km 조건만 추출하는 대역을 제공한다."""
+        return extracted(
+            origin=None,
+            destination=None,
+            origin_label={"value": "대구", "quote": "대구"},
+            destination_label={"value": "서울", "quote": "서울"},
+        )
+
+    async def plan(analysis: RequestAnalysis) -> PlanProposal:
+        """계획 전에 두 제공사 위치가 해석되었는지 확인한다."""
+        assert set(analysis.coordinate_sources.values()) == {"kakao_address"}
+        return proposal()
+
+    async def scenario() -> None:
+        """분석기·계획기만 대역으로 주입하고 위치 및 데이터 조회 어댑터는 실제 구현을 사용한다."""
+        config = settings()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+
+            async def lookup(label: str) -> ToolResult[dict]:
+                """같은 요청의 모의 HTTP 클라이언트로 지명을 검색한다. 별도 네트워크는 없다."""
+                return await resolve_location(label, config, client)
+
+            result = await execute_request(
+                user,
+                config,
+                analyzer=analyze,
+                planner=plan,
+                reference_date=TODAY,
+                location_resolver=lookup,
+                client=client,
+            )
+        assert result.ok and result.data["execution"]["status"] == "recommended"
+        assert any("지역" in warning for warning in result.data["execution"]["warnings"])
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("fatal", [False, True])
+def test_run_cli_dispatches_real_graph_and_returns_failure_exit_code(
+    fatal: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """run CLI가 실제 그래프까지 연결되며 핵심 오류를 종료1로, 정상 추천을 종료0으로 내보낸다."""
+    provider = Provider("base_auth" if fatal else "normal")
+
+    async def entry(user: str, config: Settings, *, reference_date: date) -> ToolResult[dict]:
+        """실제 실행 그래프에 모델 대역/모의 HTTP만 주입한다."""
+
+        async def analyze(message: str) -> ExtractedRequest:
+            """CLI 원문을 확인하고 합성 추출을 반환한다."""
+            assert message == USER
+            return extracted()
+
+        async def plan(analysis: RequestAnalysis) -> PlanProposal:
+            """CLI 검증용 작업 순서를 반환한다."""
+            return proposal()
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+            return await execute_request(
+                user,
+                config,
+                analyzer=analyze,
+                planner=plan,
+                reference_date=reference_date,
+                client=client,
+            )
+
+    monkeypatch.setattr("fuelroute.__main__.execute_request", entry)
+    monkeypatch.setattr("fuelroute.__main__.Settings", settings)
+    assert main(["run", "--message", USER, "--reference-date", "2026-11-19"]) == (1 if fatal else 0)
+    result = json.loads(capsys.readouterr().out)
+    assert result["ok"] is not fatal

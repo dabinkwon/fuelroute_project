@@ -1,4 +1,4 @@
-"""State·make_graph·모델 함수 주입으로 구성한 F3005 분석·F3006 작업 계획 그래프."""
+"""함수 주입으로 구성한 F3005 분석·F3006 계획·F3007 조회 실행 그래프."""
 
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from fuelroute.agent_gms import llm_analyze, llm_plan
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolResult
+from fuelroute.execution import PlanExecution, execute_work_plan
 from fuelroute.geocoding import LocationMatchSet, resolve_location
 from fuelroute.probes import Coordinate, ProbeFailure, run_probe
 from fuelroute.request_analysis import (
@@ -25,14 +26,17 @@ from fuelroute.task_plan import PlanProposal, WorkPlan, finalize_plan, prepare_p
 Analyzer = Callable[[str], Awaitable[ExtractedRequest]]
 LocationResolver = Callable[[str], Awaitable[ToolResult[dict]]]
 Planner = Callable[[RequestAnalysis], Awaitable[PlanProposal]]
+Executor = Callable[[WorkPlan], Awaitable[PlanExecution]]
 
 
 class State(TypedDict, total=False):
-    """현재 원문·분석·작업 계획을 전달한다. 조회 실행·Memory·이벤트는 후속 작업이다."""
+    """원문·분석·계획·작업 결과와 실행 요약을 전달한다. Memory·이벤트는 후속 작업이다."""
 
     user: str
     analysis: dict
     plan: dict
+    results: dict
+    execution: dict
 
 
 class AnalysisInput(BaseModel):
@@ -49,6 +53,7 @@ def make_graph(
     location_resolver: LocationResolver | None = None,
     *,
     llm_plan_fn: Planner | None = None,
+    executor: Executor | None = None,
 ) -> CompiledStateGraph:
     """분석·선택 위치 검색·선택 계획 함수를 주입받아 실행 전 그래프를 만든다.
 
@@ -60,7 +65,9 @@ def make_graph(
     연결한다. 이미 입력한 좌표·잘못된 좌표 입력은 덮어쓰지 않는다. 예:
     await make_graph(fake, today, resolver).ainvoke({'user': ...}).
     잘못된 요청은 ValidationError, 모델 출력/계획 순서 오류는 INVALID_RESPONSE다.
-    시간·연료·거리 계산과 실제 Tool 실행·Memory·저장은 하지 않는다.
+    executor가 있으면 계획 뒤 execute_plan을 연결하고 준비된 계획만 한 회차 실행한다.
+    executor를 쓰려면 llm_plan_fn도 필요하다. 구성 오류는ValueError이며 실행 실패는
+    State.execution에 보존한다. Memory·DB·이벤트·최종 자연어 응답·자동 재계획은 없다.
     """
 
     async def analyze(state: State) -> dict:
@@ -79,6 +86,8 @@ def make_graph(
         result = analyze_conditions(query.user, extracted, reference_date)
         return {"analysis": result.model_dump(mode="json")}
 
+    if executor is not None and llm_plan_fn is None:
+        raise ValueError("실행 노드에는 계획 함수가 필요합니다.")
     graph = StateGraph(State)
     graph.add_node("analyze", analyze)
     graph.add_edge(START, "analyze")
@@ -108,7 +117,36 @@ def make_graph(
             return {"plan": result.model_dump(mode="json")}
 
         graph.add_node("build_plan", build_plan)
-        graph.add_edge("build_plan", END)
+        graph.add_edge("build_plan", "execute_plan" if executor is not None else END)
+    if executor is not None:
+
+        async def execute_plan(state: State) -> dict:
+            """ready 계획만 실행기에 전달하고 작업별 결과·부분 실패·실행 상태를 덮어쓴다.
+
+            State.plan을 WorkPlan으로 검사한다. 보류/비추천은 실행기 호출0회·빈 결과이며
+            이전 요청의 results/execution을 재사용하지 않는다. 주입 실행기 출력 스키마가
+            틀리면 INVALID_RESPONSE다. 실제 조회/계산·오류 정책은 실행기 계약을 따르고
+            이 노드는 DB·이벤트·추가LLM·재계획을 실행하지 않는다.
+            """
+            plan = WorkPlan.model_validate(state["plan"])
+            try:
+                result = (
+                    PlanExecution.model_validate(await executor(plan))
+                    if plan.status == "ready"
+                    else PlanExecution(
+                        status=plan.status,
+                        warnings=list(plan.warnings),
+                    )
+                )
+            except ValidationError as exc:
+                raise ProbeFailure("INVALID_RESPONSE", "작업 실행 출력 계약을 확인하세요.") from exc
+            return {
+                "results": result.results.model_dump(mode="json"),
+                "execution": result.model_dump(mode="json"),
+            }
+
+        graph.add_node("execute_plan", execute_plan)
+        graph.add_edge("execute_plan", END)
     if location_resolver is None:
         graph.add_edge("analyze", finish)
     else:
@@ -249,14 +287,18 @@ async def _run_request(
     location_resolver: LocationResolver | None,
     include_plan: bool,
     planner: Planner | None,
+    include_execution: bool = False,
+    executor: Executor | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> ToolResult[dict]:
     """분석/계획 진입점이 공유하는 요청별 그래프·의존성과 클라이언트 수명을 관리한다.
 
     입력 범위와 기준일은 AnalysisInput으로 검사한다. include_plan이 참일 때만 주입 또는
     GMS 계획기를 연결하고, 결과에 plan/planner_mode를 추가한다. 나머지 입력/분석기/위치
-    검색 계약은 analyze_request와 같다. 설정/예상 실패는 run_probe의 공통 응답이며
-    프로그래밍 오류는 숨기지 않는다. 외부 호출은 주입 함수 또는 GMS/Local만 가능하고
-    요청 사이 상태·캐시는 공유하지 않는다. DB·실행 Tool·자동 재시도는 없다.
+    검색 계약은 analyze_request와 같다. include_execution이면 검증한 계획을 실행기에
+    전달하고 results/execution을 반환한다. 핵심 실행 실패는 공통 error로 올리며 CLI가
+    실패를 성공 종료로 표시하지 않게 한다. 프로그래밍 오류는 숨기지 않는다. 주입client는
+    닫지 않고 직접 만든 클라이언트만 닫는다. DB·자동 재시도/재계획은 없다.
     예: include_plan=False이면 기존 분석 CLI의 출력과 호출 횟수를 유지한다.
     """
 
@@ -278,32 +320,46 @@ async def _run_request(
             """현재 요청의 정규화 분석을 GMS 계획기에 전달한다. 실행 Tool은 호출하지 않는다."""
             return await llm_plan(analysis, settings)
 
-        async def execute(resolver: LocationResolver | None) -> tuple[State, list[str]]:
+        async def execute(active_client: httpx.AsyncClient | None) -> tuple[State, list[str]]:
             """현재 분석/선택 계획기를 연결한 그래프를 실행하고 State와 구성 노드를 반환한다.
 
-            resolver=None은 자동 위치 검색을 하지 않는다. include_plan에 따라 계획 노드를
-            포함하고 그래프의 예상 오류는 상위로 전달한다. 주입 함수 외 추가 호출·저장은
-            없으며 HTTP 클라이언트 종료는 호출자 책임이다. 노드 이름은 실행 이력이 아니다.
+            테스트 분석기만 주입하면 자동 위치 조회를 생략한다. 필요할 때만 같은 요청의
+            클라이언트를 위치 검색/실행기에 전달하며 종료는 호출자 책임이다. 노드 목록은
+            구성 정보이고 실제 실행 이력이 아니다. 예외는 상위 공통 응답으로 전달한다.
             """
+            resolver = location_resolver
+            if resolver is None and analyzer is None:
+
+                async def kakao_resolver(label: str) -> ToolResult[dict]:
+                    """원문 지명을 요청 클라이언트로 조회한다. 추가LLM·저장은 없다."""
+                    return await resolve_location(label, settings, active_client)
+
+                resolver = kakao_resolver
+
+            async def tools_execute(plan: WorkPlan) -> PlanExecution:
+                """같은 요청의 열린 클라이언트로 계획을 한 회차 실행한다. 소유권은 상위에 둔다."""
+                return await execute_work_plan(plan, settings, active_client)
+
             graph = make_graph(
                 analyzer or gms_analyze,
                 today,
                 resolver,
                 llm_plan_fn=(planner or gms_plan) if include_plan else None,
+                executor=(executor or tools_execute) if include_execution else None,
             )
             output = await graph.ainvoke({"user": query.user})
             return output, [name for name in graph.get_graph().nodes if not name.startswith("__")]
 
-        if analyzer is not None or location_resolver is not None:
-            output, nodes = await execute(location_resolver)
+        needs_client = (analyzer is None and location_resolver is None) or (
+            include_execution and executor is None
+        )
+        if client is not None:
+            output, nodes = await execute(client)
+        elif needs_client:
+            async with httpx.AsyncClient() as owned_client:
+                output, nodes = await execute(owned_client)
         else:
-            async with httpx.AsyncClient() as client:
-
-                async def kakao_resolver(label: str) -> ToolResult[dict]:
-                    """지명 한 건을 요청 소유 HTTP 클라이언트로 검색한다. 추가 LLM 호출은 없다."""
-                    return await resolve_location(label, settings, client)
-
-                output, nodes = await execute(kakao_resolver)
+            output, nodes = await execute(None)
         data = {
             "analysis": output["analysis"],
             "reference_date": today.isoformat(),
@@ -312,11 +368,64 @@ async def _run_request(
         }
         if include_plan:
             data.update(plan=output["plan"], planner_mode="injected" if planner else "gms")
+        if include_execution:
+            execution = PlanExecution.model_validate(output["execution"])
+            if execution.error:
+                error = execution.error
+                raise ProbeFailure(
+                    error.code,
+                    error.message,
+                    retryable=error.retryable,
+                    replan_allowed=error.replan_allowed,
+                )
+            data.update(
+                results=output["results"],
+                execution=output["execution"],
+                executor_mode="injected" if executor else "tools",
+            )
         return data
 
     return await run_probe(
         settings,
         "local" if analyzer else "gms",
-        "plan_request" if include_plan else "analyze_request",
+        "execute_request"
+        if include_execution
+        else ("plan_request" if include_plan else "analyze_request"),
         operation,
+    )
+
+
+async def execute_request(
+    user: str,
+    settings: Settings,
+    *,
+    analyzer: Analyzer | None = None,
+    planner: Planner | None = None,
+    reference_date: date | None = None,
+    location_resolver: LocationResolver | None = None,
+    executor: Executor | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> ToolResult[dict]:
+    """자연어를 분석·위치 해석·계획한 뒤 F3007 Tool 실행 결과까지 공통 응답으로 반환한다.
+
+    user는1~5000자이며 기본 기준일은 실행일KST다. 기본 GMS 분석1회+준비된 추천의 계획1회,
+    위치 검색 최대4회 뒤 한 회차만 실행한다. 모델·resolver·executor·client는 오프라인
+    주입이 가능하며 주입client는 닫지 않는다. 내부 생성한 클라이언트는 항상 닫는다.
+    성공 data의analysis/plan/results/execution에 결과·개별 실패·호출을 전달한다. 핵심
+    인증/설정/한도/경로 실패는 공통error(data=None), 보조 조회 실패는 추천과 함께 표시한다.
+    기본 데이터 조회 상한은Opinet6회·Kakao7회·휴게소1논리호출(최대10HTTP)이며 캐시로 줄 수
+    있다. 재시도·재계획·DB·Memory·이벤트·최종 문장 생성은 없다. 예:km 입력이 부족하면
+    실행기 호출 없이needs_user_input이다. 원본 상세 경로는 반환하지 않는다.
+    """
+    return await _run_request(
+        user,
+        settings,
+        analyzer=analyzer,
+        reference_date=reference_date,
+        location_resolver=location_resolver,
+        include_plan=True,
+        planner=planner,
+        include_execution=True,
+        executor=executor,
+        client=client,
     )
