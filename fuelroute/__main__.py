@@ -4,10 +4,12 @@ import argparse
 import asyncio
 import json
 from collections.abc import Sequence
+from datetime import date
 
 import httpx
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from fuelroute.agent import analyze_request
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolError, ToolMeta, ToolResult, utc_now
 from fuelroute.gms import probe_gms
@@ -25,11 +27,15 @@ def build_parser() -> argparse.ArgumentParser:
     WGS84 경도/위도를 다른 옵션으로 받는다. 외부 호출·파일 생성은 없다.
     route-spike는 연결 실험, recommend는 유한한 재계획과 추천, tool-schemas는 정적 계약
     출력이다. 예: doctor 또는 --help. 명령을 정의하는 과정에서 HTTP를 실행하지 않는다.
+    analyze는 F3005 요청 분석만 수행하고 계획·외부 데이터 조회는 하지 않는다.
     """
     parser = argparse.ArgumentParser(description="FuelRoute 환경·API 독립 검증")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="설정된 변수/누락 항목만 확인 (호출·키 출력 없음)")
     commands.add_parser("tool-schemas", help="일곱 Tool의 입력·출력 계약 출력 (호출 없음)")
+    analyze = commands.add_parser("analyze", help="F3005 요청 분석·누락/오류 확인 (GMS 1회)")
+    analyze.add_argument("--message", required=True, help="주행 조건을 포함한 요청 원문")
+    analyze.add_argument("--reference-date", help="상대 날짜 기준 YYYY-MM-DD, 기본 실행일 KST")
     gms = commands.add_parser("gms", help="GMS 텍스트·조건 추출·Tool 왕복 검증")
     gms.add_argument("--mode", choices=["text", "conditions", "tool"], default="text")
     nearby = commands.add_parser("opinet-nearby", help="KATEC 직접 입력으로 Opinet 인증 확인")
@@ -92,6 +98,7 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
     예: opinet-detail은 검색 함수 없이 입력 ID로 상세 요청만 보낸다. route-spike는
     명시적 호출 상한 안에서 경로·후보를 연결한다. recommend는 캐시·재계획을 포함하며
     tool-schemas는 HTTP 없이 계약만 반환한다. 두 명령도 LLM이나 DB를 사용하지 않는다.
+    analyze는 GMS 1회로 분석 전용 그래프를 실행하고 보완할 입력을 구조화한다.
     """
     if args.command == "doctor":
         status = {
@@ -112,6 +119,14 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
         )
     if args.command == "gms":
         return await probe_gms(settings, args.mode)
+    if args.command == "analyze":
+        return await analyze_request(
+            args.message,
+            settings,
+            reference_date=TypeAdapter(date).validate_python(args.reference_date)
+            if args.reference_date
+            else None,
+        )
     async with httpx.AsyncClient() as client:
         if args.command == "tool-schemas":
             return ToolResult(
