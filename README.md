@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** 추천 CLI와 F3005 요청 분석·지명 자동 좌표 변환 실호출 성공. 전체 계획·실행·Memory·로깅·API·화면 연결은 후속
+> **구현 상태:** 추천 CLI와 F3005 분석·자동 좌표 변환, F3006 작업 계획 실호출 성공. 전체 실행·Memory·로깅·API·화면 연결은 후속
 
 ## 단계별 진행 기록
 
@@ -17,6 +17,8 @@
 | 6. 추천·재계획·Tool 계약 | 제약 우선 정렬, 최대 2회 재계획·캐시, 일곱 Tool 등록·스키마 출력 | 테스트 110개·Ruff 통과, 추천 실호출 성공. [검증 기록](docs/verification/2026-11-18-recommendation.json) | `7ad21e9` |
 | 7. F3005 요청 분석 | GMS 구조화 추출, 원문·단위·누락 검사, 분석 전용 LangGraph·CLI | 테스트 141개·Ruff 통과, 기존 GMS 실호출 4회. [분석 기록](docs/DEVELOPMENT.md#f3005-implementation) | `e90586c` |
 | 8. 지명·주소 자동 좌표 변환 | Kakao Local 조회, 유일한 결과 선택, 모호성·지역 수준 안내, 입력 좌표 보존 | 테스트 164개·Ruff 통과, 기존 GMS 1회·Local 5회 검증. [변환 기록](docs/DEVELOPMENT.md#f3005-geocoding) | `3fe9a09` |
+| 9. F3006 작업 계획 수립 | GMS 계획 제안·의존 순서 검증, 계획 노드·CLI, 입력 부족/비추천 시 계획 생략 | 테스트 189개·Ruff 통과, 기존 GMS 검증 근거 보존. [계획 기록](docs/DEVELOPMENT.md#f3006-implementation) | `ba57c23` |
+| 10. km 기본 입력 전환 | 계기판 주행 가능 거리·안전 여유, 연비 없는 계산, 분석·계획·기존 실행기·Tool·CLI 연결 | 테스트 215개·Ruff·의존성 검사 통과, 기존 GMS 3회 검증. [km 전환 기록](docs/DEVELOPMENT.md#km-input) | `feef6ba` |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -66,7 +68,7 @@ git push github master
 
 ## 서비스 한 줄 소개
 
-**현재 차량의 잔여 연료와 평균 연비를 기준으로 안전하게 도달 가능한 구간을 계산하고, 목적지까지의 경로상에서 접근 가능한 주유소의 가격과 우회 비용을 비교해 합리적인 주유 지점을 추천하는 Agent 기반 플래너.**
+**계기판의 주행 가능 거리(km)에서 안전 여유(km)를 빼 안전하게 도달 가능한 구간을 계산하고, 목적지까지의 경로상에서 접근 가능한 주유소의 가격과 우회 비용을 비교해 합리적인 주유 지점을 추천하는 Agent 기반 플래너.**
 
 ## 프로젝트 배경
 
@@ -84,7 +86,7 @@ FuelRoute는 단순 주변 최저가 검색이 아니라 **도달 가능성 → 
 
 ## 핵심 기능 요약
 
-- 출발지·목적지·유종·현재 연료량·평균 연비·안전 잔량 입력
+- 출발지·목적지·유종·주행 가능 거리(km)·남길 안전 여유(km) 입력
 - 목적지까지 자동차 경로 조회
 - 현재 조건에서의 안전 주행 가능 거리 계산
 - 안전하게 도달 가능한 경로 구간에서 주유소 후보 탐색
@@ -146,10 +148,11 @@ project-root/
 ├── fuelroute/
 │   ├── main.py         # FastAPI /health
 │   ├── __main__.py     # python -m fuelroute 검증 CLI
-│   ├── agent.py        # State·make_graph와 F3005 분석 노드
-│   ├── agent_gms.py    # GMS 구조화 요청 분석, 모델 함수 분리
+│   ├── agent.py        # State·make_graph와 F3005 분석·F3006 계획 노드
+│   ├── agent_gms.py    # GMS 구조화 요청 분석·작업 순서 제안
 │   ├── request_analysis.py # 원문 근거·단위·필수값 검증
 │   ├── geocoding.py    # Kakao Local 주소·장소 검색과 모호성 처리
+│   ├── task_plan.py    # F3006 계획 스키마·입력 보존·의존 순서 검증
 │   ├── config.py       # .env와 OS 환경변수
 │   ├── contracts.py    # ToolResult 공통 성공·실패
 │   ├── services.py     # 안전 주행거리 계산
@@ -240,10 +243,10 @@ python -m fuelroute rest-search --point 128.806648 37.758206 --radius-m 3000 --d
 ### 경로→후보→실제 도달·우회비용 연결 실험
 
 ```bash
-python -m fuelroute route-spike --origin 128.6014 35.8714 --destination 126.9780 37.5665 --current-fuel-l 15 --reserve-fuel-l 3 --efficiency-kmpl 12 --fuel-type gasoline --max-detour-min 15 --max-candidates 3
+python -m fuelroute route-spike --origin 128.6014 35.8714 --destination 126.9780 37.5665 --remaining-range-km 180 --reserve-range-km 30 --fuel-type gasoline --max-detour-min 15 --max-candidates 3
 ```
 
-144km 안전 구간에서 기본 반경 5km의 검색점을 최대 3개 만든다. 도로별 보고 거리와 상세 좌표를 사용하며, 도로 안의 위치는 지오데식 길이 비율로 근사한다. 조회한 후보를 ID로 합친 뒤 일부 후보만 상세·접근·경유 경로로 평가한다. 독립 접근 거리와 경유 첫 구간 거리 중 큰 값으로 안전 잔량을 확인한다.
+위 km 예시는 150km 안전 구간에서 기본 반경 5km의 검색점을 최대 3개 만든다. 과거 L/연비 실호출은 144km 안전 구간으로 검증했다. 도로별 보고 거리와 상세 좌표를 사용하며, 도로 안의 위치는 지오데식 길이 비율로 근사한다. 조회한 후보를 ID로 합친 뒤 일부 후보만 상세·접근·경유 경로로 평가한다. 독립 접근 거리와 경유 첫 구간 거리 중 큰 값으로 안전 잔량을 확인한다.
 
 기본값의 최대 호출은 Opinet 6회·Kakao 7회이며 GMS는 호출하지 않는다. `--max-search-points`는 1~3, `--max-candidates`는 1~10이며 상한을 늘리면 호출 수도 늘어난다. `--max-detour-km`으로 추가 거리 상한도 지정할 수 있다. 전체 경로를 완전 탐색하거나 전역 최저가를 보장하지 않으며 평가하지 않은 후보 수를 함께 반환한다.
 
@@ -252,21 +255,39 @@ python -m fuelroute route-spike --origin 128.6014 35.8714 --destination 126.9780
 ### F3005 요청 분석 — 구현·검증·커밋 완료
 
 ```bash
-python -m fuelroute analyze --message '대구에서 서울로 가는데 휘발유이고 현재 연료15L, 안전 잔량3L, 연비12km/L로 주유 추천해줘.' --reference-date 2026-11-19
+python -m fuelroute analyze --message '대구에서 서울로 가는데 휘발유이고 주행 가능180km, 안전 여유30km로 주유 추천해줘.' --reference-date 2026-11-19
 ```
 
-한 요청에 GMS를 1회 호출하고, 좌표 없이 지명·주소를 입력하면 Kakao Local 주소 검색→0건일 때 장소 검색으로 자동 변환한다. 위 예시는 출발/도착 좌표를 직접 요구하지 않는다. 연료 조건이 빠졌다면 해당 조건만 추가로 묻고, 위치가 여러 곳이면 후보 이름·주소를 보여주며 더 구체적인 위치를 요청한다. 지역명 결과는 지역 단위 검색 좌표라는 안내를 포함한다.
+한 요청에 GMS를 1회 호출하고, 좌표 없이 지명·주소를 입력하면 Kakao Local 주소 검색→0건일 때 장소 검색으로 자동 변환한다. 위 예시는 출발/도착 좌표를 직접 요구하지 않는다. 주행 가능 거리·안전 여유(km)가 빠졌다면 해당 값만 추가로 묻고, 위치가 여러 곳이면 후보 이름·주소를 보여주며 더 구체적인 위치를 요청한다. 지역명 결과는 지역 단위 검색 좌표라는 안내를 포함한다.
 
 기존 `KAKAO_REST_API_KEY`와 해당 앱의 **카카오맵 사용 설정 ON**이 필요하다. 위치당 최대 2회, 두 위치 최대 4회이며 같은 지명은 한 실행 안에서 재사용한다. 입력한 유효 좌표는 유지하고 인사/설명에는 위치 검색을 호출하지 않는다. `--reference-date`는 상대 날짜 재현용이며 생략하면 실행일 KST를 사용한다. 날짜 미언급 시 계획 날짜를 채우지 않는다. [API 한도·사용 범위](docs/API_USAGE.md)를 따른다.
 
-결과는 `data.analysis`에 조건과 기준/선호/제약 분류, 누락·오류·미확인 필드, 추가 질문, `ready_for_planning`을 담는다. 원문 구절과 숫자·단위를 대조하며 알 수 없는 좌표나 연료를 추측하지 않는다. 현재 L·km/L·분·km 단위를 확인하고 다른 단위나 누락 단위는 입력 보완 대상으로 둔다. 준비 상태는 입력 검증 결과이며 실제 추천이나 시간 제약 충족을 뜻하지 않는다.
+기본 계산은 **주행 가능180km − 안전 여유30km = 안전 주행150km**다. 계기판을 읽어 입력하며 차량에서 자동 수집하지 않는다. 주행 가능 거리와 목적지까지 거리는 구분한다. [km 전환 검증](docs/verification/2026-11-19-distance-input.json)을 참고한다.
+
+결과는 `data.analysis`에 조건과 기준/선호/제약 분류, 누락·오류·미확인 필드, 추가 질문, `ready_for_planning`을 담는다. 원문 구절과 숫자·단위를 대조하며 알 수 없는 좌표나 연료를 추측하지 않는다. 기본 필수값은 주행 가능 거리·안전 여유(km)이며 연료량이나 연비를 요구하지 않는다. 안전 여유의 임의 기본값도 없다. 기존 L/연비 입력은 별도로 지원하며 혼용은 거절한다. km·L·km/L·분 단위 누락/불일치는 입력 보완 대상으로 둔다. 준비 상태는 입력 검증 결과이며 실제 추천이나 시간 제약 충족을 뜻하지 않는다.
 
 첨부 예제처럼 `State`, `make_graph`, 모델 호출 함수를 분리했다. 추천 요청의 현재 그래프는 `START→analyze→resolve_locations→END`이며 다른 의도는 분석 뒤 종료한다. 계획·주유소 조회·Memory·최종 응답·로깅은 작업별 확인 후 연결한다. [분석 기록](docs/DEVELOPMENT.md#f3005-implementation), [자동 변환 기록](docs/DEVELOPMENT.md#f3005-geocoding), [실호출 근거](docs/verification/2026-11-19-geocoding.json)를 참고한다.
+
+<a id="f3006-task-plan"></a>
+
+### F3006 작업 계획 — 구현·검증·커밋 완료
+
+```bash
+python -m fuelroute plan --message '대구에서 서울로 가는데 휘발유이고 주행 가능180km, 안전 여유30km로 주유 추천해줘.' --reference-date 2026-11-19
+```
+
+기존 분석과 필요한 위치 해석 뒤 `build_plan` 노드를 실행한다. 준비된 추천 요청만 GMS에 작업 순서를 1회 더 제안받으며, 입력이 부족하면 `data.plan.status=needs_user_input`, 인사·설명 등은 `not_required`와 빈 작업 목록을 반환한다. 이 두 경우 계획 모델을 호출하지 않는다. `analyze` 명령은 기존 분석 범위를 유지한다.
+
+준비된 계획은 `status=ready`이며 `data.plan.request`에 검증한 주행 조건과 기존 실행 기본값을, `steps`에 작업 ID·외부 Tool/일반 코드 구분·선행 작업·입력 출처·조건부 실행 범위·실패 정책을 담는다. 기본 경로·안전거리 → 검색점 → 후보 → 상세 → 접근/경유 경로 → 제약 판정 → 정렬 → 추천 후보의 휴게소 보조정보 순서다. 코드가 누락·중복·의존 순서 위반과 임의 작업/인자 삽입을 거절한다. 입력 출처는 후속 실행기를 위한 설명이며 문자열을 코드로 실행하지 않는다.
+
+GMS는 분석 포함 최대 2회, 위치 검색은 별도 최대 4회다. **아직 계획의 길찾기·주유소·휴게소 조회를 실행하지 않는다.** 상세 가격이 없는 후보의 경로 조회와 추천 후보가 없는 경우의 보조 조회를 생략하도록 계획한다. 보조정보 실패는 추천 제외 사유로 사용하지 않는다. 날짜·시각은 분석에 보존하며 미래 가격이나 도착 시각 충족을 보장하지 않는다. 작업 계획은 F3015에서 저장할 최종 주유 계획과 구분한다.
+
+F3006 신규 테스트 25개와 km 전환 테스트 26개를 포함해 전체 215개를 통과했다. 실제 GMS 정상/누락/인사와 km 입력·안전 여유 누락을 확인했다. [상세 기록](docs/DEVELOPMENT.md#f3006-implementation), [실호출 근거](docs/verification/2026-11-19-task-plan.json)를 참고한다. F3006과 km 기본 입력 전환은 사용자 요청으로 작업별 커밋을 마쳤으며 다음 개발 작업은 F3007 Tool 호출·결과 통합이다.
 
 ### 추천·재계획 실행
 
 ```bash
-python -m fuelroute recommend --origin 128.6014 35.8714 --destination 126.9780 37.5665 --current-fuel-l 15 --reserve-fuel-l 3 --efficiency-kmpl 12 --fuel-type gasoline --max-detour-min 15 --max-replans 2 --max-evaluations 9 --sort-by price
+python -m fuelroute recommend --origin 128.6014 35.8714 --destination 126.9780 37.5665 --remaining-range-km 180 --reserve-range-km 30 --fuel-type gasoline --max-detour-min 15 --max-replans 2 --max-evaluations 9 --sort-by price
 # HTTP·LLM 호출 없이 일곱 Tool의 입력·출력·실패 계약 확인
 python -m fuelroute tool-schemas
 ```
@@ -314,7 +335,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-현재는 **F3005 요청 분석·지명 자동 좌표 변환을 구현·검증하고 사용자 요청으로 작업별 커밋을 마친 단계**다. 다음 작업은 F3006 계획 수립이다.
+현재는 **F3006 작업 계획과 km 기본 입력 전환을 구현·검증하고 작업별 커밋을 마친 단계**다. 다음 개발 작업은 F3007 Tool 호출·결과 통합이다.
 
 완료된 내용:
 
@@ -339,7 +360,9 @@ python -m pip check
 - 실제 추천 성공, 오프라인 테스트 110개·Ruff 검사 통과
 - F3005의 기준·선호·제약 추출, 원문 근거/단위 대조, 누락·오류 안내와 분석 전용 그래프 구현·검증·커밋 완료
 - 지명·주소 자동 좌표 변환, 후보 모호성·실패 안내, 좌표 출처·지역 수준 경고 추가
-- 현재 전체 오프라인 테스트 164개·Ruff·의존성 검사 통과. 기존 F3005 GMS 4회와 자동 변환 검증 GMS 1회·Kakao Local 5회 확인
+- F3005 단계의 오프라인 테스트 164개·Ruff·의존성 검사 통과. 분석 GMS 4회와 자동 변환 검증 GMS 1회·Kakao Local 5회 확인
+- F3006 계획 모델·노드, 작업 의존 순서·입력 보존·계획 생략과 km 기본 입력 전환 구현·검증·커밋 완료
+- 현재 전체 테스트 215개·Ruff·의존성 검사 통과. F3006 시나리오 GMS 4회와 사전 실행 2회, km 전환 GMS 3회를 구분해 기록
 
 아직 완료되지 않은 내용:
 

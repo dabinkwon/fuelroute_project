@@ -195,9 +195,11 @@ session_id
 origin
 destination
 fuel_type
-current_fuel_l
-avg_efficiency_kmpl
-reserve_fuel_l
+remaining_range_km
+reserve_range_km
+current_fuel_l?  # 기존 L 방식
+avg_efficiency_kmpl?  # km 방식에서는 선택
+reserve_fuel_l?  # 기존 L 방식
 max_detour_min?
 max_detour_km?
 budget_krw?
@@ -281,7 +283,7 @@ created_at
 ```json
 {
   "session_id": null,
-  "message": "대구에서 서울 가는데 휘발유 15L 남았고 연비는 12km/L야. 최소 3L는 남기고 싶어."
+  "message": "대구에서 서울 가는데 휘발유고 주행 가능180km야. 안전 여유30km는 남기고 싶어."
 }
 ```
 
@@ -348,7 +350,7 @@ created_at
 | `GET /api/logs/{session_id}` | 세션 ID | 200, `{session: ExecutionSession, events: ExecutionEvent[]}`; sequence 오름차순 |
 | `DELETE /api/logs/{session_id}` | 세션 ID | 204, 본문 없음; 저장한 계획은 유지 |
 
-- `TripContext`의 좌표는 `{longitude: number, latitude: number, label?: string}`인 WGS84, 연료는 L, 연비는 km/L다. 필수값 누락은 임의 보충하지 않고 Chat의 `needs_user_input=true`/`missing_fields`로 안내한다.
+- `TripContext`의 좌표는 `{longitude: number, latitude: number, label?: string}`인 WGS84, 기본 범위 입력은 주행 가능/안전 여유(km)다. km 방식에 L/연비는 필수가 아니며 기존 L 방식만 별도로 허용한다. 필수값 누락은 임의 보충하지 않고 Chat의 `needs_user_input=true`/`missing_fields`로 안내한다.
 - `FuelPlan`은 5장의 저장 구조를 따르며 추천 주유소는 `StationDetails`, 실제 도달·우회 거리(km)/시간(min), 추천 근거, 보조정보 `RestAreaInfo[]|null`을 담는다. HTTP 직전 도메인 계산에서 m/s→km/min 변환을 명시한다.
 - `ExecutionEvent`는 11장의 세션/순서/Tool/요청ID/시각과 마스킹된 payload를 사용한다. 원본 인증 URL·헤더·내부 예외 trace는 응답에 포함하지 않는다.
 - HTTP 오류는 `{error: {code, message, request_id}}`로 통일한다. 잘못된 입력은 422, 없는 계획/로그는 404, 일시 외부 장애로 핵심 판단 불가 시 503이다. 후보 없음·추가 입력·보조정보 실패는 대화 상태로 표현하고 UI가 `warnings`와 근거를 표시한다.
@@ -364,20 +366,18 @@ created_at
 ## 7.1 안전 주행 가능 거리 — 확정
 
 ```text
-usable_fuel_l = current_fuel_l - reserve_fuel_l
-safe_range_km = usable_fuel_l × avg_efficiency_kmpl
+safe_range_km = remaining_range_km - reserve_range_km
+# 예: 180km - 30km = 150km
 ```
 
 검증:
 
 ```text
-current_fuel_l > 0
-avg_efficiency_kmpl > 0
-reserve_fuel_l >= 0
-reserve_fuel_l < current_fuel_l
+remaining_range_km > 0
+0 <= reserve_range_km < remaining_range_km
 ```
 
-별도 안전계수 적용은 아직 확정하지 않는다.
+두 값은 유한한 km이며 안전 여유에 임의 기본값을 넣지 않는다. km 입력에 연비는 필요 없고 L를 역산하지 않는다. 기존 L/연비는 `(현재L-안전L)*연비(km/L)`로 계산한다. km 범위와 L 연료량 혼용은 거절한다. km 방식의 선택 연비로 차감식을 바꾸지 않는다. 두 방식 모두 사용자 입력 기반 추정치이며 별도 안전계수는 추가하지 않는다.
 
 ---
 
@@ -439,6 +439,8 @@ detour_duration = candidate_duration - base_duration
 ---
 
 ## 7.5 추가 이동 연료비 — 제안
+
+이 계산은 사용자가 연비를 별도로 제공했을 때 검토하는 선택 설계다. 기본 km 입력에서 연비를 요구하거나 L 소비량·연료비를 역산하지 않는다. 현재 구현은 실제 추가 거리/시간과 조회 가격을 사용한다.
 
 필요하면 다음 근사식을 사용할 수 있다.
 
@@ -595,17 +597,36 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 # 10. Agent 구조 설계안
 
-## F3005 구현 상태 — 2026-11-19
+## F3005~F3006 구현 상태 — 2026-11-19
 
-첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. 현재 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. 모델 함수와 위치 검색 함수를 각각 주입할 수 있다. 아래 전체 흐름은 F3006 이후에 연결할 설계이며 현재 구현 범위와 구분한다.
+첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. `analyze` 명령의 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. F3006의 `plan` 명령은 위치 해석 뒤 `build_plan→END`를 연결한다. 비추천 의도는 위치 검색 없이 `build_plan`에서 계획 생략을 기록한다. 분석·계획·위치 검색 함수를 각각 주입할 수 있다. 아래 전체 실행 흐름은 F3007 이후에 연결할 설계이며 현재 구현 범위와 구분한다.
 
 `ExtractedRequest`는 명시된 값과 원문 `quote`를 받고, `analyze_conditions`는 원문 존재·숫자와 단위·좌표 범위·상대 날짜/시각·유종/정렬 별칭을 검사한다. 원문과 대조할 수 없는 값은 `unverified_fields`, 사용자 범위 오류는 `invalid_fields`, 필수값 부재는 `missing_fields`로 반환한다. 기준·선호·제약은 `condition_groups`로 구분한다. 같은 숫자가 다른 의미로 사용된 경우 등 의미 분류의 정확성은 모델에 의존하므로 원문 대조가 모든 해석 오류를 보장하지는 않는다.
 
-추천의 내부 필수 입력은 출발/목적 WGS84 좌표·유종·현재 연료·안전 잔량·연비다. 사용자에게 좌표 입력을 필수로 요구하지 않고, 지명/주소만 있으면 Kakao Local 주소 검색 후 0건일 때만 장소 검색으로 보완한다. 유일한 결과만 채우고 여러 후보는 상세 주소·장소명을 다시 묻는다. 유효한 입력 좌표와 입력 오류는 검색 결과로 덮어쓰지 않는다. `coordinate_sources`·`location_results`에 출처·후보·실패를 남기고 지역/도로 수준 결과는 `warnings`로 표시한다.
+추천의 내부 필수 입력은 출발/목적 WGS84 좌표·유종·주행 가능 거리·안전 여유(km)다. `range_input_mode=distance`이면 연비를 요구하지 않는다. 명시적 L 연료량만 있으면 `fuel` 모드로 기존 세 값을 요구한다. 두 방식 혼용은 입력 보완 대상으로 둔다. 사용자에게 좌표 입력을 필수로 요구하지 않고, 지명/주소만 있으면 Kakao Local 주소 검색 후 0건일 때만 장소 검색으로 보완한다. 유일한 결과만 채우고 여러 후보는 상세 주소·장소명을 다시 묻는다. 유효한 입력 좌표와 입력 오류는 검색 결과로 덮어쓰지 않는다. `coordinate_sources`·`location_results`에 출처·후보·실패를 남기고 지역/도로 수준 결과는 `warnings`로 표시한다.
 
 위치 검색은 위치당 최대 2회·요청당 최대 4회이며 동일 실행 내 동일 지명은 캐시한다. 빈 결과·잘못된 개별 지명 외의 제공사 장애/권한/한도 오류가 나면 다음 위치도 반복 조회하지 않는다. 좌표 검색 뒤 누락 목록·질문·계획 준비 상태를 다시 계산한다. L/리터·km/L·분/min·km 단위만 현재 추출 검사에서 채택하고 다른 단위는 확인을 요청한다. 날짜 미언급 시 날짜를 채우지 않으며 상대 날짜는 선택 기준일 또는 실행일 KST를 사용한다.
 
-누락·잘못된 사용자 값은 성공 결과 안의 `needs_user_input`으로 안내하고, GMS 설정/인증/통신·모델 출력 형식 오류는 공통 실패로 반환한다. 위치 검색 실패는 해당 `location_results`의 공통 오류와 입력 보완 상태로 남긴다. `ready_for_planning`은 입력 준비 상태이며 시간 제약 충족이나 추천 성공 판정이 아니다. 아직 Memory·계획·주유소 조회·최종 자연어 응답·이벤트·로그 저장은 수행하지 않는다. [분석 기록](DEVELOPMENT.md#f3005-implementation), [위치 해석 기록](DEVELOPMENT.md#f3005-geocoding)을 따른다.
+누락·잘못된 사용자 값은 성공 결과 안의 `needs_user_input`으로 안내하고, GMS 설정/인증/통신·모델 출력 형식 오류는 공통 실패로 반환한다. 위치 검색 실패는 해당 `location_results`의 공통 오류와 입력 보완 상태로 남긴다. `ready_for_planning`은 입력 준비 상태이며 시간 제약 충족이나 추천 성공 판정이 아니다. 아직 Memory·계획에 따른 조회 실행·최종 자연어 응답·이벤트·로그 저장은 수행하지 않는다. [분석 기록](DEVELOPMENT.md#f3005-implementation), [위치 해석 기록](DEVELOPMENT.md#f3005-geocoding)을 따른다.
+
+### F3006 작업 계획 계약
+
+`task_plan.py`는 요청 분석 결과를 재검사하는 `prepare_plan`과 모델 제안을 검증하는 `finalize_plan`을 분리한다. 준비된 추천만 `agent_gms.llm_plan`으로 GMS를 1회 더 호출한다. 모델에는 검증 조건·기존 실행 기본값·허용 작업·실제 외부 조회 Tool의 설명/입력 스키마/다음 필드를 전달한다. 원본 위치 응답·인증정보는 전달하지 않는다. `calculate_safe_range`·제약 평가·정렬은 일반 코드 작업이며 모델의 외부 조회 Tool 목록에서는 제외한다.
+
+| 필드 | 의미 |
+|---|---|
+| `State.plan.status` | `ready`: 작업 순서 준비, `needs_user_input`: 입력 보완, `not_required`: 추천 계획 불필요 |
+| `request` | 기존 `PlanningRequest`로 검증한 좌표·유종·연료·우회 상한·정렬과 실행 기본값. 보류/생략이면 `null` |
+| `steps` | 작업 ID·선택 이유·외부 조회/일반 코드·Tool 이름·선행 작업·입력 출처·실행 범위·실패 정책. 보류/생략이면 빈 목록 |
+| `warnings` | 지역 수준 좌표 안내와 미판정 시각·미래 가격 예측 제외 등 해석상 한계 |
+
+추천 계획의 작업은 기본 경로(`base_route`)·안전거리(`safe_range`) → 검색점 → 후보 → 상세 → 접근/경유 경로 → 제약 판정 → 정렬 → 추천 후보 휴게소 보조정보다. 독립적인 기본 경로/안전거리 순서는 바꿀 수 있으나 각 의존성은 먼저 충족해야 한다. 아홉 단계의 누락·중복·역순·허용되지 않은 작업/인자 추가는 `INVALID_RESPONSE`이며 재호출이나 임의 복구를 하지 않는다. 조건·Tool 이름·입력 출처·정렬·예산은 모델이 바꾸지 못한다. 입력 참조는 논리적 출처 설명이며 문자열을 코드로 평가하지 않는다.
+
+상세 조회는 후보 ID를 사용하고 가격이 확인된 후보만 실제 경로를 평가하도록 계획한다. 후보 검색 0건은 재계획 판단 대상으로 남기고, 핵심 조회의 인증/설정/한도는 중단한다. 휴게소는 정렬한 추천 후보가 있을 때만 조회하며 실패하면 보조정보 미확인으로 남긴다. 이 단계는 실행 조건·정책을 보관하며 실제 반복/호출/재계획은 F3007~F3009에서 연결한다. 안전 잔량·유종·사용자 상한은 완화하지 않는다.
+
+`plan`의 GMS 상한은 분석 1회+계획 1회다. 미준비·비추천 의도는 계획 호출 0회이며 자동 Local 검색은 별도 최대 4회다. 현재 계획의 경로·주유소·휴게소 Tool은 실행하지 않는다. `graph_nodes`는 구성한 노드 목록이고 `analyzer_mode`/`planner_mode`는 의존성 선택이므로 실제 호출 이력으로 해석하지 않는다. 실행 이력은 후속 이벤트로 관리한다.
+
+날짜·출발/도착 시각은 `analysis.conditions`에 유지한다. `plan.request`는 현재 추천 실행기 입력이므로 날짜·시각 적합성은 아직 계산하지 않는다. 기본 경로의 상세 좌표는 검색점 생성에 필요하지만 현재 등록 `get_driving_route`는 정규화 비용만 반환한다. F3007에서는 기존 `probe_route`·`build_route_path`와 실행기 내부 경로 보관을 연결·검증해야 하며 원본 경로를 모델에 전달하지 않는다. 작업 계획은 F3015의 저장할 최종 주유 계획과 구분한다. [구현·검증 기록](DEVELOPMENT.md#f3006-implementation), [실호출 근거](verification/2026-11-19-task-plan.json)를 따른다.
 
 ## 전체 Agent 연결 설계
 
@@ -734,7 +755,7 @@ Logging Agent는 이벤트를 세션 단위로 그대로 저장한다.
 | 좌표 변환 | 두 API 연결 실패 | Critical | 경도/위도→KATEC 실험 |
 | 검색 지점 전략 | 호출량 과다/후보 누락 | High | 몇 개 지점으로 후보 확보 가능한지 실험 |
 | 휴게소 API·주유소 매칭 | 보조정보 오연결 또는 외부 API 조건 미충족 | High | 실호출·페이지 처리·위치/방향 매칭 확인 |
-| 실제 연비 오차 | 도달거리 과신 | Medium | 안전 잔량 + 안내 정책 확정 |
+| 계기판 주행 가능 거리 추정 오차 | 도달거리 과신 | Medium | 사용자 지정 안전 여유(km)와 추정치 안내 |
 | 가격 갱신 시차 | 추천 가격 불일치 | Medium | 가격 기준시각 확인/표시 |
 | 추천 정렬 기준 | 결과 설명 어려움 | Medium | 실제 후보 데이터로 비교 |
 
@@ -894,8 +915,8 @@ PDF p.9·14 대조에 따라 모델에 노출할 조회 Tool과 실행 흐름이
 |---|---|---|
 | DEC-001 | FuelRoute 도메인 확정 | 명시적인 안전 제약·외부 데이터·재계획·저장이 연결됨. 대안과 기획 이유는 PRD 1.5 |
 | DEC-002 | 미래 유가 예측 제외 | 현재 사실 데이터로 추천에 집중. 예측 모델·데이터 검증 전에는 재도입하지 않음 |
-| DEC-003 | 연료량·평균 연비 직접 입력 | 차량 제조사·OBD 연동 범위 축소. 입력 기반 추정치임을 안내 |
-| DEC-004 | 안전 잔량 하드 제약 | 연료가 거의 0이 되는 후보를 허용하지 않음. 추가 안전계수는 미정 |
+| DEC-003 | 계기판 주행 가능 거리·안전 여유(km) 직접 입력으로 변경 — 2026-11-19 | 사용자 요청. L/연비 없이 계산하며 기존 L 입력은 호환 지원. 차량 자동 수집 없음 |
+| DEC-004 | 안전 여유 하드 제약 | 주행 가능-안전 여유(km) 범위를 넘는 후보 제외. 기존 L 방식도 안전 잔량 유지 |
 | DEC-005 | 5km 제한은 검색점별 반경 | 도로 거리 기반 좌표 보간과 안전 구간 검색점 생성·실제 후보 연결 검증 완료 |
 | DEC-006 | 최초 최대 세 검색점, 재계획 최대 두 점 추가 | 기존 후보를 먼저 재사용. 기본 최대 Opinet 14회/Kakao 19회이며 전체 경로 커버리지는 보장하지 않음 |
 | DEC-007 | 제약 필터 후 가격 우선, 선택 시간 우선 정렬 확정 | 임의 가중치 없이 사전식 비교. 실제 비용의 로컬 재판정과 추천 실호출 완료 |
