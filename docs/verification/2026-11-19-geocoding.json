@@ -1,0 +1,334 @@
+{
+  "date": "2026-11-19",
+  "requirement": "F3005 location resolution enhancement",
+  "verification_type": "real_gms_and_kakao_local_calls",
+  "model": "gpt-5.4-mini",
+  "activation": {
+    "user_confirmed": true,
+    "previous_http_status": 403,
+    "previous_error_type": "NotAuthorizedError",
+    "previous_message": "OPEN_MAP_AND_LOCAL disabled",
+    "preflight_calls_before_activation": 2,
+    "preflight_calls_after_activation": 2
+  },
+  "gms_calls": 1,
+  "kakao_local_verification_calls": 5,
+  "other_external_api_calls": 0,
+  "input": "대구에서 서울로 가는데 휘발유이고 현재 연료15L, 안전 잔량3L, 연비12km/L로 주유 추천해줘.",
+  "analysis_result": {
+    "ok": true,
+    "tool_name": "analyze_request",
+    "data": {
+      "analysis": {
+        "intent": "recommend",
+        "reason": "주유 추천을 요청했고 출발지와 목적지, 연료 조건을 함께 제시했다.",
+        "conditions": {
+          "origin_label": "대구",
+          "destination_label": "서울",
+          "origin": {
+            "longitude": 128.601805491072,
+            "latitude": 35.8713802646199
+          },
+          "destination": {
+            "longitude": 126.978652258309,
+            "latitude": 37.5668260046608
+          },
+          "trip_date": null,
+          "departure_time": null,
+          "arrival_deadline": null,
+          "fuel_type": "gasoline",
+          "sort_by": null,
+          "current_fuel_l": 15.0,
+          "reserve_fuel_l": 3.0,
+          "avg_efficiency_kmpl": 12.0,
+          "max_detour_min": null,
+          "max_detour_km": null
+        },
+        "condition_groups": {
+          "basis": [
+            "origin_label",
+            "destination_label",
+            "origin",
+            "destination"
+          ],
+          "preferences": [
+            "fuel_type"
+          ],
+          "constraints": [
+            "current_fuel_l",
+            "reserve_fuel_l",
+            "avg_efficiency_kmpl"
+          ]
+        },
+        "missing_fields": [],
+        "invalid_fields": [],
+        "unverified_fields": [],
+        "needs_user_input": false,
+        "ready_for_planning": true,
+        "questions": [],
+        "location_results": {
+          "origin": {
+            "ok": true,
+            "tool_name": "resolve_location",
+            "data": {
+              "query": "대구",
+              "status": "resolved",
+              "search_type": "address",
+              "total_count": 1,
+              "candidates": [
+                {
+                  "longitude": 128.601805491072,
+                  "latitude": 35.8713802646199,
+                  "name": "대구",
+                  "address": "대구",
+                  "road_address": null,
+                  "place_id": null,
+                  "place_url": null,
+                  "source": "kakao_address",
+                  "match_level": "area"
+                }
+              ],
+              "selected": {
+                "longitude": 128.601805491072,
+                "latitude": 35.8713802646199,
+                "name": "대구",
+                "address": "대구",
+                "road_address": null,
+                "place_id": null,
+                "place_url": null,
+                "source": "kakao_address",
+                "match_level": "area"
+              },
+              "api_call_count": 1
+            },
+            "error": null,
+            "meta": {
+              "provider": "kakao_local",
+              "request_id": "ac6d136b-a1fc-4a90-b775-c070e03ccf3f",
+              "elapsed_ms": 79.259,
+              "fetched_at": "2026-11-19T04:51:15.793668Z"
+            }
+          },
+          "destination": {
+            "ok": true,
+            "tool_name": "resolve_location",
+            "data": {
+              "query": "서울",
+              "status": "resolved",
+              "search_type": "address",
+              "total_count": 1,
+              "candidates": [
+                {
+                  "longitude": 126.978652258309,
+                  "latitude": 37.5668260046608,
+                  "name": "서울",
+                  "address": "서울",
+                  "road_address": null,
+                  "place_id": null,
+                  "place_url": null,
+                  "source": "kakao_address",
+                  "match_level": "area"
+                }
+              ],
+              "selected": {
+                "longitude": 126.978652258309,
+                "latitude": 37.5668260046608,
+                "name": "서울",
+                "address": "서울",
+                "road_address": null,
+                "place_id": null,
+                "place_url": null,
+                "source": "kakao_address",
+                "match_level": "area"
+              },
+              "api_call_count": 1
+            },
+            "error": null,
+            "meta": {
+              "provider": "kakao_local",
+              "request_id": "5abee196-7c01-4010-9d37-d5f738a21e14",
+              "elapsed_ms": 41.947,
+              "fetched_at": "2026-11-19T04:51:15.835251Z"
+            }
+          }
+        },
+        "coordinate_sources": {
+          "origin": "kakao_address",
+          "destination": "kakao_address"
+        },
+        "warnings": [
+          "출발 위치 '대구'은 지역·도로 단위 검색 좌표입니다. 정확한 위치가 필요하면 상세 주소나 장소명을 입력해주세요.",
+          "도착 위치 '서울'은 지역·도로 단위 검색 좌표입니다. 정확한 위치가 필요하면 상세 주소나 장소명을 입력해주세요."
+        ]
+      },
+      "reference_date": "2026-11-19",
+      "graph_nodes": [
+        "analyze",
+        "resolve_locations"
+      ],
+      "analyzer_mode": "gms"
+    },
+    "error": null,
+    "meta": {
+      "provider": "gms",
+      "request_id": "b8e5fb51-de64-428c-88a5-f7a55ec518e5",
+      "elapsed_ms": 2265.117,
+      "fetched_at": "2026-11-19T04:51:15.837095Z"
+    }
+  },
+  "independent_location_lookups": {
+    "중앙동": {
+      "ok": true,
+      "tool_name": "resolve_location",
+      "data": {
+        "query": "중앙동",
+        "status": "ambiguous",
+        "search_type": "address",
+        "total_count": 52,
+        "candidates": [
+          {
+            "longitude": 126.949789748223,
+            "latitude": 37.4841881538496,
+            "name": "서울 관악구 중앙동",
+            "address": "서울 관악구 중앙동",
+            "road_address": null,
+            "place_id": null,
+            "place_url": null,
+            "source": "kakao_address",
+            "match_level": "area"
+          },
+          {
+            "longitude": 126.993455678842,
+            "latitude": 37.433150880627,
+            "name": "경기 과천시 중앙동",
+            "address": "경기 과천시 중앙동",
+            "road_address": null,
+            "place_id": null,
+            "place_url": null,
+            "source": "kakao_address",
+            "match_level": "area"
+          },
+          {
+            "longitude": 127.156279509281,
+            "latitude": 37.4429300831517,
+            "name": "경기 성남시 중원구 중앙동",
+            "address": "경기 성남시 중원구 중앙동",
+            "road_address": null,
+            "place_id": null,
+            "place_url": null,
+            "source": "kakao_address",
+            "match_level": "area"
+          },
+          {
+            "longitude": 127.053230310907,
+            "latitude": 37.9077500762619,
+            "name": "경기 동두천시 중앙동",
+            "address": "경기 동두천시 중앙동",
+            "road_address": null,
+            "place_id": null,
+            "place_url": null,
+            "source": "kakao_address",
+            "match_level": "area"
+          },
+          {
+            "longitude": 126.837635740617,
+            "latitude": 37.3238246626019,
+            "name": "경기 안산시 단원구 중앙동",
+            "address": "경기 안산시 단원구 중앙동",
+            "road_address": null,
+            "place_id": null,
+            "place_url": null,
+            "source": "kakao_address",
+            "match_level": "area"
+          }
+        ],
+        "selected": null,
+        "api_call_count": 1
+      },
+      "error": null,
+      "meta": {
+        "provider": "kakao_local",
+        "request_id": "5dd3b8fa-979b-49d1-9c2e-2ec88d641cba",
+        "elapsed_ms": 68.55,
+        "fetched_at": "2026-11-19T04:51:16.052948Z"
+      }
+    },
+    "서울역": {
+      "ok": true,
+      "tool_name": "resolve_location",
+      "data": {
+        "query": "서울역",
+        "status": "ambiguous",
+        "search_type": "keyword",
+        "total_count": 19982,
+        "candidates": [
+          {
+            "longitude": 126.97070335253385,
+            "latitude": 37.55406888733184,
+            "name": "서울역",
+            "address": "서울 중구 봉래동2가 122-11",
+            "road_address": "서울 중구 한강대로 405",
+            "place_id": "9113903",
+            "place_url": "http://place.map.kakao.com/9113903",
+            "source": "kakao_keyword",
+            "match_level": "place"
+          },
+          {
+            "longitude": 126.972636930856,
+            "latitude": 37.5554875216741,
+            "name": "서울역 GTX-A",
+            "address": "서울 중구 봉래동2가 166-1",
+            "road_address": null,
+            "place_id": "161159877",
+            "place_url": "http://place.map.kakao.com/161159877",
+            "source": "kakao_keyword",
+            "match_level": "place"
+          },
+          {
+            "longitude": 126.96974961781686,
+            "latitude": 37.55332892758497,
+            "name": "서울역 공항철도",
+            "address": "서울 용산구 동자동 43-205",
+            "road_address": "서울 용산구 청파로 378",
+            "place_id": "21161051",
+            "place_url": "http://place.map.kakao.com/21161051",
+            "source": "kakao_keyword",
+            "match_level": "place"
+          },
+          {
+            "longitude": 126.97209238331357,
+            "latitude": 37.55597933890212,
+            "name": "서울역 1호선",
+            "address": "서울 중구 남대문로5가 73-6",
+            "road_address": "서울 중구 세종대로 지하 2",
+            "place_id": "27254967",
+            "place_url": "http://place.map.kakao.com/27254967",
+            "source": "kakao_keyword",
+            "match_level": "place"
+          },
+          {
+            "longitude": 126.97264235696984,
+            "latitude": 37.553027798935524,
+            "name": "서울역 4호선",
+            "address": "서울 용산구 동자동 14-151",
+            "road_address": "서울 용산구 한강대로 지하 392",
+            "place_id": "21160827",
+            "place_url": "http://place.map.kakao.com/21160827",
+            "source": "kakao_keyword",
+            "match_level": "place"
+          }
+        ],
+        "selected": null,
+        "api_call_count": 2
+      },
+      "error": null,
+      "meta": {
+        "provider": "kakao_local",
+        "request_id": "90227586-e152-4d07-813e-69770aa278c0",
+        "elapsed_ms": 80.553,
+        "fetched_at": "2026-11-19T04:51:16.132168Z"
+      }
+    }
+  },
+  "scope": "location resolution only; no routes, station searches, planning, memory or logging"
+}

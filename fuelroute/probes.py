@@ -129,12 +129,15 @@ async def get_json(
     params: dict,
     headers: dict | None = None,
     timeout: float = 20,
+    rate_limit_codes: tuple[int, ...] = (),
 ) -> dict:
     """고정 제공사 URL에 GET을 1회 보내 JSON 객체를 받는다.
 
     params/headers는 인증정보를 포함할 수 있어 기록하지 않는다. timeout은 초다.
     HTTP 인증·한도·서버 오류와 타임아웃을 ProbeFailure로 변환한다. XML 게이트웨이
-    오류도 구분하며 비정상 JSON은 INVALID_RESPONSE다. 리다이렉트·자동 재시도는 없다.
+    오류도 구분하며 비정상 JSON은 INVALID_RESPONSE다. rate_limit_codes가 있으면 HTTP
+    오류 본문의 code도 비교한다. 예: Kakao Local의 HTTP 400/code=-10은 RATE_LIMITED다.
+    리다이렉트·자동 재시도는 없다. 오류 본문·인증정보는 반환하지 않는다.
     """
     try:
         response = await client.get(
@@ -148,6 +151,13 @@ async def get_json(
         raise ProbeFailure(
             "UPSTREAM_ERROR", "외부 API에 연결할 수 없습니다.", retryable=True
         ) from exc
+    if rate_limit_codes and response.status_code >= 400:
+        try:
+            error_body = response.json()
+        except ValueError:
+            error_body = None
+        if isinstance(error_body, dict) and error_body.get("code") in rate_limit_codes:
+            raise ProbeFailure("RATE_LIMITED", "호출 한도를 확인하세요.", retryable=True)
     if response.status_code in (401, 403):
         raise ProbeFailure("AUTH_FAILED", "인증키와 API 사용 권한을 확인하세요.")
     if response.status_code == 429:

@@ -7,6 +7,8 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from fuelroute.contracts import ToolResult
+from fuelroute.geocoding import LocationMatchSet
 from fuelroute.probes import Coordinate
 from fuelroute.services import FuelConditions
 
@@ -62,7 +64,7 @@ class ExtractedRequest(BaseModel):
 
 
 class TripConditions(BaseModel):
-    """원문 대조를 통과한 조건. 날짜·시각은 추출 결과이며 도착 가능성 판정이 아니다."""
+    """원문 또는 위치 API로 확인한 조건. 날짜·시각 추출은 도착 가능성 판정이 아니다."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     origin_label: str | None = None
@@ -94,11 +96,16 @@ class RequestAnalysis(BaseModel):
     needs_user_input: bool
     ready_for_planning: bool
     questions: list[str]
+    location_results: dict[str, ToolResult[LocationMatchSet]] = Field(default_factory=dict)
+    coordinate_sources: dict[str, Literal["user", "kakao_address", "kakao_keyword"]] = Field(
+        default_factory=dict
+    )
+    warnings: list[str] = Field(default_factory=list)
 
 
 FIELD_LABELS = {
-    "origin": "출발 좌표(WGS84 경도·위도)",
-    "destination": "목적 좌표(WGS84 경도·위도)",
+    "origin": "출발 위치(지명·주소)",
+    "destination": "목적 위치(지명·주소)",
     "origin_label": "출발 지명",
     "destination_label": "목적 지명",
     "fuel_type": "유종(휘발유/경유)",
@@ -120,13 +127,13 @@ REQUIRED_FIELDS = (
     "reserve_fuel_l",
     "avg_efficiency_kmpl",
 )
-NUMBER = re.compile("[-+]?\\d+(?:,\\d{3})*(?:\\.\\d+)?")
+NUMBER = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?")
 QUANTITY_UNITS = {
-    "current_fuel_l": "(?:l(?![a-z])|리터)",
-    "reserve_fuel_l": "(?:l(?![a-z])|리터)",
-    "avg_efficiency_kmpl": "(?:km\\s*/\\s*l|kmpl|킬로미터\\s*/\\s*리터)",
-    "max_detour_min": "(?:분|min(?:ute)?s?)",
-    "max_detour_km": "(?:km(?![a-z])|킬로미터)",
+    "current_fuel_l": r"(?:l(?![a-z])|리터)",
+    "reserve_fuel_l": r"(?:l(?![a-z])|리터)",
+    "avg_efficiency_kmpl": r"(?:km\s*/\s*l|kmpl|킬로미터\s*/\s*리터)",
+    "max_detour_min": r"(?:분|min(?:ute)?s?)",
+    "max_detour_km": r"(?:km(?![a-z])|킬로미터)",
 }
 
 
@@ -148,7 +155,7 @@ def _quantity_present(field: str, value: float, quote: str) -> bool:
     단위 없는 숫자를 추정하지 않는다. 예: max_detour_min=1은 '1시간'에서 채택하지
     않는다. 단위가 빠졌으면 입력 확인 대상으로 남기며 HTTP·저장 부작용은 없다.
     """
-    pattern = f"({NUMBER.pattern})\\s*{QUANTITY_UNITS[field]}"
+    pattern = rf"({NUMBER.pattern})\s*{QUANTITY_UNITS[field]}"
     return Decimal(str(value)) in {
         Decimal(token.replace(",", "")) for token in re.findall(pattern, quote, re.I)
     }
@@ -162,14 +169,12 @@ def _date_present(value: date, quote: str, reference_date: date) -> bool:
     """
     if value.isoformat() in quote:
         return True
-    for year, month, day in re.findall("(\\d{4})년\\s*(\\d{1,2})월\\s*(\\d{1,2})일", quote):
+    for year, month, day in re.findall(r"(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일", quote):
         if (value.year, value.month, value.day) == (int(year), int(month), int(day)):
             return True
     return any(
-        (
-            token in quote and value == reference_date + timedelta(days=offset)
-            for token, offset in [("오늘", 0), ("내일", 1), ("모레", 2)]
-        )
+        token in quote and value == reference_date + timedelta(days=offset)
+        for token, offset in [("오늘", 0), ("내일", 1), ("모레", 2)]
     )
 
 
@@ -187,9 +192,7 @@ def _time_present(value: str, quote: str) -> bool:
         return False
     if value in quote:
         return True
-    for period, hour, minute in re.findall(
-        "(오전|오후)?\\s*(\\d{1,2})시(?:\\s*(\\d{1,2})분)?", quote
-    ):
+    for period, hour, minute in re.findall(r"(오전|오후)?\s*(\d{1,2})시(?:\s*(\d{1,2})분)?", quote):
         hours = int(hour)
         if period:
             if not 1 <= hours <= 12:
@@ -206,7 +209,7 @@ def _grounded(field: str, mention: Mention, user: str, reference_date: date) -> 
     숫자·좌표·날짜·시각·유종/정렬 별칭을 확인하며 지오코딩이나 의미의 완전한 검증은
     하지 않는다. 같은 숫자가 다른 맥락에 있는 경우의 의미 분류는 모델 책임으로 남는다.
     """
-    value, quote = (mention.value, mention.quote)
+    value, quote = mention.value, mention.quote
     if quote not in user:
         return False
     if field in {"origin", "destination"}:
@@ -222,7 +225,7 @@ def _grounded(field: str, mention: Mention, user: str, reference_date: date) -> 
         "detour_time": ("시간 우선", "시간순", "가장 빨리", "detour_time"),
     }
     if field in {"fuel_type", "sort_by"}:
-        return any((alias in quote.lower() for alias in aliases[value]))
+        return any(alias in quote.lower() for alias in aliases[value])
     if isinstance(value, (float, int)):
         return _quantity_present(field, value, quote)
     return bool(value.strip()) and value in quote
@@ -235,12 +238,12 @@ def analyze_conditions(
 
     user는 이번 요청 원문이고 reference_date는 상대 날짜 해석 기준이다. 과거 대화는
     사용하지 않는다(F3010 후속 작업). 추천 요청은 출발/목적 좌표·유종·연료·잔량·연비가
-    필수다. 지명만 있으면 지명을 보존하고 좌표를 되묻는다. 불명확한 값은 제외하고
+    필수다. 지명만 있으면 지명을 보존해 후속 위치 검색에 넘긴다. 불명확한 값은 제외하고
     unverified_fields로 알린다. 인사/설명은 주행 필수값을 요구하지 않는다.
     날짜/시각은 추출만 하며 도착 적합성·Tool 실행·계획·저장·재계획·최종 설명은 수행하지
     않는다. 예: '서울 가는 길에 주유'는 연료를 채우지 않고 누락 목록을 반환한다.
     """
-    values, invalid, unverified = ({}, [], [])
+    values, invalid, unverified = {}, [], []
     if extracted.intent == "recommend":
         for field in TripConditions.model_fields:
             mention = getattr(extracted, field)
@@ -273,12 +276,13 @@ def analyze_conditions(
     if conditions.current_fuel_l is not None and conditions.reserve_fuel_l is not None:
         if conditions.reserve_fuel_l >= conditions.current_fuel_l:
             invalid.append("reserve_fuel_l")
-    if all(
-        (
+    if (
+        all(
             getattr(conditions, field) is not None
             for field in ("current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl")
         )
-    ) and (not invalid):
+        and not invalid
+    ):
         FuelConditions.model_validate(
             conditions.model_dump(
                 include={"current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl"}
@@ -300,14 +304,15 @@ def analyze_conditions(
 
 
 def refresh_analysis(analysis: RequestAnalysis) -> RequestAnalysis:
-    """추출 조건의 누락·질문·계획 준비 상태를 계산한다. 외부 호출·저장은 없다.
+    """추출·위치 검색 뒤의 조건으로 누락 목록·질문·좌표 출처를 다시 계산한다.
 
-    입력을 복사해 원문 대조·범위 오류를 보존하고 기준·선호·제약 필드를 분류한다.
-    지명만 있으면 좌표를 요구하며, 비추천 의도는 주행 필수값을 요구하지 않는다.
+    RequestAnalysis를 복사해 원문 대조·범위 오류를 유지하고 조건 그룹을 갱신한다.
+    위치가 모호하면 지역/주소를 보완하게 하고 검색 장애를 좌표 추측으로 대신하지 않는다.
+    외부 호출·DB 변경은 없다. 예: 위치가 확정되면 origin은 누락 질문에서 제거한다.
     """
     result = analysis.model_copy(deep=True)
     conditions = result.conditions
-    invalid, unverified = (result.invalid_fields, result.unverified_fields)
+    invalid, unverified = result.invalid_fields, result.unverified_fields
     missing = (
         [
             field
@@ -336,17 +341,48 @@ def refresh_analysis(analysis: RequestAnalysis) -> RequestAnalysis:
             "arrival_deadline",
         ],
     }
+    needs = bool(missing or invalid or unverified)
     result.condition_groups = {
         group: [field for field in fields if getattr(conditions, field) is not None]
         for group, fields in groups.items()
     }
     result.missing_fields = missing
-    result.needs_user_input = bool(missing or invalid or unverified)
-    result.ready_for_planning = result.intent == "recommend" and (not result.needs_user_input)
-    result.questions = [f"{FIELD_LABELS[field]}을 알려주세요." for field in missing]
+    result.needs_user_input = needs
+    result.ready_for_planning = result.intent == "recommend" and not needs
+    result.questions = []
+    for field in missing:
+        label = FIELD_LABELS[field]
+        location = result.location_results.get(field)
+        if location is not None and location.error:
+            if location.error.code == "EMPTY_RESULT":
+                result.questions.append(
+                    f"{label}을 찾지 못했습니다. 상세 주소나 정확한 장소명을 알려주세요."
+                )
+            elif location.error.code == "INVALID_INPUT":
+                result.questions.append(
+                    f"{label}이 너무 길거나 올바르지 않습니다. 지명·주소를 확인해주세요."
+                )
+            else:
+                result.questions.append(
+                    f"{label} 검색을 이용할 수 없습니다. 잠시 후 다시 시도해주세요."
+                )
+        elif location is not None and location.data.status == "ambiguous":
+            choices = "; ".join(
+                f"{index}. {candidate.name} "
+                f"({candidate.road_address or candidate.address or '주소 미확인'})"
+                for index, candidate in enumerate(location.data.candidates, start=1)
+            )
+            result.questions.append(
+                f"{label}의 후보가 여러 곳입니다. {choices}. 지역·주소를 더 자세히 알려주세요."
+            )
+        else:
+            result.questions.append(f"{label}을 알려주세요.")
     result.questions += [
         f"{FIELD_LABELS[field]}을 확인해 다시 입력해주세요."
         for field in dict.fromkeys(invalid + unverified)
         if field not in missing
     ]
+    for field in ("origin", "destination"):
+        if getattr(conditions, field) is not None:
+            result.coordinate_sources.setdefault(field, "user")
     return result
