@@ -13,6 +13,7 @@ from fuelroute.probes import Coordinate, ProbeFailure, probe_route, run_probe
 from fuelroute.recommendation import RecommendationRequest, RecommendationResult, rank_candidates
 from fuelroute.route_contracts import DrivingRoute
 from fuelroute.route_spike import assess_candidate_routes
+from fuelroute.routing import RoutePath, build_route_path
 from fuelroute.services import RangeConditions, calculate_safe_range
 from fuelroute.tools import (
     CandidateSearch,
@@ -183,20 +184,59 @@ class ToolRegistry:
         설정·인증·타임아웃·경로 없음은 공통 실패, 잘못된 비용은 INVALID_RESPONSE다.
         예: via=null은 기본/접근 경로, via=주유소 좌표는 경유 비용이다.
         """
-        result = await probe_route(
-            self.settings,
-            self.client,
-            origin=query.origin,
-            destination=query.destination,
-            via=query.via,
-        )
-        if result.ok:
-            try:
-                normalized = DrivingRoute.from_probe_data(result.data)
-            except ValueError as exc:
-                raise ProbeFailure("INVALID_RESPONSE", "경로 비용·구간을 확인하세요.") from exc
-            result.data = normalized.model_dump(mode="json")
+        result, _ = await self.route_context(query)
         return result
+
+    async def route_context(
+        self, query: DrivingRouteRequest, *, include_path: bool = False
+    ) -> tuple[ToolResult[dict], RoutePath | None]:
+        """경로를 한 번 조회해 공통 비용 결과와 선택적인 실행기 전용 상세 경로를 반환한다.
+
+        query는 WGS84 출발/목적·선택 경유 좌표다. include_path=True는 경유 없는 기본
+        경로에만 사용하며 도로 거리·상세 좌표로 RoutePath를 만든다. 첫 반환값 data는 항상
+        DrivingRoute의 m/초/구간 비용뿐이고 두 번째 경로는 모델·로그·공개 JSON에 넣지 않는다.
+        실패하면 같은 공통 오류와 None이다. 입력/설정은 HTTP 전에 검사하고 인증·0경로·
+        타임아웃·파싱 실패를 정제한다. 호출 최대1회·재시도0회이며 DB·캐시·파일 쓰기는 없다.
+        예: result,path=await registry.route_context(query,include_path=True) 뒤 path로 검색점을
+        만든다. 반환 경로와 HTTP 클라이언트의 수명은 요청 실행기에 한정한다.
+        """
+        path: RoutePath | None = None
+
+        async def operation() -> dict:
+            """입력을 재검증해 원본 경로를 비용과 내부 기하로 분리한다. 원본은 반환하지 않는다."""
+            nonlocal path
+            checked = DrivingRouteRequest.model_validate(query.model_dump())
+            if include_path and checked.via is not None:
+                raise ProbeFailure(
+                    "INVALID_INPUT", "검색점 생성에는 경유 없는 기본 경로가 필요합니다."
+                )
+            raw = await probe_route(
+                self.settings,
+                self.client,
+                origin=checked.origin,
+                destination=checked.destination,
+                via=checked.via,
+            )
+            if raw.error:
+                error = raw.error
+                raise ProbeFailure(
+                    error.code,
+                    error.message,
+                    retryable=error.retryable,
+                    replan_allowed=error.replan_allowed,
+                )
+            try:
+                normalized = DrivingRoute.from_probe_data(raw.data)
+                if include_path:
+                    path = build_route_path(raw.data)
+            except ValueError as exc:
+                raise ProbeFailure(
+                    "INVALID_RESPONSE", "경로 비용·구간·상세 좌표를 확인하세요."
+                ) from exc
+            return normalized.model_dump(mode="json")
+
+        result = await run_probe(self.settings, "kakao", "get_driving_route", operation)
+        return result, path if result.ok else None
 
     async def invoke(self, name: str, arguments: dict) -> ToolResult[dict]:
         """고정 이름과 JSON 객체로 Tool 하나만 실행해 성공·실패를 같은 구조로 반환한다.
