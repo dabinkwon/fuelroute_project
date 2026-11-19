@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005 분석·자동 좌표 변환, F3006 계획, F3007 조회 실행과 F3008 제약 판정 연결. 그래프 재계획·Memory·최종 문장·로깅·HTTP·화면 연결은 후속
+> **구현 상태:** F3005 분석·자동 좌표 변환, F3006 계획, F3007 조회·F3008 판정·F3009 최대2회 그래프 재계획 연결. Memory·최종 문장·로깅·HTTP·화면 연결은 후속
 
 ## 단계별 진행 기록
 
@@ -155,8 +155,8 @@ project-root/
 │   │   ├── graph.py         # State·분석→계획→실행→판정→보조 연결
 │   │   ├── analysis.py      # 원문·단위·누락 조건 검증
 │   │   ├── planning.py      # F3006 계획 구성·의존 순서 검증
-│   │   ├── execution.py     # F3007 한 회차 실행·결과 통합
-│   │   ├── replanning.py    # 명시적 입력의 기존 재계획 실행기
+│   │   ├── execution.py     # 요청별 최초/추가 회차·캐시·결과 통합
+│   │   ├── replanning.py    # F3009 재계획 정책·기존 독립 실행기
 │   │   └── llm.py           # GMS 요청 분석·계획 프롬프트
 │   ├── calculations/        # 외부 호출 없는 계산·판정
 │   │   ├── driving_range.py # 안전 주행거리
@@ -241,7 +241,7 @@ python -m fuelroute station-detail --station-id A0010207 --fuel-type gasoline
 python -m fuelroute rest-search --point 128.806648 37.758206 --radius-m 3000 --direction 하행
 ```
 
-`stations`는 WGS84 좌표를 KATEC로 변환하고 `data.items`에 ID·가격·위치를 반환한다. `station-detail`은 해당 ID로 상세·가격 기준시각을 반환한다. `rest-search`는 전체 휴게소 페이지를 읽고 반경·노선·방향을 필터한다. 휴게소 `match_status=unverified`는 가까운 참고 정보라는 뜻이며 같은 주유소라는 의미가 아니다. 전체 Agent 추천 흐름은 후속 단계다.
+`stations`는 WGS84 좌표를 KATEC로 변환하고 `data.items`에 ID·가격·위치를 반환한다. `station-detail`은 해당 ID로 상세·가격 기준시각을 반환한다. `rest-search`는 전체 휴게소 페이지를 읽고 반경·노선·방향을 필터한다. 휴게소 `match_status=unverified`는 가까운 참고 정보라는 뜻이며 같은 주유소라는 의미가 아니다. 자연어 추천·판정·재계획은 아래 run 명령으로 연결했다. Memory·최종 문장·HTTP/화면은 후속이다.
 
 실제 응답의 값·필드·실패 사례는 [`2026-11-18 검증 기록`](docs/verification/2026-11-18.json)에 남겼다. 로컬 상세 원본과 임시 스크립트가 있던 `artifacts`는 2026-11-19 사용자 요청으로 삭제했으며, Git에 기록한 검증 자료는 유지한다. Opinet은 잘못된 키에도 빈 배열을 반환했으므로 0건만으로 인증 성공이나 실패를 단정할 수 없다.
 
@@ -303,7 +303,7 @@ F3007은 `START→analyze→resolve_locations→build_plan→execute_plan→END`
 
 기본 호출 상한은 GMS2회·Local4회·Opinet6회·길찾기7회·휴게소1논리조회(내부 최대10페이지)다. 실제 수는 좌표 입력·캐시·조기 제외에 따라 줄어든다. `tool_call_counts`는 HTTP 수가 아닌 논리 Tool 시도 수이며 설정 누락 시 HTTP0회일 수도 있다. 실제 검증은 명시적 좌표로 Local0회였고 GMS2·Opinet6·길찾기7·휴게소1회로 후보16곳 중3곳을 평가해 추천했다. 휴게소 참고 정보2건은 동일 시설/방향 미확인으로 표시했다. 이는 해당 호출 시점의 결과다.
 
-신규 테스트40개·전체255개, Ruff·의존성 검사를 통과했다. [구현·검증 기록](docs/DEVELOPMENT.md#f3007-implementation), [실호출 근거](docs/verification/2026-11-19-tool-execution.json), [호출 상한](docs/API_USAGE.md)을 참고한다. 자동 재시도·그래프 재계획·최종 자연어 응답·DB/이벤트는 후속 작업이다. 도착시각과 제약 근거는 아래 F3008에서 보완했다.
+신규 테스트40개·전체255개, Ruff·의존성 검사를 통과했다. [구현·검증 기록](docs/DEVELOPMENT.md#f3007-implementation), [실호출 근거](docs/verification/2026-11-19-tool-execution.json), [호출 상한](docs/API_USAGE.md)을 참고한다. 동일 실패 재시도·최종 자연어 응답·DB/이벤트는 후속 작업이다. 그래프 재계획은 아래 F3009에서 연결했다. 도착시각과 제약 근거는 아래 F3008에서 보완했다.
 
 <a id="f3008-judgement"></a>
 
@@ -319,7 +319,20 @@ python -m fuelroute run --message '대구에서 서울로 휘발유 주유 추�
 
 휴게소 조회는 판정 뒤 확정 후보에만 연결한다. 시간 제약으로A에서B로 추천이 바뀌어도A의 보조정보를B에 표시하지 않는다. 선택 연비가 있으면 도달에 필요한 추정L를 계산할 수 있지만 기본 km 입력에는 연비·L를 요구하지 않는다. ETA·소비량은 추정치이며 미래 교통·대기시간·가격을 보장하지 않는다.
 
-전체 테스트288개·Ruff·의존성 검사를 통과했다. 실제 GMS1회로 명시된 익일 날짜/시각·정차10분 추출을 확인하고, 기존 F3007 실제 경로를 새 조회 없이 재판정해 충족/상한 초과/정차시간 누락을 구분했다. [상세 기록](docs/DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](docs/verification/2026-11-19-constraint-judgement.json)를 참고한다. 다음 작업은 F3009 그래프 재계획이다.
+전체 테스트288개·Ruff·의존성 검사를 통과했다. 실제 GMS1회로 명시된 익일 날짜/시각·정차10분 추출을 확인하고, 기존 F3007 실제 경로를 새 조회 없이 재판정해 충족/상한 초과/정차시간 누락을 구분했다. [상세 기록](docs/DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](docs/verification/2026-11-19-constraint-judgement.json)를 참고한다. 그래프 재계획은 아래 F3009 기록을 따른다.
+
+<a id="f3009-replanning"></a>
+
+### F3009 그래프 재계획 — 구현·검증·사용자 확인 완료
+
+`run`은 `analyze→resolve_locations→build_plan→execute_plan→judge→replan`으로 실행한다. 필요하면 `replan→judge`를 최대2회 반복하고 종료 뒤에만 `enrich→END`로 간다. 분석·계획 모델을 다시 부르거나 최초 실행기를 중첩 실행하지 않는다.
+
+- 기존 미평가 후보를 먼저 사용하고, 없을 때 안전 구간의 앞쪽 검색점 한 곳만 추가한다.
+- 기본 회차당3곳·전체9곳 평가이며 실패 후보도 예산을 사용한다. 기본 경로·기존 상세·동일 경로의 성공/실패는 요청 안에서 재사용한다.
+- 입력 부족·핵심 인증/한도/설정 실패는 재계획하지 않는다. 안전 여유·유종·우회/시간 상한을 자동 완화하지 않는다.
+- `data.replanning`의 `replan_count`, `rounds`, `stop_reason`, `next_input`으로 실제 회차·종료 이유·다음 입력 안내를 확인한다. `execution.calls/steps[].round_index`는 최초0/추가1~2다.
+
+신규27개·전체319개 테스트와 실제 상한 종료 검증을 통과했다. 대구→서울 요청에 의도적으로1분 도착 상한을 주어 후보9곳·추가2회 뒤 `evaluation_budget_exhausted`로 종료했다. 실제 GMS2·길찾기19·Opinet12회였고 Local·휴게소는0회다. 후보 재사용·새 검색점에서의 추천 성공 분기는 모의 검증이며 실제 추천 성공으로 합치지 않는다. [상세 기록](docs/DEVELOPMENT.md#f3009-replanning), [실제 실행 근거](docs/verification/2026-11-19-graph-replanning.json)를 참고한다.
 
 ### 기존 명시적 조건의 추천·재계획 실행
 
@@ -372,7 +385,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-현재는 **F3008 제약 판정을 `d11e437`, 기능별 폴더 재구성을 `ac21f80`에 각각 커밋한 단계**다. 전체292개 테스트를 통과했고 다음 개발 작업은 F3009 그래프 재계획이다.
+현재는 **F3009 그래프 재계획의 사용자 확인을 마치고 기능별 커밋으로 기록하는 단계**다. 전체319개 테스트와 실제2회 상한 종료를 확인했으며 다음 개발 작업은 F3010 대화 맥락 유지다. F3008과 폴더 재구성 커밋 이력은 위 표에 보존했다.
 
 완료된 내용:
 
@@ -401,6 +414,7 @@ python -m pip check
 - F3006 계획 모델·노드, 작업 의존 순서·입력 보존·계획 생략과 km 기본 입력 전환 구현·검증·커밋 완료
 - F3006·km 전환 시점의 전체 테스트215개 통과. F3006 시나리오 GMS4회와 사전 실행2회, km 전환 GMS3회를 구분해 기록
 - F3007 계획 순서 실행·후보별 실패 격리·경로 기하 분리·보조정보·Agent/CLI 연결 구현·검증·커밋 완료
+- F3009의 전체 테스트319개·실제2회 상한 종료 확인.
 - F3007 시점의 전체 테스트255개 통과. 실제 GMS2·길찾기7·Opinet6·휴게소1회로 한 회차 실행 확인
 - 현재 전체 테스트288개·Ruff·의존성 검사 통과. F3008 시간 필드 추출 GMS1회와 기존 실제 비용의 로컬 재판정 확인
 

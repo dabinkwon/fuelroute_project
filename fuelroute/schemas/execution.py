@@ -19,6 +19,7 @@ class ToolCallRecord(BaseModel):
     station_id: str | None = Field(description="후보별 호출의 Opinet ID, 기본/검색점 호출은 null")
     inputs: dict = Field(description="좌표·유종·ID 등 공개 입력; 인증/원본 경로/URL 제외")
     result: ToolResult[dict] = Field(description="검증·정규화한 ok/data/error/meta 공통 결과")
+    round_index: int = Field(default=0, ge=0, le=2, description="최초0·추가1~2 회차")
 
 
 class StepExecution(BaseModel):
@@ -27,6 +28,7 @@ class StepExecution(BaseModel):
     action: Action
     status: Literal["completed", "skipped", "failed"]
     message: str
+    round_index: int = Field(default=0, ge=0, le=2, description="이 단계를 처리한 회차")
 
 
 class CandidateRoutes(BaseModel):

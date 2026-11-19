@@ -161,7 +161,8 @@ def _candidate(
     요청은 검증된 km/유종/우회 상한이고 source는 평가한 ID/조회 실패 사유다. 상세 목록과
     접근/경유 경로로 도달거리·우회를 다시 계산한다. 경유 첫 구간과 독립 접근 중 큰 m를
     사용하고 음수 우회는 원래 값 보존 후 상한에0을 적용한다. 알려진 조회 실패는 유지하며
-    불충족/미확인을 구분한다. 시간은 실제 주행 예상초+명시 정차초를 예산과 비교한다.
+    불충족/미확인을 구분한다. 이전 시간/미확인 판정 코드는 재계산하며 반복 판정 때
+    제공사 오류로 누적하지 않는다. 시간은 실제 주행 예상초+명시 정차초를 예산과 비교한다.
     반환에는 km 여유·선택 연비의 추정L·근거와 호출ID를 담는다. 연비가 없으면L는None이다.
     잘못된 구간은 후보 미확인이며 프로그래밍 오류는 숨기지 않는다. HTTP·LLM·저장·재시도는 없다.
     """
@@ -180,7 +181,11 @@ def _candidate(
         "MISSING_ROUTE_COST",
         "FUEL_TYPE_MISMATCH",
         "STATION_ID_MISMATCH",
+        "ARRIVAL_DEADLINE_EXCEEDED",
+        "DETAILS",
+        "ROUTE_COST",
     }
+    known |= {"UNVERIFIED_" + code for code in [*known, "LOOKUP_ERROR"]}
     provider_errors = [code for code in source.reason_codes if code not in known]
     checks = [
         ConstraintCheck(
@@ -366,6 +371,7 @@ def judge_execution(
     신뢰하지 않는다. 실패/미확인 후보는 확정 추천에서 제외하고 사용자 정렬을 유지한다.
     날짜 없는 시각 비교·명시된 익일 날짜·정차 미확인을 구분하고 누락값을 새로 만들지 않는다.
     plan 미준비/비추천은 같은 상태, 핵심 조회 실패는unavailable, 데이터 모순은ProbeFailure다.
+    같은 근거를 재판정해도 경고를 중복 누적하지 않는다. 회차 간 실제 조회 실패는 보존한다.
     예: 가장 싼 후보의 주행+정차가 도착 예산을 초과하면 다음 충족 후보를 선택한다.
     반환 가격/도착시각은 조회값·추정치이며 전체 경로 최저가/미래 도착 보장이 아니다.
     """
@@ -466,7 +472,7 @@ def judge_execution(
         time_constraint=timing,
         missing_fields=timing.missing_fields,
         questions=[FIELD_LABELS[name] + "을 확인해 알려주세요." for name in timing.missing_fields],
-        warnings=warnings,
+        warnings=list(dict.fromkeys(warnings)),
         replan_needed=recommendation.recommended is None and not timing.missing_fields,
     )
 

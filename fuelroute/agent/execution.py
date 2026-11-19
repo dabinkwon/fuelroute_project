@@ -6,6 +6,7 @@ import httpx
 from pydantic import ValidationError
 
 from fuelroute.agent.planning import plan_step_specs
+from fuelroute.agent.replanning import decide_replan, replan_search_points
 from fuelroute.calculations.detour import assess_candidate_routes
 from fuelroute.calculations.driving_range import calculate_safe_range
 from fuelroute.calculations.ranking import rank_candidates
@@ -21,13 +22,15 @@ from fuelroute.schemas.execution import (
     StepExecution,
     ToolCallRecord,
 )
+from fuelroute.schemas.judgement import TripJudgement
 from fuelroute.schemas.planning import Action, WorkPlan
 from fuelroute.schemas.recommendation import (
     CandidateEvaluation,
     RecommendationRequest,
 )
+from fuelroute.schemas.replanning import ReplanOutcome
 from fuelroute.schemas.requests import PlanningRequest
-from fuelroute.schemas.routes import DrivingRoute, DrivingRouteRequest
+from fuelroute.schemas.routes import DrivingRoute, DrivingRouteRequest, RoutePoint
 from fuelroute.schemas.stations import RestAreasOutput, StationCandidate, StationDetails
 from fuelroute.tools.registry import ToolRegistry
 
@@ -86,11 +89,14 @@ class _PlanRunner:
         *,
         defer_rest_info: bool = False,
     ) -> None:
-        """검증된 ready 계획과 호출자 소유 클라이언트를 보관한다. 생성 시 HTTP·DB는 없다.
+        """검증된 ready 계획·설정·호출자 소유 클라이언트를 보관한다.
 
-        defer_rest_info=True이면 보조 조회를 후속 판정 뒤로 미룬다. 기본False는 기존 직접
-        실행 계약이다. 상세 경로와 캐시는 이 객체에서만 사용한다. 공개 output에는 기하를
-        넣지 않는다. 입력 검사는 execute_work_plan이 먼저 수행하며 종료는 호출자 책임이다.
+        생성 시 HTTP·LLM·DB 호출은 없다. defer_rest_info=True는 판정 뒤 보조 조회용이고
+        False는 독립 실행의 기존 계약이다. 입력 검사는 Session.start가 먼저 수행한다.
+        최초 round_index=0, 추가 회차는1~2이며 경로·검색 캐시는 이 요청에서만 유지한다.
+        active_search_points=None은 최초 검색점 전체, 빈 목록은 검색 없는 후보 재사용이다.
+        반환·실패·재시도는 없고 client 종료는 호출자 책임이다. 예:추가 회차에 기본 경로를
+        다시 조회하지 않는다. 원본 기하는 공개 output에 넣지 않는다.
         """
         self.plan = plan
         self.request = plan.request
@@ -100,6 +106,9 @@ class _PlanRunner:
         self.selected: list[StationCandidate] = []
         self.evaluations: dict[str, CandidateEvaluation] = {}
         self.route_cache: dict[str, ToolResult[dict]] = {}
+        self.search_cache: dict[tuple, ToolResult[dict]] = {}
+        self.active_search_points: list[RoutePoint] | None = None
+        self.round_index = 0
         self.action: Action = "base_route"
         self.defer_rest_info = defer_rest_info
 
@@ -118,6 +127,7 @@ class _PlanRunner:
                 station_id=station_id,
                 inputs=inputs,
                 result=result,
+                round_index=self.round_index,
             )
         )
 
@@ -216,27 +226,41 @@ class _PlanRunner:
         return True
 
     async def search_candidates(self) -> bool:
-        """각 검색점에서 후보를 조회하고 주유소 ID로 병합한다. 0건 외 검색 실패는 중단한다.
+        """활성 검색점의 후보를 조회하고 기존 후보와 주유소 ID로 합친다.
 
-        WGS84 점·고정 유종·반경m를 전달하며 최대3회 조회한다. 여러 검색점의 같은 ID는
-        최초 후보만 유지하고 실제 가격은 후속 상세에서 확인한다. 0건이면 다음 점으로
-        진행하고 전체0건은 재계획 필요 상태로 남긴다. 유종 불일치는 INVALID_RESPONSE다.
-        호출/공통 실패는 기록하고 재시도·검색점 확대·DB 쓰기는 하지 않는다.
+        입력은 고정 유종·반경m와 WGS84 검색점이다. 최초 최대3점, 추가 회차 최대1점이며
+        이미 호출한 동일 좌표/유종/반경은 성공·실패 모두 캐시에서 재사용한다. 같은 ID는
+        최초 후보를 유지하고 실제 가격은 후속 상세에서 확인한다. 0건은 다음 점으로 진행,
+        그 밖의 검색 실패는 ProbeFailure로 중단한다. 유종 불일치는 INVALID_RESPONSE다.
+        공개 호출/결과만 기록하고 반환 True는 검색 처리 완료를 뜻한다. 후보0건은 실패를
+        감춘 성공 추천이 아니며 후속 판정/재계획에서 처리한다. 자체 검색점 변경·재시도·
+        LLM·DB는 없다. 예:캐시 후보 평가 회차는 이 함수를 호출하지 않는다.
         """
-        candidates = {}
-        for point in self.output.results.search_points:
+        candidates = {item.station_id: item for item in self.output.results.search_candidates}
+        points = (
+            self.output.results.search_points
+            if self.active_search_points is None
+            else self.active_search_points
+        )
+        for point in points:
             arguments = {
                 "longitude": point.longitude,
                 "latitude": point.latitude,
                 "fuel_type": self.request.fuel_type,
                 "radius_m": self.request.radius_m,
             }
-            result = await self.registry.invoke("search_gas_stations", arguments)
-            if result.ok and any(
-                row["fuel_type"] != self.request.fuel_type for row in result.data["items"]
-            ):
-                result = _invalid_result(result, "후보 유종이 요청과 일치하지 않습니다.")
-            self._record(result, arguments)
+            key = (point.longitude, point.latitude, self.request.fuel_type, self.request.radius_m)
+            if key in self.search_cache:
+                self.output.cache_hits += 1
+                result = self.search_cache[key]
+            else:
+                result = await self.registry.invoke("search_gas_stations", arguments)
+                if result.ok and any(
+                    row["fuel_type"] != self.request.fuel_type for row in result.data["items"]
+                ):
+                    result = _invalid_result(result, "후보 유종이 요청과 일치하지 않습니다.")
+                self._record(result, arguments)
+                self.search_cache[key] = result
             if result.error:
                 if result.error.code == "EMPTY_RESULT":
                     continue
@@ -254,23 +278,30 @@ class _PlanRunner:
         return True
 
     async def station_details(self) -> bool:
-        """가격/ID 순 후보 일부의 상세를 조회해 ID·유종을 검사하고 개별 실패를 남긴다.
+        """아직 평가하지 않은 후보 일부의 상세·ID·유종을 검사한다.
 
-        후보는 미제공 가격을 뒤에 두고 ID로 동률을 정한다. 한 회차 평가 수는
-        min(max_candidates,max_evaluations) 이하이며 실패 후보도 예산을 사용한다.
-        상세 NOT_FOUND/타임아웃/파싱 실패는 해당 후보만 제외하고 다른 후보를 계속한다.
-        인증/설정/한도/입력은 중단한다. 가격 미제공은 MISSING_PRICE로 남기고 경로 조회를
-        생략한다. HTTP는 후보당1회·재시도0회, DB는 없다. 후보0건이면False다.
+        후보는 조회 가격→ID 순서이며 미제공 가격은 뒤로 보낸다. 한 회차 선택 수는
+        min(max_candidates, max_evaluations-누적평가수)다. 실패 후보도 예산을 사용하고
+        이미 시도한 ID는 상세·실패를 다시 조회하지 않는다. NOT_FOUND/타임아웃/파싱 실패는
+        해당 후보에 보존하며 인증·설정·한도·입력 오류는 중단한다. 가격 미제공이면
+        MISSING_PRICE로 남기고 경로 조회를 생략한다. 후보당 HTTP1회·재시도0회이며
+        DB·LLM·조건 완화는 없다. 반환은 선택 후보 존재 여부다. 예:최초3곳 실패 후
+        전체상한4면 다음 회차는1곳만 선택한다.
         """
         ordered = sorted(
-            self.output.results.search_candidates,
+            (
+                item
+                for item in self.output.results.search_candidates
+                if item.station_id not in self.evaluations
+            ),
             key=lambda item: (
                 item.price_krw_per_l is None,
                 item.price_krw_per_l or 0,
                 item.station_id,
             ),
         )
-        self.selected = ordered[: min(self.request.max_candidates, self.request.max_evaluations)]
+        remaining = max(0, self.request.max_evaluations - len(self.evaluations))
+        self.selected = ordered[: min(self.request.max_candidates, remaining)]
         selected_ids = {item.station_id for item in self.selected}
         self.output.unevaluated_station_ids = [
             item.station_id for item in ordered if item.station_id not in selected_ids
@@ -287,6 +318,7 @@ class _PlanRunner:
             self._record(result, arguments, station_id)
             item = CandidateEvaluation(station_id=station_id)
             self.evaluations[station_id] = item
+            self.output.results.evaluate_constraints = list(self.evaluations.values())
             if not self._require(result):
                 item.reason_codes = [result.error.code]
                 continue
@@ -297,15 +329,18 @@ class _PlanRunner:
         return bool(self.selected)
 
     async def candidate_routes(self) -> bool:
-        """유효 상세/가격이 있는 후보만 실제 접근·단일 경유 비용을 조회해 후보별로 묶는다.
+        """이번 회차의 유효 상세·가격 후보만 실제 접근·단일 경유 비용을 조회한다.
 
-        기본 경로와 같은 출발/옵션이며 거리m·시간초·호출 request_id를 보존한다. 접근이
-        안전거리 초과면 경유 조회를 생략하고 UNREACHABLE로 남긴다. 개별 경로 실패는
-        후보 제외, 인증/설정/한도는 중단이다. 후보당 최대2회·재시도0회, 캐시는 요청 내
-        동일 인자만 재사용한다. 유효 가격 후보가 없으면False다. 기하/DB 저장은 없다.
+        기본 경로와 같은 출발/옵션이며 WGS84 좌표를 사용한다. 거리m·시간초·request_id를
+        후보별로 묶고 접근이 안전거리 초과면 경유는 생략해 UNREACHABLE로 남긴다.
+        이전 회차 후보를 다시 순회하지 않으며 같은 인자의 성공·실패는 요청 캐시에서
+        재사용한다. 개별 실패는 제외, 핵심 인증/설정/한도는 ProbeFailure다. 후보당
+        HTTP최대2회·재시도0회이며 시도 후보가 있으면True다. HTTP외 DB·LLM·기하 저장은
+        없다. 예:좌표가 같은 A/B는 회차가 달라도 같은 경로 비용을 재사용한다.
         """
         attempted = False
-        for item in self.evaluations.values():
+        for candidate in self.selected:
+            item = self.evaluations[candidate.station_id]
             if item.reason_codes:
                 continue
             attempted = True
@@ -396,12 +431,14 @@ class _PlanRunner:
         )
         return True
 
-    async def run(self) -> PlanExecution:
+    async def run(self, *, actions: set[Action] | None = None) -> PlanExecution:
         """고정 핸들러만 계획 순서대로 한 회차 실행하고 실제 단계·부분 결과를 반환한다.
 
         호출 전에 _check_plan을 통과해야 한다. 핵심 ProbeFailure는 stopped/error로 남기고
         이후 단계는 미실행 처리한다. 프로그래밍 오류는 숨기지 않는다. no_recommendation은
-        정상 결과이며 replan_needed만 표시하고 자동 재계획/최종 문장/로그 저장은 하지 않는다.
+        정상 결과이며 replan_needed만 표시하고 자체 재계획/최종 문장/로그 저장은 하지 않는다.
+        actions=None은 최초 전체 계획, 지정 집합은 추가 회차의 후보 관련 작업만 실행한다.
+        기본 경로·안전거리·이전 비용은 객체에 유지하며 반복 횟수는 그래프가 관리한다.
         호출 집계는 논리 Tool 시도 수이며 인증 사전 실패·휴게소 페이지 수와 HTTP 수는 다르다.
         """
         handlers = {
@@ -416,6 +453,8 @@ class _PlanRunner:
             "rest_area_info": self.rest_area_info,
         }
         for step in self.plan.steps:
+            if actions is not None and step.action not in actions:
+                continue
             self.action = step.action
             if self.output.error:
                 self.output.steps.append(
@@ -423,6 +462,7 @@ class _PlanRunner:
                         action=step.action,
                         status="skipped",
                         message="앞선 핵심 오류로 실행하지 않았습니다.",
+                        round_index=self.round_index,
                     )
                 )
                 continue
@@ -431,7 +471,12 @@ class _PlanRunner:
             except ProbeFailure as exc:
                 self.output.error = exc.error
                 self.output.steps.append(
-                    StepExecution(action=step.action, status="failed", message=exc.error.message)
+                    StepExecution(
+                        action=step.action,
+                        status="failed",
+                        message=exc.error.message,
+                        round_index=self.round_index,
+                    )
                 )
             else:
                 self.output.steps.append(
@@ -439,6 +484,7 @@ class _PlanRunner:
                         action=step.action,
                         status="completed" if executed else "skipped",
                         message="처리 완료" if executed else "실행할 후보·선행 결과가 없습니다.",
+                        round_index=self.round_index,
                     )
                 )
         if self.output.error:
@@ -451,6 +497,112 @@ class _PlanRunner:
             Counter(call.result.meta.provider for call in self.output.calls)
         )
         return self.output
+
+
+class PlanExecutionSession:
+    """자연어 요청 하나의 최초 실행·추가 회차·비공개 경로·캐시를 소유한다."""
+
+    def __init__(
+        self, settings: Settings, client: httpx.AsyncClient, *, defer_rest_info: bool = True
+    ) -> None:
+        """열린 호출자 소유 client와 설정을 보관한다. 생성 시 API·LLM·DB 호출은 없다.
+
+        기본 defer_rest_info=True는 그래프의 최종 판정 후 보조 조회용이다. False는 독립
+        실행의 기존 계약이다. 객체는 요청당 하나 생성하고 다른 요청/스레드와 공유하지
+        않는다. start는 한 번만 가능하고 추가 실행은 replan에 고정 계획을 전달한다.
+        client 종료는 호출자 책임이다. 예:PlanExecutionSession(settings, client).
+        """
+        self.settings = settings
+        self.client = client
+        self.defer_rest_info = defer_rest_info
+        self.runner: _PlanRunner | None = None
+        self.started = False
+
+    async def start(self, plan: WorkPlan) -> PlanExecution:
+        """계획·핵심 설정을 HTTP 전에 검사하고 최초 한 회차만 실행한다.
+
+        입력은 F3006 WorkPlan이며 검증 복사본만 보관한다. 비추천/입력 보완은 조회0회,
+        핵심 키 누락은 stopped/CONFIG_ERROR다. 계획 변조·중복 시작은 INVALID_INPUT,
+        프로그래밍 오류는 숨기지 않는다. ready만 내부 실행기를 만들고 기하/캐시를 후속
+        회차까지 유지한다. 검색점·후보 상한은 고정 요청을 따르며 반복·재시도·LLM·DB는 없다.
+        예:await session.start(plan)의 반환 PlanExecution을 그래프 판정에 전달한다.
+        """
+        if self.started:
+            raise ProbeFailure("INVALID_INPUT", "실행 세션은 요청마다 새로 생성해야 합니다.")
+        self.started = True
+        try:
+            checked = WorkPlan.model_validate(plan.model_dump())
+        except ValidationError as exc:
+            raise ProbeFailure("INVALID_INPUT", "실행 계획의 타입·주행 조건을 확인하세요.") from exc
+        _check_plan(checked)
+        if checked.status != "ready":
+            return PlanExecution(status=checked.status, warnings=list(checked.warnings))
+        missing = self.settings.missing("kakao") + self.settings.missing("opinet")
+        if missing:
+            return PlanExecution(
+                status="stopped",
+                error=ToolError(
+                    code="CONFIG_ERROR", message="미설정 환경변수: " + ", ".join(missing)
+                ),
+                warnings=list(checked.warnings),
+            )
+        self.runner = _PlanRunner(
+            checked, self.settings, self.client, defer_rest_info=self.defer_rest_info
+        )
+        return await self.runner.run()
+
+    async def replan(
+        self, plan: WorkPlan, execution: PlanExecution, judgement: TripJudgement, replan_count: int
+    ) -> ReplanOutcome:
+        """동일 요청의 미평가 후보 또는 새 검색점 한 곳으로 추가 회차를 최대 한 번 실행한다.
+
+        start 뒤 판정한 누적 결과와 완료 추가 횟수0~2를 받는다. 고정 계획·회차·호출ID가
+        내부 세션과 같아야 하며 불일치는 HTTP 전 INVALID_INPUT이다. 기존 실제 경로의
+        안전 구간에서 미사용 점을 계산하고 decide_replan으로 후보 재사용을 우선한다.
+        종료는execution=None, 추가 실행은 기본 경로/안전거리/기존 상세를 재조회하지 않은
+        누적 결과다. 실패 후보도 전체 평가 예산을 사용하고 조건은 완화하지 않는다.
+        호출/단계에 회차를 남기고 보조 조회는 최종 판정 뒤로 미룬다. 내부 반복·추가LLM·
+        DB·자동 재시도는 없다. 예:캐시B평가는 후보검색0회, 새점은 검색최대1회다.
+        """
+        runner = self.runner
+        if (
+            runner is None
+            or plan != runner.plan
+            or replan_count != runner.round_index
+            or [call.result.meta.request_id for call in execution.calls]
+            != [call.result.meta.request_id for call in runner.output.calls]
+        ):
+            raise ProbeFailure("INVALID_INPUT", "재계획의 요청·회차·실행 세션이 일치하지 않습니다.")
+        points = replan_search_points(
+            runner.path,
+            runner.output.results.safe_range.safe_range_km,
+            runner.request.radius_m,
+            runner.output.results.search_points,
+        )
+        points = [
+            point
+            for point in points
+            if (point.longitude, point.latitude, runner.request.fuel_type, runner.request.radius_m)
+            not in runner.search_cache
+        ]
+        decision = decide_replan(plan, execution, judgement, replan_count, points)
+        if decision.action == "stop":
+            return ReplanOutcome(decision=decision)
+        runner.output = execution.model_copy(deep=True)
+        runner.round_index += 1
+        runner.defer_rest_info = True
+        runner.active_search_points = [decision.search_point] if decision.search_point else []
+        runner.output.results.search_points.extend(runner.active_search_points)
+        actions: set[Action] = {
+            "station_details",
+            "candidate_routes",
+            "evaluate_constraints",
+            "rank_candidates",
+            "rest_area_info",
+        }
+        if decision.search_point is not None:
+            actions.add("search_candidates")
+        return ReplanOutcome(decision=decision, execution=await runner.run(actions=actions))
 
 
 async def execute_work_plan(
@@ -472,24 +624,7 @@ async def execute_work_plan(
     재사용한다. defer_rest_info=True는 F3008 판정 뒤 보조 조회를 하기 위한 옵션이며
     기본False는 기존 직접 실행 계약을 유지한다. 최종 자연어 응답은 후속 단계다.
     """
-    try:
-        plan = WorkPlan.model_validate(plan.model_dump())
-    except ValidationError as exc:
-        raise ProbeFailure("INVALID_INPUT", "실행 계획의 타입·주행 조건을 확인하세요.") from exc
-    _check_plan(plan)
-    if plan.status != "ready":
-        return PlanExecution(status=plan.status, warnings=list(plan.warnings))
-    missing = settings.missing("kakao") + settings.missing("opinet")
-    if missing:
-        return PlanExecution(
-            status="stopped",
-            error=ToolError(
-                code="CONFIG_ERROR",
-                message="미설정 환경변수: " + ", ".join(missing),
-            ),
-            warnings=list(plan.warnings),
-        )
-    return await _PlanRunner(plan, settings, client, defer_rest_info=defer_rest_info).run()
+    return await PlanExecutionSession(settings, client, defer_rest_info=defer_rest_info).start(plan)
 
 
 async def enrich_rest_area(
@@ -510,7 +645,7 @@ async def enrich_rest_area(
     output = execution.model_copy(deep=True)
     recommendation = output.results.rank_candidates
     selected = recommendation.recommended if recommendation else None
-    step = next((item for item in output.steps if item.action == "rest_area_info"), None)
+    step = next((item for item in reversed(output.steps) if item.action == "rest_area_info"), None)
     output.results.rest_area_info = None
     if selected is None or request is None or output.error:
         if step:
@@ -541,6 +676,7 @@ async def enrich_rest_area(
                 station_id=selected.station_id,
                 inputs=arguments,
                 result=result,
+                round_index=step.round_index if step else 0,
             )
         )
     if result.ok:

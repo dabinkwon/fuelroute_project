@@ -33,7 +33,8 @@ def build_parser() -> argparse.ArgumentParser:
     route-spike는 연결 실험, recommend는 유한한 재계획과 추천, tool-schemas는 정적 계약
     출력이다. 예: doctor 또는 --help. 명령을 정의하는 과정에서 HTTP를 실행하지 않는다.
     analyze는 F3005 분석·필요한 위치 검색, plan은 준비된 입력의 F3006 계획까지 수행한다.
-    run은 F3007 조회/계산 한 회차를 실제 실행한다. DB·최종 문장·자동 재계획은 없다.
+    run은 조회·판정 후 필요할 때 최대2회 재계획하며 모델은 추가 호출하지 않는다.
+    DB·최종 문장은 후속 단계다.
     """
     parser = argparse.ArgumentParser(description="FuelRoute 환경·API 독립 검증")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -42,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("analyze", "F3005 분석·위치 해석·누락/오류 확인 (GMS 1회)"),
         ("plan", "F3006 작업 순서 수립 (GMS 최대 2회, 실행 Tool 호출 없음)"),
-        ("run", "F3007~F3008 조회 한 회차·제약 판정 (GMS 최대 2회와 데이터 API 호출)"),
+        ("run", "F3007~F3009 조회·제약 판정·최대2회 재계획 (GMS 최대 2회와 데이터 API 호출)"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--message", required=True, help="주행 조건을 포함한 요청 원문")
@@ -114,8 +115,8 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
     명시적 호출 상한 안에서 경로·후보를 연결한다. recommend는 캐시·재계획을 포함하며
     tool-schemas는 HTTP 없이 계약만 반환한다. 두 명령도 LLM이나 DB를 사용하지 않는다.
     analyze는 GMS1회·필요한 Local 검색, plan은 준비된 요청에 계획 GMS1회를 추가한다.
-    run은 준비된 계획을 실제 조회에 연결하고 핵심 실패는 종료1로 반환한다. 계획 보류/
-    생략은 성공 데이터로 구분한다. DB·로그 파일·자동 재계획은 수행하지 않는다.
+    run은 준비된 계획을 조회·판정·상한 있는 재계획에 연결하고 핵심 실패는 종료1이다. 계획 보류/
+    생략은 성공 데이터로 구분한다. 재계획 종료 근거도 출력하며 DB·로그 파일은 쓰지 않는다.
     """
     if args.command == "doctor":
         status = {

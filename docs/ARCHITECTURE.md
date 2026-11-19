@@ -607,7 +607,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 ## F3005~F3008 구현 상태 — 2026-11-19
 
-첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. `analyze` 명령의 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. F3006의 `plan` 명령은 위치 해석 뒤 `build_plan→END`를 연결한다. 비추천 의도는 위치 검색 없이 `build_plan`에서 계획 생략을 기록한다. 분석·계획·위치 검색 함수를 각각 주입할 수 있다. 아래 전체 흐름 중 별도 판단·재계획·Memory·최종 응답은 후속 설계이며 현재 구현 범위와 구분한다.
+첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. `analyze` 명령의 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. F3006의 `plan` 명령은 위치 해석 뒤 `build_plan→END`를 연결한다. 비추천 의도는 위치 검색 없이 `build_plan`에서 계획 생략을 기록한다. 분석·계획·위치 검색 함수를 각각 주입할 수 있다. F3008 판정·F3009 재계획은 아래 구현 계약을 따른다. 전체 설계의 Memory·최종 응답은 후속이다.
 
 `ExtractedRequest`는 명시된 값과 원문 `quote`를 받고, `analyze_conditions`는 원문 존재·숫자와 단위·좌표 범위·상대 날짜/시각·유종/정렬 별칭을 검사한다. 원문과 대조할 수 없는 값은 `unverified_fields`, 사용자 범위 오류는 `invalid_fields`, 필수값 부재는 `missing_fields`로 반환한다. 기준·선호·제약은 `condition_groups`로 구분한다. 같은 숫자가 다른 의미로 사용된 경우 등 의미 분류의 정확성은 모델에 의존하므로 원문 대조가 모든 해석 오류를 보장하지는 않는다.
 
@@ -638,7 +638,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 ### F3007 조회 실행 계약
 
-`run` 명령의 추천 그래프는 `START→analyze→resolve_locations→build_plan→execute_plan→END`다. `execute_work_plan`은 요청을 재검증하고 아홉 작업의 ID·순서·의존성·고정 Tool/입력 출처/실패 정책이 F3006 계약과 같은지 HTTP 전에 확인한다. 문자열 참조를 코드로 실행하지 않으며 고정 핸들러만 사용한다. 입력 보완/비추천은 실행기 호출0회다. Kakao/Opinet 필수 설정도 첫 경로 호출 전에 검사하고 휴게소 키는 선택 의존성으로 취급한다.
+F3007 당시 그래프는 `START→analyze→resolve_locations→build_plan→execute_plan→END`였다. 아래는 독립 최초 회차 계약이며 현재 run의 판정·재계획은 F3008/F3009 절을 따른다. `execute_work_plan`은 요청을 재검증하고 아홉 작업의 ID·순서·의존성·고정 Tool/입력 출처/실패 정책이 F3006 계약과 같은지 HTTP 전에 확인한다. 문자열 참조를 코드로 실행하지 않으며 고정 핸들러만 사용한다. 입력 보완/비추천은 실행기 호출0회다. Kakao/Opinet 필수 설정도 첫 경로 호출 전에 검사하고 휴게소 키는 선택 의존성으로 취급한다.
 
 | 결과 | 계약 |
 |---|---|
@@ -664,7 +664,29 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 기본 입력 준비는 `analysis.ready_for_planning`, 최종 제약 상태는 `judgement.status`다. 상태는 `recommended/no_recommendation/needs_user_input/unavailable/not_required`이며 입력 보완 질문은 `missing_fields/questions`에 있다. ETA는 주행 응답과 정차 예상값에 따른 추정치이고 미래 교통을 보장하지 않는다. 시간 판정 자체는 HTTP/LLM0회다.
 
-기본 그래프 실행기는 보조 조회를 미룬 뒤 확정 판정의 후보만 `enrich_rest_area`에 넘긴다. 다른 후보의 보조정보는 지우고 같은 ID의 과거 보조 호출은 성공/실패 모두 재사용한다. 직접 `execute_work_plan`의 기본값은 기존 한 회차 계약을 유지하며 판정 그래프가 `defer_rest_info=True`를 사용한다. 시간 제약으로 후보가 모두 제외되면 보조 HTTP0회다. 그래프 재계획·Memory·최종 문장·이벤트/저장은 후속 범위다. [F3008 기록](DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](verification/2026-11-19-constraint-judgement.json)를 따른다.
+기본 그래프 실행기는 보조 조회를 미룬 뒤 확정 판정의 후보만 `enrich_rest_area`에 넘긴다. 다른 후보의 보조정보는 지우고 같은 ID의 과거 보조 호출은 성공/실패 모두 재사용한다. 직접 `execute_work_plan`의 기본값은 기존 한 회차 계약을 유지하며 판정 그래프는 `PlanExecutionSession(defer_rest_info=True)`를 사용한다. 시간 제약으로 후보가 모두 제외되면 보조 HTTP0회다. 그래프 재계획은 아래 F3009에서 연결했으며 Memory·최종 문장·이벤트/저장은 후속 범위다. [F3008 기록](DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](verification/2026-11-19-constraint-judgement.json)를 따른다.
+
+### F3009 그래프 재계획 계약
+
+생산 `run`은 `execute_plan→judge→replan` 이후 추가 회차가 있으면 `replan→judge`로 돌아가고, 종료하면 `enrich→END`로 간다. `agent/execution.py`의 `PlanExecutionSession`은 요청당 하나 생성하며 최초 `start` 한 번과 추가 `replan` 한 번씩을 제공한다. 최초 실행을 중첩 호출하거나 기존 `recommend_route`의 반복기를 그래프 안에 다시 넣지 않는다. GMS는 분석/계획 최대2회 그대로다.
+
+`agent/replanning.py`의 `replan_stop_reason`은 비추천 의도·필수 입력/시간 보완·핵심 실패·추천 발견·전체 평가 예산·추가 회차 상한을 먼저 확인한다. `decide_replan`은 아직 평가하지 않은 실제 후보 ID를 우선하고, 없으면 기존 상세 경로로 만든 안전 구간의 미사용 앞쪽 점을 한 곳 고른다. 검색은0건만 새 점 대상으로 삼고 개별 상세/경로 실패는 다른 후보로 진행한다. 같은 실패 요청을 재시도하거나 입력·안전/우회/시간 제약을 바꾸지 않는다.
+
+최초 회차0·추가1~2회, 기본 회차3곳/전체9곳이며 실패한 평가도 예산을 쓴다. 추가 회차에는 남은 평가 예산만 선택한다. 기본 경로·안전거리·기존 후보/상세/경로는 유지하고, 동일 좌표/유종/반경 검색과 같은 경로 인자의 성공/실패는 캐시한다. 기하/캐시는 요청 종료 시 폐기하며 공개 상태에 원본 경로를 넣지 않는다. 매 회차 실제 비용으로 F3008을 재판정하고 판정 코드/경고를 제공사 오류나 중복 문장으로 누적하지 않는다.
+
+| 출력 | 의미 |
+|---|---|
+| `data.replanning.replan_count` | 완료한 추가 회차0~2, 최초 회차 제외 |
+| `rounds` | 회차별 트리거·새 검색점·신규 평가ID·적합 후보 수·논리 호출 증가량 |
+| `stop_reason` | recommendation_found / needs_user_input / not_required / core_error / evaluation_budget_exhausted / replan_limit_reached / search_space_exhausted / judgement_unavailable |
+| `next_input` | 입력 보완 또는 상한·검색 범위 소진 시 확인할 내용 |
+| `execution.calls/steps[].round_index` | 최초0/추가1~2회차의 호출·단계 연결 |
+
+종료한 `execution.replan_needed`는false이고 `judgement.replan_needed`는 조건상 대안 탐색 필요 여부다. 정상적인 후보 미발견은 공통 성공의 `no_recommendation`이며 전체 경로에 후보가 없다는 뜻이 아니다. 핵심 실패의 공개 응답은 기존처럼 `ok=false/data=null/error`이고 원 그래프 State에는 부분 결과·종료 근거를 보존한다. 입력 보완/인사는 실제 실행 회차가 없어 rounds가 비어 있다.
+
+`execute_request`의 모델/실행기 주입을 유지한다. 사용자 주입 executor만 있으면 임의 재계획은 비활성화하며 같은 소유권의 replanner를 함께 명시해야 반복한다. 생산 경로는 내부 Session.start/replan을 연결한다. 그래프 자체도 주입 콜백 전에 횟수/평가 상한을 검사하고 누적 결과·진행 없는 출력을 거절한다. 보조 조회는 마지막 확정 후보에만 최대1회이며 실패가 추천을 지우지 않는다.
+
+기본 전체 호출 상한은 GMS2·Local4·Opinet14·Mobility19·휴게소1논리조회/최대10HTTP다. [검증 기록](DEVELOPMENT.md#f3009-replanning)과 [실제 상한 종료](verification/2026-11-19-graph-replanning.json)를 따른다. Memory·최종 문장·이벤트/저장은 후속이다.
 
 ## 전체 Agent 연결 설계
 
@@ -720,7 +742,7 @@ END
 
 ## 재계획 실행 정책 — 확정·서비스 구현 완료
 
-`agent/replanning.py`의 `recommend_route`는 명시적 조건을 받는 실행기다. 위 전체 LangGraph는 후속 단계이며 현재 CLI에서 다음 정책을 검증했다.
+`agent/replanning.py`의 `recommend_route`는 명시적 조건을 받는 실행기다. 아래는 독립 CLI의 정책이다. F3009 그래프는 위 Session/판정 계약으로 같은 예산·검색점 정책을 적용한다. 대화 Memory·최종 문장은 후속이다.
 
 - 재계획은 최대 2회, 최초 실행 포함 최대 3회차다. `max_replans=0`이면 최초 회차만 실행한다.
 - 검색 결과가 없거나 평가한 후보가 전부 제외되면 이미 조회한 미평가 후보를 먼저 사용한다. 미평가 후보가 없을 때만 안전 구간의 앞쪽 검색점을 회차당 한 곳 추가한다. 기본 139/119/94km 이후 추가 지점은 69/44km다.
@@ -732,7 +754,7 @@ END
 
 종료 사유는 `recommendation_found`, `evaluation_budget_exhausted`, `search_space_exhausted`, `replan_limit_reached`로 구분한다. 적합 후보가 없으면 `status=no_recommendation`과 부분 평가·제외 근거를 반환한다. 상한 안에서 후보를 찾지 못했다는 뜻이며 주유소가 전체 경로에 없다는 단정은 하지 않는다. 기존 `route-spike`는 재계획 없는 기술 검증 명령으로 별도 유지한다.
 
-재계획·상한·캐시·인증/한도 중단은 모의 검증했고, 실제 추천은 최초 회차 성공을 확인했다. [검증 기록](verification/2026-11-18-recommendation.json)과 [호출 예산](API_USAGE.md)을 따른다.
+독립 실행기의 재계획·상한·캐시·인증/한도 중단은 모의 검증했고 실제 추천은 최초 회차 성공을 확인했다. 이후 F3009 그래프에서는 실제2회/9곳 상한 종료도 확인했다. [검증 기록](verification/2026-11-18-recommendation.json)과 [호출 예산](API_USAGE.md)을 따른다.
 
 ---
 

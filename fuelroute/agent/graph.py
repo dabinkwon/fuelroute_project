@@ -1,4 +1,4 @@
-"""함수 주입으로 구성한 F3005 분석·F3006 계획·F3007 실행·F3008 판정 그래프."""
+"""함수 주입으로 구성한 F3005~F3009 분석·계획·실행·판정·재계획 그래프."""
 
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
@@ -10,9 +10,10 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import ValidationError
 
 from fuelroute.agent.analysis import analyze_conditions, refresh_analysis
-from fuelroute.agent.execution import enrich_rest_area, execute_work_plan
+from fuelroute.agent.execution import PlanExecutionSession, enrich_rest_area
 from fuelroute.agent.llm import llm_analyze, llm_plan
 from fuelroute.agent.planning import finalize_plan, prepare_plan
+from fuelroute.agent.replanning import replan_stop_reason, stop_replanning
 from fuelroute.calculations.constraints import apply_judgement, judge_execution
 from fuelroute.clients.kakao_local import resolve_location
 from fuelroute.core.config import Settings
@@ -25,6 +26,7 @@ from fuelroute.schemas.execution import PlanExecution
 from fuelroute.schemas.judgement import TripJudgement
 from fuelroute.schemas.locations import LocationMatchSet
 from fuelroute.schemas.planning import PlanProposal, WorkPlan
+from fuelroute.schemas.replanning import ReplanOutcome, ReplanRound, ReplanState
 
 Analyzer = Callable[[str], Awaitable[ExtractedRequest]]
 
@@ -43,9 +45,11 @@ Judge = Callable[[RequestAnalysis, WorkPlan, PlanExecution], TripJudgement]
 
 Enricher = Callable[[WorkPlan, PlanExecution], Awaitable[PlanExecution]]
 
+Replanner = Callable[[WorkPlan, PlanExecution, TripJudgement, int], Awaitable[ReplanOutcome]]
+
 
 class State(TypedDict, total=False):
-    """원문·분석·계획·작업 결과·실행·판정 근거를 전달한다. Memory·이벤트는 후속 작업이다."""
+    """원문·분석·계획·실행·판정·재계획 횟수/근거를 전달한다. Memory·이벤트는 후속 작업이다."""
 
     user: str
     analysis: dict
@@ -53,6 +57,7 @@ class State(TypedDict, total=False):
     results: dict
     execution: dict
     judgement: dict
+    replanning: dict
 
 
 def make_graph(
@@ -64,6 +69,7 @@ def make_graph(
     executor: Executor | None = None,
     judge: Judge | None = None,
     enricher: Enricher | None = None,
+    replanner: Replanner | None = None,
 ) -> CompiledStateGraph:
     """분석·선택 위치 검색·선택 계획 함수를 주입받아 실행 전 그래프를 만든다.
 
@@ -79,7 +85,10 @@ def make_graph(
     executor를 쓰려면 llm_plan_fn도 필요하다. 구성 오류는ValueError이며 실행 실패는
     State.execution에 보존한다. judge가 있으면 실행 뒤 순수 제약 판정과 선택 보조 조회를
     연결한다. judge에는executor, enricher에는judge가 필요하다. Memory·DB·이벤트·최종
-    문장·자동 재계획은 없다. 추가 판정은 API/LLM을 사용하지 않는다.
+    문장은 후속 단계다. 추가 판정은 API/LLM을 사용하지 않는다. replanner에는judge가
+    필요하며 judge→replan→judge로 추가 회차를최대2번 실행한다. 최초실행기는반복하지
+    않고 주입 재계획기만 한 회차씩 호출한다. 인증/입력/평가/회차 상한은호출전에검사한다.
+    State.replanning에회차·종료사유·입력안내를남기며 최종판정뒤에만enrich한다.
     """
 
     async def analyze(state: State) -> dict:
@@ -102,6 +111,8 @@ def make_graph(
         raise ValueError("실행 노드에는 계획 함수가 필요합니다.")
     if judge is not None and executor is None or enricher is not None and judge is None:
         raise ValueError("판정에는 실행기, 보조 연결에는 판정 함수가 필요합니다.")
+    if replanner is not None and judge is None:
+        raise ValueError("재계획에는 제약 판정 함수가 필요합니다.")
     graph = StateGraph(State)
     graph.add_node("analyze", analyze)
     graph.add_edge(START, "analyze")
@@ -157,6 +168,7 @@ def make_graph(
             return {
                 "results": result.results.model_dump(mode="json"),
                 "execution": result.model_dump(mode="json"),
+                "replanning": ReplanState().model_dump(mode="json"),
             }
 
         graph.add_node("execute_plan", execute_plan)
@@ -179,14 +191,122 @@ def make_graph(
             except ValidationError as exc:
                 raise ProbeFailure("INVALID_RESPONSE", "제약 판정 출력 계약을 확인하세요.") from exc
             updated = apply_judgement(execution, judgement)
-            return {
+            values = {
                 "judgement": judgement.model_dump(mode="json"),
                 "results": updated.results.model_dump(mode="json"),
                 "execution": updated.model_dump(mode="json"),
             }
+            if replanner is not None and plan.status == "ready":
+                progress = ReplanState.model_validate(state["replanning"])
+                previous_ids = {
+                    station_id
+                    for row in progress.rounds
+                    for station_id in row.evaluated_station_ids
+                }
+                previous_points = {
+                    point.model_dump_json()
+                    for row in progress.rounds
+                    for point in row.search_points
+                }
+                progress.rounds.append(
+                    ReplanRound(
+                        round_index=progress.replan_count,
+                        trigger=progress.decision.action if progress.decision else "initial",
+                        search_points=[
+                            point
+                            for point in updated.results.search_points
+                            if point.model_dump_json() not in previous_points
+                        ],
+                        evaluated_station_ids=[
+                            item.station_id
+                            for item in updated.results.evaluate_constraints
+                            if item.station_id not in previous_ids
+                        ],
+                        eligible_count=len(judgement.recommendation.ranked_candidates)
+                        if judgement.recommendation
+                        else 0,
+                        tool_calls_added=len(updated.calls)
+                        - sum(row.tool_calls_added for row in progress.rounds),
+                    )
+                )
+                values["replanning"] = progress.model_dump(mode="json")
+            return values
 
         graph.add_node("judge", judge_plan)
-        graph.add_edge("judge", "enrich" if enricher is not None else END)
+        graph.add_edge(
+            "judge", "replan" if replanner is not None else ("enrich" if enricher else END)
+        )
+    if replanner is not None:
+
+        async def replan(state: State) -> dict:
+            """판정 뒤 종료 조건을 먼저 검사하고 필요한 추가 회차만 재계획기에 전달한다.
+
+            누적State의 고정계획·실행·판정·횟수만 사용한다. 최초회차는세지않고추가실행이
+            실제 반환됐을때만count를1증가시킨다. 최대2회·전체평가예산은주입함수호출전에도
+            검사한다. 결과/기본경로/누적호출/기존ID를보존하지않는주입출력은INVALID_RESPONSE다.
+            종료면다음입력안내와stop_reason을남기고보조연결/종료로,추가면다시judge로보낸다.
+            이노드는추가LLM·제약완화·DB·동일요청재시도를하지않으며 실제조회는주입함수책임이다.
+            예:인증실패와정차시간누락은추가회차0회다.
+            """
+            plan = WorkPlan.model_validate(state["plan"])
+            execution = PlanExecution.model_validate(state["execution"])
+            judgement = TripJudgement.model_validate(state["judgement"])
+            progress = ReplanState.model_validate(state["replanning"])
+            reason = replan_stop_reason(plan, execution, judgement, progress.replan_count)
+            try:
+                outcome = (
+                    ReplanOutcome(decision=stop_replanning(reason, judgement))
+                    if reason
+                    else ReplanOutcome.model_validate(
+                        await replanner(plan, execution, judgement, progress.replan_count)
+                    )
+                )
+            except ValidationError as exc:
+                raise ProbeFailure("INVALID_RESPONSE", "재계획 출력 계약을 확인하세요.") from exc
+            progress.decision = outcome.decision
+            if outcome.execution is None:
+                progress.stop_reason = outcome.decision.reason
+                progress.next_input = outcome.decision.next_input
+                execution.replan_needed = False
+            else:
+                advanced = outcome.execution
+                old_ids = {item.station_id for item in execution.results.evaluate_constraints}
+                new_ids = {item.station_id for item in advanced.results.evaluate_constraints}
+                old_points = {point.model_dump_json() for point in execution.results.search_points}
+                new_points = {point.model_dump_json() for point in advanced.results.search_points}
+                if (
+                    not old_ids.issubset(new_ids)
+                    or len(new_ids) > plan.request.max_evaluations
+                    or advanced.results.base_route != execution.results.base_route
+                    or advanced.calls[: len(execution.calls)] != execution.calls
+                    or not (new_ids - old_ids or new_points - old_points)
+                ):
+                    raise ProbeFailure(
+                        "INVALID_RESPONSE", "재계획의 누적 결과·진행·예산을 확인하세요."
+                    )
+                progress.replan_count += 1
+                execution = advanced
+            return {
+                "replanning": progress.model_dump(mode="json"),
+                "execution": execution.model_dump(mode="json"),
+                "results": execution.results.model_dump(mode="json"),
+            }
+
+        def after_replan(state: State) -> str:
+            """종료사유가 없으면 새 결과의judge로, 있으면최종보조연결 또는END로 보낸다.
+
+            재계획노드의구조화상태만읽고 API·변경·LLM·저장은없다. 예:상한종료는judge를
+            다시실행하지않아회차기록을중복하지않는다. 상태누락은KeyError로숨기지않는다.
+            """
+            if state["replanning"]["stop_reason"] is None:
+                return "judge"
+            return "enrich" if enricher is not None else END
+
+        graph.add_node("replan", replan)
+        finish_replan = "enrich" if enricher is not None else END
+        graph.add_conditional_edges(
+            "replan", after_replan, {"judge": "judge", finish_replan: finish_replan}
+        )
     if enricher is not None:
 
         async def enrich_plan(state: State) -> dict:
@@ -207,10 +327,17 @@ def make_graph(
                 raise ProbeFailure(
                     "INVALID_RESPONSE", "보조정보 연결 출력 계약을 확인하세요."
                 ) from exc
-            return {
+            values = {
                 "results": result.results.model_dump(mode="json"),
                 "execution": result.model_dump(mode="json"),
             }
+            if replanner is not None:
+                progress = ReplanState.model_validate(state["replanning"])
+                if progress.rounds:
+                    before = len(state["execution"]["calls"])
+                    progress.rounds[-1].tool_calls_added += len(result.calls) - before
+                values["replanning"] = progress.model_dump(mode="json")
+            return values
 
         graph.add_node("enrich", enrich_plan)
         graph.add_edge("enrich", END)
@@ -357,16 +484,18 @@ async def _run_request(
     include_execution: bool = False,
     executor: Executor | None = None,
     client: httpx.AsyncClient | None = None,
+    replanner: Replanner | None = None,
 ) -> ToolResult[dict]:
-    """분석/계획 진입점이 공유하는 요청별 그래프·의존성과 클라이언트 수명을 관리한다.
+    """분석/계획/실행 진입점의 요청별 그래프·의존성·클라이언트 수명을 관리한다.
 
-    입력 범위와 기준일은 AnalysisInput으로 검사한다. include_plan이 참일 때만 주입 또는
-    GMS 계획기를 연결하고, 결과에 plan/planner_mode를 추가한다. 나머지 입력/분석기/위치
-    검색 계약은 analyze_request와 같다. include_execution이면 검증한 계획을 실행기에
-    전달하고 results/execution을 반환한다. 핵심 실행 실패는 공통 error로 올리며 CLI가
-    실패를 성공 종료로 표시하지 않게 한다. 프로그래밍 오류는 숨기지 않는다. 주입client는
-    닫지 않고 직접 만든 클라이언트만 닫는다. DB·자동 재시도/재계획은 없다.
-    예: include_plan=False이면 기존 분석 CLI의 출력과 호출 횟수를 유지한다.
+    원문1~5000자와 선택 기준일을 AnalysisInput으로 검사한다. include_plan만 계획기를,
+    include_execution만 최초 실행·판정·상한 있는 재계획·최종 보조 연결을 활성화한다.
+    기본 실행은 요청별 Session의 캐시를 최대2추가회차까지 유지하고 종료 시 폐기한다.
+    사용자 주입 executor에는 명시한 replanner만 연결하며 임의 네트워크 재계획을 하지
+    않는다. 주입 client는 닫지 않고 직접 생성한 것만 닫는다. 핵심 실행 실패는 공통
+    error/data=None, 정상 부분 실패는 구조화 결과에 보존한다. 프로그래밍 오류는 숨기지
+    않는다. DB·Memory·최종 문장·동일 실패 재시도는 없다. 예:include_plan=False면 기존
+    분석 CLI의 호출/출력을 유지하고, 실행이면 data.replanning에 회차·종료 근거를 더한다.
     """
 
     async def operation() -> dict:
@@ -395,6 +524,7 @@ async def _run_request(
             구성 정보이고 실제 실행 이력이 아니다. 예외는 상위 공통 응답으로 전달한다.
             """
             resolver = location_resolver
+            session = PlanExecutionSession(settings, active_client)
             if resolver is None and analyzer is None:
 
                 async def kakao_resolver(label: str) -> ToolResult[dict]:
@@ -404,8 +534,12 @@ async def _run_request(
                 resolver = kakao_resolver
 
             async def tools_execute(plan: WorkPlan) -> PlanExecution:
-                """한 회차를 실행하고 보조 조회는 F3008 뒤로 미룬다. 클라이언트는 상위 소유다."""
-                return await execute_work_plan(plan, settings, active_client, defer_rest_info=True)
+                """요청별 최초 회차를 실행하고 경로/캐시는추가회차까지유지한다. 보조는판정뒤다.
+
+                plan은고정WorkPlan,반환은누적실행이며클라이언트는상위소유다. 추가LLM·DB·
+                반복은없다. 예:빈후보도판정/재계획노드로넘기고이함수는다시호출하지않는다.
+                """
+                return await session.start(plan)
 
             async def enrich(plan: WorkPlan, execution: PlanExecution) -> PlanExecution:
                 """확정 후보의 보조정보를 연결한다. 같은 ID의 과거 보조 호출은 재사용한다."""
@@ -419,6 +553,9 @@ async def _run_request(
                 executor=(executor or tools_execute) if include_execution else None,
                 judge=judge_execution if include_execution else None,
                 enricher=enrich if include_execution else None,
+                replanner=(replanner or session.replan)
+                if include_execution and (executor is None or replanner is not None)
+                else None,
             )
             output = await graph.ainvoke({"user": query.user})
             return output, [name for name in graph.get_graph().nodes if not name.startswith("__")]
@@ -454,6 +591,10 @@ async def _run_request(
                 execution=output["execution"],
                 executor_mode="injected" if executor else "tools",
                 judgement=output["judgement"],
+                replanning=output["replanning"],
+                replanner_mode="injected"
+                if replanner
+                else ("disabled" if executor else "bounded_tools"),
             )
         return data
 
@@ -477,19 +618,22 @@ async def execute_request(
     location_resolver: LocationResolver | None = None,
     executor: Executor | None = None,
     client: httpx.AsyncClient | None = None,
+    replanner: Replanner | None = None,
 ) -> ToolResult[dict]:
-    """자연어를 분석·위치 해석·계획·조회한 뒤 F3008 제약 판정과 보조정보를 반환한다.
+    """자연어 분석·계획·실제 조회·제약 판정과 최대2회 재계획 뒤 보조정보를 반환한다.
 
-    user는1~5000자이며 기본 기준일은 실행일KST다. 기본 GMS 분석1회+준비된 추천의 계획1회,
-    위치 검색 최대4회 뒤 한 회차만 실행한다. 모델·resolver·executor·client는 오프라인
-    주입이 가능하며 주입client는 닫지 않는다. 내부 생성한 클라이언트는 항상 닫는다.
-    성공 data의analysis/plan/results/execution/judgement에 결과·개별 실패·호출·판정 근거를
-    전달한다. 시간 상한에는 명시 정차시간을 더하고 날짜/시각/정차가 미확인이면 필요한
-    입력을 묻는다. 제약 판정은 추가LLM/API가 없고 보조 조회는 확정 후보에만 한다. 핵심
-    인증/설정/한도/경로 실패는 공통error(data=None), 보조 조회 실패는 추천과 함께 표시한다.
-    기본 데이터 조회 상한은Opinet6회·Kakao7회·휴게소1논리호출(최대10HTTP)이며 캐시로 줄 수
-    있다. 재시도·재계획·DB·Memory·이벤트·최종 문장 생성은 없다. 예:km 입력이 부족하면
-    실행기 호출 없이needs_user_input이다. 원본 상세 경로는 반환하지 않는다.
+    user는1~5000자, reference_date는 선택 date이며 기본은 실행일 KST다. GMS는 분석1회와
+    준비된 추천의 계획1회뿐이다. 위치 검색은 최대4회, 이후 최초+최대2추가회차를 수행한다.
+    미평가 후보를 먼저 사용하고 없을 때 안전 구간의 앞쪽 검색점을 하나 추가한다.
+    주행 조건·안전 여유는 완화하지 않고 기본 회차3곳/전체9곳 평가를 넘지 않는다.
+    기본 조회 상한은 Opinet14·Mobility19·휴게소1논리조회(최대10HTTP)이며 최초만이면6/7회다.
+    성공 data에는 analysis/plan/results/execution/judgement/replanning과 의존성 모드가 있다.
+    replanning은 추가 횟수·회차·종료 사유·다음 입력 안내다. 시간 입력 부족·인증·한도는
+    재계획하지 않고, 보조정보 실패는 확정 추천을 유지한다. 핵심 실패는 공통error/data=None다.
+    analyzer/planner/resolver/executor/client/replanner는 오프라인 주입용이며 executor를
+    주입하면 replanner도 명시해야 추가 회차가 활성화된다. 주입 client는 닫지 않는다.
+    DB·Memory·이벤트·최종 문장·동일 실패 재시도는 없다. 예:km 누락은 조회 없이 입력 보완,
+    전체 제외는 상한까지 기존 후보를 평가하고 정해진 종료 이유를 반환한다.
     """
     return await _run_request(
         user,
@@ -502,4 +646,5 @@ async def execute_request(
         include_execution=True,
         executor=executor,
         client=client,
+        replanner=replanner,
     )

@@ -1,4 +1,4 @@
-"""명시적 입력의 후보·검색점을 재사용하는 유한 재계획 실행기. 그래프 연결은 후속 작업이다."""
+"""F3009 그래프 재계획 정책과 기존 명시적 입력의 독립 추천 실행기."""
 
 from collections import Counter
 
@@ -14,10 +14,105 @@ from fuelroute.core.contracts import ToolResult
 from fuelroute.core.errors import FATAL_CODES, ProbeFailure
 from fuelroute.core.results import run_probe
 from fuelroute.schemas.coordinates import Coordinate
+from fuelroute.schemas.execution import PlanExecution
+from fuelroute.schemas.judgement import TripJudgement
+from fuelroute.schemas.planning import WorkPlan
 from fuelroute.schemas.recommendation import RecommendationRequest, RecommendationResult
+from fuelroute.schemas.replanning import ReplanDecision
 from fuelroute.schemas.requests import PlanningRequest
 from fuelroute.schemas.routes import RoutePoint
 from fuelroute.tools.fuel_tools import FuelTools
+
+
+def replan_stop_reason(
+    plan: WorkPlan, execution: PlanExecution, judgement: TripJudgement, replan_count: int
+) -> str | None:
+    """추가 조회 전에 입력·핵심 실패·추천·전체 평가/회차 상한의 종료 여부를 판정한다.
+
+    plan은 고정 조건/예산, execution은 누적 실행, judgement는 직전 제약 판정이다.
+    count는 완료한 추가 회차0~2이며 범위 밖은ValueError다. 비추천/입력 보완/핵심 실패/
+    확정 추천을 먼저 처리하고 전체 평가 상한, 재계획 상한 순서로 종료 사유를 반환한다.
+    None은 후보/검색점 변경을 검토할 수 있다는 뜻이며 실제 작업 가능 여부는 별도 검사다.
+    입력·안전 여유 완화, API·LLM·DB·재시도는 없다. 예:count=2는3번째 추가 조회를 막는다.
+    """
+    if type(replan_count) is not int or not 0 <= replan_count <= 2:
+        raise ValueError("재계획 횟수는 0~2 정수여야 합니다.")
+    if plan.status == "not_required":
+        return "not_required"
+    if plan.status == "needs_user_input" or judgement.missing_fields:
+        return "needs_user_input"
+    if execution.error:
+        return "core_error"
+    if judgement.recommendation and judgement.recommendation.recommended:
+        return "recommendation_found"
+    if not judgement.replan_needed:
+        return "judgement_unavailable"
+    if plan.request is None:
+        raise ProbeFailure("INVALID_INPUT", "재계획할 주행 조건이 없습니다.")
+    evaluated = {item.station_id for item in execution.results.evaluate_constraints}
+    if len(evaluated) >= plan.request.max_evaluations:
+        return "evaluation_budget_exhausted"
+    if replan_count >= plan.request.max_replans:
+        return "replan_limit_reached"
+    return None
+
+
+def stop_replanning(reason: str, judgement: TripJudgement) -> ReplanDecision:
+    """종료 코드와 기존 판정 질문으로 외부 조회 없는 종료 결정·다음 입력 안내를 만든다.
+
+    reason은 내부 고정 코드이며 provider 원문을 사용하지 않는다. 입력 보완은 기존
+    질문을 보존하고 상한/검색 소진에는 실제 거리·상세 위치 확인을 안내한다. 값을 자동
+    변경하거나 안전 여유를 줄이지 않는다. 정상 추천/비추천 의도에는 안내가 없다.
+    반환은action=stop이며 HTTP·LLM·DB·예외·입력 변경은 없다. 예:needs_user_input은
+    판정에서 요청한 정차시간만 다시 묻는다. 최종 자연어 설명(F3011)과는 별도다.
+    """
+    if reason == "needs_user_input":
+        guidance = list(judgement.questions)
+    elif reason in {
+        "evaluation_budget_exhausted",
+        "replan_limit_reached",
+        "search_space_exhausted",
+    }:
+        guidance = [
+            "상한 안에서 적합 후보를 찾지 못했습니다. 전체 경로에 후보가 없다는 뜻은 아닙니다.",
+            "출발·목적의 상세 위치와 계기판 주행 가능 거리·안전 여유를 확인해 알려주세요.",
+        ]
+    elif reason == "core_error":
+        guidance = ["API 설정·권한·호출 한도와 오류 코드를 확인한 뒤 다시 요청하세요."]
+    elif reason in {"judgement_unavailable", "executor_unavailable"}:
+        guidance = ["확인되지 않은 조회 결과를 확인한 뒤 다시 요청하세요."]
+    else:
+        guidance = []
+    return ReplanDecision(action="stop", reason=reason, next_input=guidance)
+
+
+def decide_replan(
+    plan: WorkPlan,
+    execution: PlanExecution,
+    judgement: TripJudgement,
+    replan_count: int,
+    additional_points: list[RoutePoint],
+) -> ReplanDecision:
+    """기존 미평가 후보를 우선하고 없을 때 안전 구간의 다음 검색점 한 곳만 선택한다.
+
+    additional_points는 요청 내부의 실제 상세 경로로 계산한 미사용 WGS84/누적m 목록이다.
+    종료 사유·전체 평가/추가 회차 상한을 먼저 확인한다. 후보 존재 여부는 공통 실행
+    결과의ID에서 판정하며 호출자가 준unevaluated 목록만 맹신하지 않는다. 후보가 없고
+    추가점도 없으면search_space_exhausted다. 선택은 고정 정책이며 LLM·외부 조회·DB·
+    제약 완화·입력 변경은 없다. 예:캐시 후보B가 있으면추가검색보다B의상세평가를 먼저 한다.
+    실제 검색/평가와 안전·중복 재검사는 요청별 실행기가 담당한다.
+    """
+    reason = replan_stop_reason(plan, execution, judgement, replan_count)
+    if reason:
+        return stop_replanning(reason, judgement)
+    evaluated = {item.station_id for item in execution.results.evaluate_constraints}
+    if any(item.station_id not in evaluated for item in execution.results.search_candidates):
+        return ReplanDecision(action="evaluate_cached", reason="cached_candidates")
+    if additional_points:
+        return ReplanDecision(
+            action="expand_search", reason="earlier_search_point", search_point=additional_points[0]
+        )
+    return stop_replanning("search_space_exhausted", judgement)
 
 
 def replan_search_points(

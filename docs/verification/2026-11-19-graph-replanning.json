@@ -1,0 +1,5641 @@
+{
+  "verification_kind": "live_api_graph_replanning",
+  "started_at": "2026-11-19T07:43:28.795354+00:00",
+  "completed_at": "2026-11-19T07:43:53.312369+00:00",
+  "elapsed_ms": 24517.518,
+  "model": "gpt-5.4-mini",
+  "request": {
+    "message": "출발(128.6014,35.8714)에서 목적(126.9780,37.5665)으로 휘발유 주유 추천해줘. 주행 가능180km, 안전 여유36km야. 출발15:00 도착15:01 주유0분이고 우회15분 이내면 좋겠어.",
+    "reference_date": "2026-11-19"
+  },
+  "http_call_counts": {
+    "gms": 2,
+    "kakao": 19,
+    "opinet": 12
+  },
+  "result": {
+    "ok": true,
+    "tool_name": "execute_request",
+    "data": {
+      "analysis": {
+        "intent": "recommend",
+        "reason": "주유 추천을 요청했고 출발·목적 좌표와 주행 가능 거리, 안전 여유, 시간 조건을 함께 제시했다.",
+        "conditions": {
+          "origin_label": null,
+          "destination_label": null,
+          "origin": {
+            "longitude": 128.6014,
+            "latitude": 35.8714
+          },
+          "destination": {
+            "longitude": 126.978,
+            "latitude": 37.5665
+          },
+          "trip_date": null,
+          "arrival_date": null,
+          "departure_time": "15:00:00",
+          "arrival_deadline": "15:01:00",
+          "fuel_type": "gasoline",
+          "sort_by": null,
+          "remaining_range_km": 180.0,
+          "reserve_range_km": 36.0,
+          "current_fuel_l": null,
+          "reserve_fuel_l": null,
+          "avg_efficiency_kmpl": null,
+          "max_detour_min": 15.0,
+          "max_detour_km": null,
+          "refuel_stop_min": 0.0
+        },
+        "condition_groups": {
+          "basis": [
+            "origin",
+            "destination",
+            "departure_time"
+          ],
+          "preferences": [
+            "fuel_type"
+          ],
+          "constraints": [
+            "remaining_range_km",
+            "reserve_range_km",
+            "max_detour_min",
+            "arrival_deadline",
+            "refuel_stop_min"
+          ]
+        },
+        "missing_fields": [],
+        "invalid_fields": [],
+        "unverified_fields": [],
+        "needs_user_input": false,
+        "ready_for_planning": true,
+        "questions": [],
+        "range_input_mode": "distance",
+        "location_results": {},
+        "coordinate_sources": {
+          "origin": "user",
+          "destination": "user"
+        },
+        "warnings": []
+      },
+      "reference_date": "2026-11-19",
+      "graph_nodes": [
+        "analyze",
+        "build_plan",
+        "execute_plan",
+        "judge",
+        "replan",
+        "enrich",
+        "resolve_locations"
+      ],
+      "analyzer_mode": "gms",
+      "plan": {
+        "status": "ready",
+        "reason": "기본 경로와 안전 잔량을 먼저 확인한 뒤, 경로상 검색점과 후보 주유소를 순차적으로 찾고 상세 가격이 있는 후보만 실제 경유 경로로 검증합니다. 그 다음 제약을 판정하고 가격 기준으로 정렬하며, 추천 후보가 남을 때만 주변 휴게소 보조정보를 확인하는 순서가 의존성과 정책에 맞습니다.",
+        "request": {
+          "remaining_range_km": 180.0,
+          "reserve_range_km": 36.0,
+          "current_fuel_l": null,
+          "reserve_fuel_l": null,
+          "avg_efficiency_kmpl": null,
+          "origin": {
+            "longitude": 128.6014,
+            "latitude": 35.8714
+          },
+          "destination": {
+            "longitude": 126.978,
+            "latitude": 37.5665
+          },
+          "fuel_type": "gasoline",
+          "radius_m": 5000,
+          "max_search_points": 3,
+          "max_candidates": 3,
+          "max_detour_min": 15.0,
+          "max_detour_km": null,
+          "max_replans": 2,
+          "max_evaluations": 9,
+          "sort_by": "price"
+        },
+        "steps": [
+          {
+            "action": "base_route",
+            "reason": "출발지와 목적지 사이의 기본 경로를 먼저 확보해야 이후 검색점과 우회 검증의 기준이 됩니다.",
+            "kind": "external_tool",
+            "tool_name": "get_driving_route",
+            "depends_on": [],
+            "inputs_from": [
+              "request.origin",
+              "request.destination"
+            ],
+            "run_when": "once",
+            "failure_policy": "stop"
+          },
+          {
+            "action": "safe_range",
+            "reason": "주행 가능 구간과 안전 잔량 기준을 먼저 계산해야 이후 후보의 가능 여부를 같은 기준으로 판단할 수 있습니다.",
+            "kind": "local",
+            "tool_name": null,
+            "depends_on": [],
+            "inputs_from": [
+              "request.remaining_range_km",
+              "request.reserve_range_km"
+            ],
+            "run_when": "once",
+            "failure_policy": "stop"
+          },
+          {
+            "action": "search_points",
+            "reason": "기본 경로와 안전 구간을 바탕으로 후보 검색에 사용할 경로상 지점을 정해야 합니다.",
+            "kind": "local",
+            "tool_name": null,
+            "depends_on": [
+              "base_route",
+              "safe_range"
+            ],
+            "inputs_from": [
+              "base_route",
+              "safe_range",
+              "request.radius_m",
+              "request.max_search_points"
+            ],
+            "run_when": "once",
+            "failure_policy": "stop"
+          },
+          {
+            "action": "search_candidates",
+            "reason": "선정된 검색점 주변에서 주유소 후보를 찾아야 상세 조회 대상을 만들 수 있습니다.",
+            "kind": "external_tool",
+            "tool_name": "search_gas_stations",
+            "depends_on": [
+              "search_points"
+            ],
+            "inputs_from": [
+              "search_points",
+              "request.fuel_type",
+              "request.radius_m"
+            ],
+            "run_when": "per_search_point",
+            "failure_policy": "replan_if_empty"
+          },
+          {
+            "action": "station_details",
+            "reason": "상세 가격이 있는 후보만 경로 평가 대상이 되므로, 먼저 가격 확인이 가능한 후보를 추려야 합니다.",
+            "kind": "external_tool",
+            "tool_name": "get_station_details",
+            "depends_on": [
+              "search_candidates"
+            ],
+            "inputs_from": [
+              "search_candidates.station_id",
+              "request.fuel_type",
+              "request.max_candidates"
+            ],
+            "run_when": "per_candidate",
+            "failure_policy": "exclude_candidate"
+          },
+          {
+            "action": "candidate_routes",
+            "reason": "가격이 확인된 후보에 대해서만 실제 출발→후보→목적지 경유 경로를 조회해 비교 기준을 만듭니다.",
+            "kind": "external_tool",
+            "tool_name": "get_driving_route",
+            "depends_on": [
+              "station_details"
+            ],
+            "inputs_from": [
+              "request.origin",
+              "station_details",
+              "request.destination"
+            ],
+            "run_when": "per_priced_candidate",
+            "failure_policy": "exclude_candidate"
+          },
+          {
+            "action": "evaluate_constraints",
+            "reason": "기본 경로와 후보 경로를 비교해 거리·우회 한도 등 제약 충족 여부를 먼저 판정해야 합니다.",
+            "kind": "local",
+            "tool_name": null,
+            "depends_on": [
+              "base_route",
+              "safe_range",
+              "candidate_routes"
+            ],
+            "inputs_from": [
+              "base_route",
+              "safe_range",
+              "candidate_routes",
+              "request"
+            ],
+            "run_when": "per_priced_candidate",
+            "failure_policy": "exclude_candidate"
+          },
+          {
+            "action": "rank_candidates",
+            "reason": "제약을 통과한 후보만 가격 기준으로 정렬해 추천 순서를 정합니다.",
+            "kind": "local",
+            "tool_name": null,
+            "depends_on": [
+              "evaluate_constraints"
+            ],
+            "inputs_from": [
+              "station_details",
+              "evaluate_constraints",
+              "request.sort_by"
+            ],
+            "run_when": "once",
+            "failure_policy": "stop"
+          },
+          {
+            "action": "rest_area_info",
+            "reason": "추천 후보가 있을 때만 주변 휴게소 보조정보를 확인하며, 실패해도 추천 후보를 제외하지 않기 때문입니다.",
+            "kind": "external_tool",
+            "tool_name": "search_rest_area_info",
+            "depends_on": [
+              "rank_candidates"
+            ],
+            "inputs_from": [
+              "rank_candidates.recommended",
+              "request.radius_m"
+            ],
+            "run_when": "if_recommended",
+            "failure_policy": "optional"
+          }
+        ],
+        "warnings": [
+          "출발·도착 시각은 분석 결과에 보존했으며 시간 적합성은 아직 판정하지 않았습니다."
+        ]
+      },
+      "planner_mode": "gms",
+      "results": {
+        "base_route": {
+          "distance_m": 291493,
+          "duration_s": 13267,
+          "legs": [
+            {
+              "distance_m": 291493,
+              "duration_s": 13267
+            }
+          ]
+        },
+        "safe_range": {
+          "safe_range_km": 144.0
+        },
+        "search_points": [
+          {
+            "longitude": 127.98487014575099,
+            "latitude": 36.78585452014204,
+            "route_distance_m": 139000.0
+          },
+          {
+            "longitude": 128.1228518944379,
+            "latitude": 36.67863814734674,
+            "route_distance_m": 119000.0
+          },
+          {
+            "longitude": 128.20059875822358,
+            "latitude": 36.48058691730905,
+            "route_distance_m": 94000.0
+          }
+        ],
+        "search_candidates": [
+          {
+            "longitude": 127.97706797668422,
+            "latitude": 36.764617334058,
+            "station_id": "A0006299",
+            "name": "청수주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1865.0,
+            "center_distance_m": 2456.7
+          },
+          {
+            "longitude": 127.97385481623246,
+            "latitude": 36.75825536809248,
+            "station_id": "A0013109",
+            "name": "시루봉주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1865.0,
+            "center_distance_m": 3215.9
+          },
+          {
+            "longitude": 128.00739664355203,
+            "latitude": 36.75463738765759,
+            "station_id": "A0017358",
+            "name": "조령주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1875.0,
+            "center_distance_m": 4004.1
+          },
+          {
+            "longitude": 127.95160182439471,
+            "latitude": 36.78066379792645,
+            "station_id": "A0013186",
+            "name": "금대주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1880.0,
+            "center_distance_m": 3024.2
+          },
+          {
+            "longitude": 128.01058384943016,
+            "latitude": 36.754798986434096,
+            "station_id": "A0013126",
+            "name": "연풍주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1889.0,
+            "center_distance_m": 4140.3
+          },
+          {
+            "longitude": 128.14957858305732,
+            "latitude": 36.64089251721979,
+            "station_id": "A0025644",
+            "name": "불정주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1829.0,
+            "center_distance_m": 4821.0
+          },
+          {
+            "longitude": 128.10640394756237,
+            "latitude": 36.719738922369864,
+            "station_id": "A0025597",
+            "name": "문경새재IC주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1846.0,
+            "center_distance_m": 4790.7
+          },
+          {
+            "longitude": 128.12516667931203,
+            "latitude": 36.69001572228424,
+            "station_id": "A0025665",
+            "name": "마성주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1855.0,
+            "center_distance_m": 1278.5
+          },
+          {
+            "longitude": 128.1253336352332,
+            "latitude": 36.66054686124923,
+            "station_id": "A0025661",
+            "name": "진남주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1868.0,
+            "center_distance_m": 2019.5
+          },
+          {
+            "longitude": 128.12191677029776,
+            "latitude": 36.7091524063047,
+            "station_id": "A0025559",
+            "name": "새재IC주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1875.0,
+            "center_distance_m": 3386.1
+          },
+          {
+            "longitude": 128.1763346313601,
+            "latitude": 36.49338363961643,
+            "station_id": "A0023849",
+            "name": "천마산주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1835.0,
+            "center_distance_m": 2595.6
+          },
+          {
+            "longitude": 128.16501785090327,
+            "latitude": 36.51124542963282,
+            "station_id": "A0026341",
+            "name": "북상주IC주유소/충전소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1835.0,
+            "center_distance_m": 4661.3
+          },
+          {
+            "longitude": 128.16280460249328,
+            "latitude": 36.4578479640637,
+            "station_id": "A0025522",
+            "name": "남이주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1848.0,
+            "center_distance_m": 4223.0
+          },
+          {
+            "longitude": 128.16788740881867,
+            "latitude": 36.46548601832002,
+            "station_id": "A0025647",
+            "name": "신흥주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1850.0,
+            "center_distance_m": 3376.2
+          },
+          {
+            "longitude": 128.20672551427216,
+            "latitude": 36.464315352097636,
+            "station_id": "A0025626",
+            "name": "경천주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1859.0,
+            "center_distance_m": 1886.6
+          },
+          {
+            "longitude": 128.2044119720582,
+            "latitude": 36.463458713471695,
+            "station_id": "A0025743",
+            "name": "사벌주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1898.0,
+            "center_distance_m": 1930.1
+          }
+        ],
+        "station_details": [
+          {
+            "longitude": 128.14957858305732,
+            "latitude": 36.64089251721979,
+            "station_id": "A0025644",
+            "name": "불정주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1829.0,
+            "price_observed_at": "2026-11-19T14:58:23+09:00",
+            "address": "경북 문경시 문경대로 949",
+            "brand": "SOL",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 128.1763346313601,
+            "latitude": 36.49338363961643,
+            "station_id": "A0023849",
+            "name": "천마산주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1835.0,
+            "price_observed_at": "2026-11-19T13:39:34+09:00",
+            "address": "경북 상주시 외서면 경상대로 3913",
+            "brand": "SOL",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 128.16501785090327,
+            "latitude": 36.51124542963282,
+            "station_id": "A0026341",
+            "name": "북상주IC주유소/충전소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1835.0,
+            "price_observed_at": "2026-11-19T13:08:43+09:00",
+            "address": "경북 상주시 공검면 경상대로 4155",
+            "brand": "SOL",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": true,
+              "CVS_YN": true
+            }
+          },
+          {
+            "longitude": 128.10640394756237,
+            "latitude": 36.719738922369864,
+            "station_id": "A0025597",
+            "name": "문경새재IC주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1846.0,
+            "price_observed_at": "2026-11-16T05:59:29+09:00",
+            "address": "경북 문경시 문경읍 문경대로 2094",
+            "brand": "GSC",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 128.16280460249328,
+            "latitude": 36.4578479640637,
+            "station_id": "A0025522",
+            "name": "남이주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1848.0,
+            "price_observed_at": "2026-11-19T12:20:18+09:00",
+            "address": "경북 상주시 북상주로 331 (부원동)",
+            "brand": "HDO",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 128.16788740881867,
+            "latitude": 36.46548601832002,
+            "station_id": "A0025647",
+            "name": "신흥주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1850.0,
+            "price_observed_at": "2026-11-19T14:48:12+09:00",
+            "address": "경북 상주시 북상주로 427 (남적동)",
+            "brand": "SKE",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 128.12516667931203,
+            "latitude": 36.69001572228424,
+            "station_id": "A0025665",
+            "name": "마성주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1855.0,
+            "price_observed_at": "2026-11-19T14:56:03+09:00",
+            "address": "경북 문경시 마성면 문경대로 1716",
+            "brand": "SKE",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 128.20672551427216,
+            "latitude": 36.464315352097636,
+            "station_id": "A0025626",
+            "name": "경천주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1859.0,
+            "price_observed_at": "2026-11-19T13:39:45+09:00",
+            "address": "경북 상주시 사벌면 상풍로 403",
+            "brand": "SKE",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": false,
+              "CVS_YN": false
+            }
+          },
+          {
+            "longitude": 127.97706797668422,
+            "latitude": 36.764617334058,
+            "station_id": "A0006299",
+            "name": "청수주유소",
+            "fuel_type": "gasoline",
+            "price_krw_per_l": 1865.0,
+            "price_observed_at": "2026-11-19T13:56:04+09:00",
+            "address": "충북 괴산군 연풍면 연풍로 1169",
+            "brand": "SKE",
+            "facilities": {
+              "MAINT_YN": false,
+              "CAR_WASH_YN": true,
+              "CVS_YN": false
+            }
+          }
+        ],
+        "candidate_routes": {
+          "A0025644": {
+            "approach": {
+              "distance_m": 115950,
+              "duration_s": 5188,
+              "legs": [
+                {
+                  "distance_m": 115950,
+                  "duration_s": 5188
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 297766,
+              "duration_s": 13792,
+              "legs": [
+                {
+                  "distance_m": 115950,
+                  "duration_s": 5188
+                },
+                {
+                  "distance_m": 181816,
+                  "duration_s": 8604
+                }
+              ]
+            },
+            "approach_request_id": "5e698412-c445-4137-b294-5d6f538e0fbb",
+            "via_request_id": "92c43965-98bf-4413-9993-4b763b422a08"
+          },
+          "A0023849": {
+            "approach": {
+              "distance_m": 96032,
+              "duration_s": 5046,
+              "legs": [
+                {
+                  "distance_m": 96032,
+                  "duration_s": 5046
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 294829,
+              "duration_s": 14007,
+              "legs": [
+                {
+                  "distance_m": 96032,
+                  "duration_s": 5046
+                },
+                {
+                  "distance_m": 198797,
+                  "duration_s": 8961
+                }
+              ]
+            },
+            "approach_request_id": "bec57770-38fd-44f7-a084-e864fa4801fa",
+            "via_request_id": "8df0ba95-29ec-4358-af3e-a40508254b0e"
+          },
+          "A0026341": {
+            "approach": {
+              "distance_m": 103384,
+              "duration_s": 4709,
+              "legs": [
+                {
+                  "distance_m": 103384,
+                  "duration_s": 4709
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 301354,
+              "duration_s": 13725,
+              "legs": [
+                {
+                  "distance_m": 103384,
+                  "duration_s": 4709
+                },
+                {
+                  "distance_m": 197970,
+                  "duration_s": 9016
+                }
+              ]
+            },
+            "approach_request_id": "11b54cb8-0672-49d7-8fa7-0b6ac0752403",
+            "via_request_id": "836778a5-75d6-4391-bf07-2a5e7cdfd123"
+          },
+          "A0025597": {
+            "approach": {
+              "distance_m": 124302,
+              "duration_s": 5512,
+              "legs": [
+                {
+                  "distance_m": 124302,
+                  "duration_s": 5512
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 295386,
+              "duration_s": 13623,
+              "legs": [
+                {
+                  "distance_m": 124302,
+                  "duration_s": 5512
+                },
+                {
+                  "distance_m": 171084,
+                  "duration_s": 8111
+                }
+              ]
+            },
+            "approach_request_id": "230923e9-315f-410f-9cac-12f0e346b4c2",
+            "via_request_id": "be226d65-c438-406b-9b62-950fcd494552"
+          },
+          "A0025522": {
+            "approach": {
+              "distance_m": 90830,
+              "duration_s": 4841,
+              "legs": [
+                {
+                  "distance_m": 90830,
+                  "duration_s": 4841
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 294804,
+              "duration_s": 14012,
+              "legs": [
+                {
+                  "distance_m": 90830,
+                  "duration_s": 4841
+                },
+                {
+                  "distance_m": 203974,
+                  "duration_s": 9171
+                }
+              ]
+            },
+            "approach_request_id": "bb02931f-0619-42ba-9bef-84b2e4c516ef",
+            "via_request_id": "939f86c5-ae7e-4b2c-8198-5877c09b94a9"
+          },
+          "A0025647": {
+            "approach": {
+              "distance_m": 91309,
+              "duration_s": 4876,
+              "legs": [
+                {
+                  "distance_m": 91309,
+                  "duration_s": 4876
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 291216,
+              "duration_s": 13869,
+              "legs": [
+                {
+                  "distance_m": 91309,
+                  "duration_s": 4876
+                },
+                {
+                  "distance_m": 199907,
+                  "duration_s": 8993
+                }
+              ]
+            },
+            "approach_request_id": "75da83cf-24b5-4a20-8caa-97d308690e09",
+            "via_request_id": "7c8ddc15-7dcf-4d5f-a18d-acd272dc7cf8"
+          },
+          "A0025665": {
+            "approach": {
+              "distance_m": 123703,
+              "duration_s": 5674,
+              "legs": [
+                {
+                  "distance_m": 123703,
+                  "duration_s": 5674
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 297375,
+              "duration_s": 13697,
+              "legs": [
+                {
+                  "distance_m": 123703,
+                  "duration_s": 5674
+                },
+                {
+                  "distance_m": 173672,
+                  "duration_s": 8023
+                }
+              ]
+            },
+            "approach_request_id": "2a235d21-bdec-425b-be39-d3f861b7e342",
+            "via_request_id": "5733f924-66dc-4155-9450-8d0296075279"
+          },
+          "A0025626": {
+            "approach": {
+              "distance_m": 90992,
+              "duration_s": 4892,
+              "legs": [
+                {
+                  "distance_m": 90992,
+                  "duration_s": 4892
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 295362,
+              "duration_s": 14216,
+              "legs": [
+                {
+                  "distance_m": 90992,
+                  "duration_s": 4892
+                },
+                {
+                  "distance_m": 204370,
+                  "duration_s": 9324
+                }
+              ]
+            },
+            "approach_request_id": "28a5efb2-c571-42cd-983e-1e2741d18da0",
+            "via_request_id": "362248ec-463c-4247-8c6b-c58f670fa788"
+          },
+          "A0006299": {
+            "approach": {
+              "distance_m": 138039,
+              "duration_s": 6005,
+              "legs": [
+                {
+                  "distance_m": 138039,
+                  "duration_s": 6005
+                }
+              ]
+            },
+            "via": {
+              "distance_m": 296509,
+              "duration_s": 13586,
+              "legs": [
+                {
+                  "distance_m": 138039,
+                  "duration_s": 6005
+                },
+                {
+                  "distance_m": 158470,
+                  "duration_s": 7581
+                }
+              ]
+            },
+            "approach_request_id": "657114ef-499c-4a55-8133-8ba33f370d3c",
+            "via_request_id": "a979b453-1296-4be6-a74f-afab914d353c"
+          }
+        },
+        "evaluate_constraints": [
+          {
+            "station_id": "A0025644",
+            "station": {
+              "longitude": 128.14957858305732,
+              "latitude": 36.64089251721979,
+              "station_id": "A0025644",
+              "name": "불정주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1829.0,
+              "price_observed_at": "2026-11-19T14:58:23+09:00",
+              "address": "경북 문경시 문경대로 949",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 115950.0,
+            "detour_distance_m": 6273.0,
+            "detour_duration_s": 525.0,
+            "raw_detour_distance_m": 6273.0,
+            "raw_detour_duration_s": 525.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0023849",
+            "station": {
+              "longitude": 128.1763346313601,
+              "latitude": 36.49338363961643,
+              "station_id": "A0023849",
+              "name": "천마산주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1835.0,
+              "price_observed_at": "2026-11-19T13:39:34+09:00",
+              "address": "경북 상주시 외서면 경상대로 3913",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 96032.0,
+            "detour_distance_m": 3336.0,
+            "detour_duration_s": 740.0,
+            "raw_detour_distance_m": 3336.0,
+            "raw_detour_duration_s": 740.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0026341",
+            "station": {
+              "longitude": 128.16501785090327,
+              "latitude": 36.51124542963282,
+              "station_id": "A0026341",
+              "name": "북상주IC주유소/충전소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1835.0,
+              "price_observed_at": "2026-11-19T13:08:43+09:00",
+              "address": "경북 상주시 공검면 경상대로 4155",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": true,
+                "CVS_YN": true
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 103384.0,
+            "detour_distance_m": 9861.0,
+            "detour_duration_s": 458.0,
+            "raw_detour_distance_m": 9861.0,
+            "raw_detour_duration_s": 458.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0025597",
+            "station": {
+              "longitude": 128.10640394756237,
+              "latitude": 36.719738922369864,
+              "station_id": "A0025597",
+              "name": "문경새재IC주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1846.0,
+              "price_observed_at": "2026-11-16T05:59:29+09:00",
+              "address": "경북 문경시 문경읍 문경대로 2094",
+              "brand": "GSC",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 124302.0,
+            "detour_distance_m": 3893.0,
+            "detour_duration_s": 356.0,
+            "raw_detour_distance_m": 3893.0,
+            "raw_detour_duration_s": 356.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0025522",
+            "station": {
+              "longitude": 128.16280460249328,
+              "latitude": 36.4578479640637,
+              "station_id": "A0025522",
+              "name": "남이주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1848.0,
+              "price_observed_at": "2026-11-19T12:20:18+09:00",
+              "address": "경북 상주시 북상주로 331 (부원동)",
+              "brand": "HDO",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 90830.0,
+            "detour_distance_m": 3311.0,
+            "detour_duration_s": 745.0,
+            "raw_detour_distance_m": 3311.0,
+            "raw_detour_duration_s": 745.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0025647",
+            "station": {
+              "longitude": 128.16788740881867,
+              "latitude": 36.46548601832002,
+              "station_id": "A0025647",
+              "name": "신흥주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1850.0,
+              "price_observed_at": "2026-11-19T14:48:12+09:00",
+              "address": "경북 상주시 북상주로 427 (남적동)",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 91309.0,
+            "detour_distance_m": 0.0,
+            "detour_duration_s": 602.0,
+            "raw_detour_distance_m": -277.0,
+            "raw_detour_duration_s": 602.0,
+            "negative_delta_observed": true
+          },
+          {
+            "station_id": "A0025665",
+            "station": {
+              "longitude": 128.12516667931203,
+              "latitude": 36.69001572228424,
+              "station_id": "A0025665",
+              "name": "마성주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1855.0,
+              "price_observed_at": "2026-11-19T14:56:03+09:00",
+              "address": "경북 문경시 마성면 문경대로 1716",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 123703.0,
+            "detour_distance_m": 5882.0,
+            "detour_duration_s": 430.0,
+            "raw_detour_distance_m": 5882.0,
+            "raw_detour_duration_s": 430.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0025626",
+            "station": {
+              "longitude": 128.20672551427216,
+              "latitude": 36.464315352097636,
+              "station_id": "A0025626",
+              "name": "경천주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1859.0,
+              "price_observed_at": "2026-11-19T13:39:45+09:00",
+              "address": "경북 상주시 사벌면 상풍로 403",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "DETOUR_TIME_EXCEEDED",
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 90992.0,
+            "detour_distance_m": 3869.0,
+            "detour_duration_s": 949.0,
+            "raw_detour_distance_m": 3869.0,
+            "raw_detour_duration_s": 949.0,
+            "negative_delta_observed": false
+          },
+          {
+            "station_id": "A0006299",
+            "station": {
+              "longitude": 127.97706797668422,
+              "latitude": 36.764617334058,
+              "station_id": "A0006299",
+              "name": "청수주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1865.0,
+              "price_observed_at": "2026-11-19T13:56:04+09:00",
+              "address": "충북 괴산군 연풍면 연풍로 1169",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": true,
+                "CVS_YN": false
+              }
+            },
+            "eligible": false,
+            "reason_codes": [
+              "ARRIVAL_DEADLINE_EXCEEDED"
+            ],
+            "reach_distance_m": 138039.0,
+            "detour_distance_m": 5016.0,
+            "detour_duration_s": 319.0,
+            "raw_detour_distance_m": 5016.0,
+            "raw_detour_duration_s": 319.0,
+            "negative_delta_observed": false
+          }
+        ],
+        "rank_candidates": {
+          "recommended": null,
+          "ranked_candidates": [],
+          "excluded_candidates": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T14:58:23+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 6273.0,
+              "detour_duration_s": 525.0,
+              "raw_detour_distance_m": 6273.0,
+              "raw_detour_duration_s": 525.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:39:34+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 96032.0,
+              "detour_distance_m": 3336.0,
+              "detour_duration_s": 740.0,
+              "raw_detour_distance_m": 3336.0,
+              "raw_detour_duration_s": 740.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:08:43+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 458.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 458.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025597",
+              "station": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864,
+                "station_id": "A0025597",
+                "name": "문경새재IC주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1846.0,
+                "price_observed_at": "2026-11-16T05:59:29+09:00",
+                "address": "경북 문경시 문경읍 문경대로 2094",
+                "brand": "GSC",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 124302.0,
+              "detour_distance_m": 3893.0,
+              "detour_duration_s": 356.0,
+              "raw_detour_distance_m": 3893.0,
+              "raw_detour_duration_s": 356.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025522",
+              "station": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637,
+                "station_id": "A0025522",
+                "name": "남이주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1848.0,
+                "price_observed_at": "2026-11-19T12:20:18+09:00",
+                "address": "경북 상주시 북상주로 331 (부원동)",
+                "brand": "HDO",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 90830.0,
+              "detour_distance_m": 3311.0,
+              "detour_duration_s": 745.0,
+              "raw_detour_distance_m": 3311.0,
+              "raw_detour_duration_s": 745.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025647",
+              "station": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002,
+                "station_id": "A0025647",
+                "name": "신흥주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1850.0,
+                "price_observed_at": "2026-11-19T14:48:12+09:00",
+                "address": "경북 상주시 북상주로 427 (남적동)",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 91309.0,
+              "detour_distance_m": 0.0,
+              "detour_duration_s": 602.0,
+              "raw_detour_distance_m": -277.0,
+              "raw_detour_duration_s": 602.0,
+              "negative_delta_observed": true
+            },
+            {
+              "station_id": "A0025665",
+              "station": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424,
+                "station_id": "A0025665",
+                "name": "마성주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1855.0,
+                "price_observed_at": "2026-11-19T14:56:03+09:00",
+                "address": "경북 문경시 마성면 문경대로 1716",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 123703.0,
+              "detour_distance_m": 5882.0,
+              "detour_duration_s": 430.0,
+              "raw_detour_distance_m": 5882.0,
+              "raw_detour_duration_s": 430.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025626",
+              "station": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636,
+                "station_id": "A0025626",
+                "name": "경천주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1859.0,
+                "price_observed_at": "2026-11-19T13:39:45+09:00",
+                "address": "경북 상주시 사벌면 상풍로 403",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED",
+                "DETOUR_TIME_EXCEEDED"
+              ],
+              "reach_distance_m": 90992.0,
+              "detour_distance_m": 3869.0,
+              "detour_duration_s": 949.0,
+              "raw_detour_distance_m": 3869.0,
+              "raw_detour_duration_s": 949.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0006299",
+              "station": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058,
+                "station_id": "A0006299",
+                "name": "청수주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1865.0,
+                "price_observed_at": "2026-11-19T13:56:04+09:00",
+                "address": "충북 괴산군 연풍면 연풍로 1169",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 138039.0,
+              "detour_distance_m": 5016.0,
+              "detour_duration_s": 319.0,
+              "raw_detour_distance_m": 5016.0,
+              "raw_detour_duration_s": 319.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "sort_by": "price",
+          "ranking_fields": [
+            "price_krw_per_l",
+            "detour_duration_s",
+            "detour_distance_m",
+            "station_id"
+          ],
+          "scope": "evaluated_candidates_only"
+        },
+        "rest_area_info": null
+      },
+      "execution": {
+        "status": "no_recommendation",
+        "results": {
+          "base_route": {
+            "distance_m": 291493,
+            "duration_s": 13267,
+            "legs": [
+              {
+                "distance_m": 291493,
+                "duration_s": 13267
+              }
+            ]
+          },
+          "safe_range": {
+            "safe_range_km": 144.0
+          },
+          "search_points": [
+            {
+              "longitude": 127.98487014575099,
+              "latitude": 36.78585452014204,
+              "route_distance_m": 139000.0
+            },
+            {
+              "longitude": 128.1228518944379,
+              "latitude": 36.67863814734674,
+              "route_distance_m": 119000.0
+            },
+            {
+              "longitude": 128.20059875822358,
+              "latitude": 36.48058691730905,
+              "route_distance_m": 94000.0
+            }
+          ],
+          "search_candidates": [
+            {
+              "longitude": 127.97706797668422,
+              "latitude": 36.764617334058,
+              "station_id": "A0006299",
+              "name": "청수주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1865.0,
+              "center_distance_m": 2456.7
+            },
+            {
+              "longitude": 127.97385481623246,
+              "latitude": 36.75825536809248,
+              "station_id": "A0013109",
+              "name": "시루봉주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1865.0,
+              "center_distance_m": 3215.9
+            },
+            {
+              "longitude": 128.00739664355203,
+              "latitude": 36.75463738765759,
+              "station_id": "A0017358",
+              "name": "조령주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1875.0,
+              "center_distance_m": 4004.1
+            },
+            {
+              "longitude": 127.95160182439471,
+              "latitude": 36.78066379792645,
+              "station_id": "A0013186",
+              "name": "금대주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1880.0,
+              "center_distance_m": 3024.2
+            },
+            {
+              "longitude": 128.01058384943016,
+              "latitude": 36.754798986434096,
+              "station_id": "A0013126",
+              "name": "연풍주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1889.0,
+              "center_distance_m": 4140.3
+            },
+            {
+              "longitude": 128.14957858305732,
+              "latitude": 36.64089251721979,
+              "station_id": "A0025644",
+              "name": "불정주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1829.0,
+              "center_distance_m": 4821.0
+            },
+            {
+              "longitude": 128.10640394756237,
+              "latitude": 36.719738922369864,
+              "station_id": "A0025597",
+              "name": "문경새재IC주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1846.0,
+              "center_distance_m": 4790.7
+            },
+            {
+              "longitude": 128.12516667931203,
+              "latitude": 36.69001572228424,
+              "station_id": "A0025665",
+              "name": "마성주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1855.0,
+              "center_distance_m": 1278.5
+            },
+            {
+              "longitude": 128.1253336352332,
+              "latitude": 36.66054686124923,
+              "station_id": "A0025661",
+              "name": "진남주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1868.0,
+              "center_distance_m": 2019.5
+            },
+            {
+              "longitude": 128.12191677029776,
+              "latitude": 36.7091524063047,
+              "station_id": "A0025559",
+              "name": "새재IC주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1875.0,
+              "center_distance_m": 3386.1
+            },
+            {
+              "longitude": 128.1763346313601,
+              "latitude": 36.49338363961643,
+              "station_id": "A0023849",
+              "name": "천마산주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1835.0,
+              "center_distance_m": 2595.6
+            },
+            {
+              "longitude": 128.16501785090327,
+              "latitude": 36.51124542963282,
+              "station_id": "A0026341",
+              "name": "북상주IC주유소/충전소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1835.0,
+              "center_distance_m": 4661.3
+            },
+            {
+              "longitude": 128.16280460249328,
+              "latitude": 36.4578479640637,
+              "station_id": "A0025522",
+              "name": "남이주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1848.0,
+              "center_distance_m": 4223.0
+            },
+            {
+              "longitude": 128.16788740881867,
+              "latitude": 36.46548601832002,
+              "station_id": "A0025647",
+              "name": "신흥주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1850.0,
+              "center_distance_m": 3376.2
+            },
+            {
+              "longitude": 128.20672551427216,
+              "latitude": 36.464315352097636,
+              "station_id": "A0025626",
+              "name": "경천주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1859.0,
+              "center_distance_m": 1886.6
+            },
+            {
+              "longitude": 128.2044119720582,
+              "latitude": 36.463458713471695,
+              "station_id": "A0025743",
+              "name": "사벌주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1898.0,
+              "center_distance_m": 1930.1
+            }
+          ],
+          "station_details": [
+            {
+              "longitude": 128.14957858305732,
+              "latitude": 36.64089251721979,
+              "station_id": "A0025644",
+              "name": "불정주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1829.0,
+              "price_observed_at": "2026-11-19T14:58:23+09:00",
+              "address": "경북 문경시 문경대로 949",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 128.1763346313601,
+              "latitude": 36.49338363961643,
+              "station_id": "A0023849",
+              "name": "천마산주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1835.0,
+              "price_observed_at": "2026-11-19T13:39:34+09:00",
+              "address": "경북 상주시 외서면 경상대로 3913",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 128.16501785090327,
+              "latitude": 36.51124542963282,
+              "station_id": "A0026341",
+              "name": "북상주IC주유소/충전소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1835.0,
+              "price_observed_at": "2026-11-19T13:08:43+09:00",
+              "address": "경북 상주시 공검면 경상대로 4155",
+              "brand": "SOL",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": true,
+                "CVS_YN": true
+              }
+            },
+            {
+              "longitude": 128.10640394756237,
+              "latitude": 36.719738922369864,
+              "station_id": "A0025597",
+              "name": "문경새재IC주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1846.0,
+              "price_observed_at": "2026-11-16T05:59:29+09:00",
+              "address": "경북 문경시 문경읍 문경대로 2094",
+              "brand": "GSC",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 128.16280460249328,
+              "latitude": 36.4578479640637,
+              "station_id": "A0025522",
+              "name": "남이주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1848.0,
+              "price_observed_at": "2026-11-19T12:20:18+09:00",
+              "address": "경북 상주시 북상주로 331 (부원동)",
+              "brand": "HDO",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 128.16788740881867,
+              "latitude": 36.46548601832002,
+              "station_id": "A0025647",
+              "name": "신흥주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1850.0,
+              "price_observed_at": "2026-11-19T14:48:12+09:00",
+              "address": "경북 상주시 북상주로 427 (남적동)",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 128.12516667931203,
+              "latitude": 36.69001572228424,
+              "station_id": "A0025665",
+              "name": "마성주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1855.0,
+              "price_observed_at": "2026-11-19T14:56:03+09:00",
+              "address": "경북 문경시 마성면 문경대로 1716",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 128.20672551427216,
+              "latitude": 36.464315352097636,
+              "station_id": "A0025626",
+              "name": "경천주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1859.0,
+              "price_observed_at": "2026-11-19T13:39:45+09:00",
+              "address": "경북 상주시 사벌면 상풍로 403",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": false,
+                "CVS_YN": false
+              }
+            },
+            {
+              "longitude": 127.97706797668422,
+              "latitude": 36.764617334058,
+              "station_id": "A0006299",
+              "name": "청수주유소",
+              "fuel_type": "gasoline",
+              "price_krw_per_l": 1865.0,
+              "price_observed_at": "2026-11-19T13:56:04+09:00",
+              "address": "충북 괴산군 연풍면 연풍로 1169",
+              "brand": "SKE",
+              "facilities": {
+                "MAINT_YN": false,
+                "CAR_WASH_YN": true,
+                "CVS_YN": false
+              }
+            }
+          ],
+          "candidate_routes": {
+            "A0025644": {
+              "approach": {
+                "distance_m": 115950,
+                "duration_s": 5188,
+                "legs": [
+                  {
+                    "distance_m": 115950,
+                    "duration_s": 5188
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 297766,
+                "duration_s": 13792,
+                "legs": [
+                  {
+                    "distance_m": 115950,
+                    "duration_s": 5188
+                  },
+                  {
+                    "distance_m": 181816,
+                    "duration_s": 8604
+                  }
+                ]
+              },
+              "approach_request_id": "5e698412-c445-4137-b294-5d6f538e0fbb",
+              "via_request_id": "92c43965-98bf-4413-9993-4b763b422a08"
+            },
+            "A0023849": {
+              "approach": {
+                "distance_m": 96032,
+                "duration_s": 5046,
+                "legs": [
+                  {
+                    "distance_m": 96032,
+                    "duration_s": 5046
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 294829,
+                "duration_s": 14007,
+                "legs": [
+                  {
+                    "distance_m": 96032,
+                    "duration_s": 5046
+                  },
+                  {
+                    "distance_m": 198797,
+                    "duration_s": 8961
+                  }
+                ]
+              },
+              "approach_request_id": "bec57770-38fd-44f7-a084-e864fa4801fa",
+              "via_request_id": "8df0ba95-29ec-4358-af3e-a40508254b0e"
+            },
+            "A0026341": {
+              "approach": {
+                "distance_m": 103384,
+                "duration_s": 4709,
+                "legs": [
+                  {
+                    "distance_m": 103384,
+                    "duration_s": 4709
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 301354,
+                "duration_s": 13725,
+                "legs": [
+                  {
+                    "distance_m": 103384,
+                    "duration_s": 4709
+                  },
+                  {
+                    "distance_m": 197970,
+                    "duration_s": 9016
+                  }
+                ]
+              },
+              "approach_request_id": "11b54cb8-0672-49d7-8fa7-0b6ac0752403",
+              "via_request_id": "836778a5-75d6-4391-bf07-2a5e7cdfd123"
+            },
+            "A0025597": {
+              "approach": {
+                "distance_m": 124302,
+                "duration_s": 5512,
+                "legs": [
+                  {
+                    "distance_m": 124302,
+                    "duration_s": 5512
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 295386,
+                "duration_s": 13623,
+                "legs": [
+                  {
+                    "distance_m": 124302,
+                    "duration_s": 5512
+                  },
+                  {
+                    "distance_m": 171084,
+                    "duration_s": 8111
+                  }
+                ]
+              },
+              "approach_request_id": "230923e9-315f-410f-9cac-12f0e346b4c2",
+              "via_request_id": "be226d65-c438-406b-9b62-950fcd494552"
+            },
+            "A0025522": {
+              "approach": {
+                "distance_m": 90830,
+                "duration_s": 4841,
+                "legs": [
+                  {
+                    "distance_m": 90830,
+                    "duration_s": 4841
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 294804,
+                "duration_s": 14012,
+                "legs": [
+                  {
+                    "distance_m": 90830,
+                    "duration_s": 4841
+                  },
+                  {
+                    "distance_m": 203974,
+                    "duration_s": 9171
+                  }
+                ]
+              },
+              "approach_request_id": "bb02931f-0619-42ba-9bef-84b2e4c516ef",
+              "via_request_id": "939f86c5-ae7e-4b2c-8198-5877c09b94a9"
+            },
+            "A0025647": {
+              "approach": {
+                "distance_m": 91309,
+                "duration_s": 4876,
+                "legs": [
+                  {
+                    "distance_m": 91309,
+                    "duration_s": 4876
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 291216,
+                "duration_s": 13869,
+                "legs": [
+                  {
+                    "distance_m": 91309,
+                    "duration_s": 4876
+                  },
+                  {
+                    "distance_m": 199907,
+                    "duration_s": 8993
+                  }
+                ]
+              },
+              "approach_request_id": "75da83cf-24b5-4a20-8caa-97d308690e09",
+              "via_request_id": "7c8ddc15-7dcf-4d5f-a18d-acd272dc7cf8"
+            },
+            "A0025665": {
+              "approach": {
+                "distance_m": 123703,
+                "duration_s": 5674,
+                "legs": [
+                  {
+                    "distance_m": 123703,
+                    "duration_s": 5674
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 297375,
+                "duration_s": 13697,
+                "legs": [
+                  {
+                    "distance_m": 123703,
+                    "duration_s": 5674
+                  },
+                  {
+                    "distance_m": 173672,
+                    "duration_s": 8023
+                  }
+                ]
+              },
+              "approach_request_id": "2a235d21-bdec-425b-be39-d3f861b7e342",
+              "via_request_id": "5733f924-66dc-4155-9450-8d0296075279"
+            },
+            "A0025626": {
+              "approach": {
+                "distance_m": 90992,
+                "duration_s": 4892,
+                "legs": [
+                  {
+                    "distance_m": 90992,
+                    "duration_s": 4892
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 295362,
+                "duration_s": 14216,
+                "legs": [
+                  {
+                    "distance_m": 90992,
+                    "duration_s": 4892
+                  },
+                  {
+                    "distance_m": 204370,
+                    "duration_s": 9324
+                  }
+                ]
+              },
+              "approach_request_id": "28a5efb2-c571-42cd-983e-1e2741d18da0",
+              "via_request_id": "362248ec-463c-4247-8c6b-c58f670fa788"
+            },
+            "A0006299": {
+              "approach": {
+                "distance_m": 138039,
+                "duration_s": 6005,
+                "legs": [
+                  {
+                    "distance_m": 138039,
+                    "duration_s": 6005
+                  }
+                ]
+              },
+              "via": {
+                "distance_m": 296509,
+                "duration_s": 13586,
+                "legs": [
+                  {
+                    "distance_m": 138039,
+                    "duration_s": 6005
+                  },
+                  {
+                    "distance_m": 158470,
+                    "duration_s": 7581
+                  }
+                ]
+              },
+              "approach_request_id": "657114ef-499c-4a55-8133-8ba33f370d3c",
+              "via_request_id": "a979b453-1296-4be6-a74f-afab914d353c"
+            }
+          },
+          "evaluate_constraints": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T14:58:23+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 6273.0,
+              "detour_duration_s": 525.0,
+              "raw_detour_distance_m": 6273.0,
+              "raw_detour_duration_s": 525.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:39:34+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 96032.0,
+              "detour_distance_m": 3336.0,
+              "detour_duration_s": 740.0,
+              "raw_detour_distance_m": 3336.0,
+              "raw_detour_duration_s": 740.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:08:43+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 458.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 458.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025597",
+              "station": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864,
+                "station_id": "A0025597",
+                "name": "문경새재IC주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1846.0,
+                "price_observed_at": "2026-11-16T05:59:29+09:00",
+                "address": "경북 문경시 문경읍 문경대로 2094",
+                "brand": "GSC",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 124302.0,
+              "detour_distance_m": 3893.0,
+              "detour_duration_s": 356.0,
+              "raw_detour_distance_m": 3893.0,
+              "raw_detour_duration_s": 356.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025522",
+              "station": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637,
+                "station_id": "A0025522",
+                "name": "남이주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1848.0,
+                "price_observed_at": "2026-11-19T12:20:18+09:00",
+                "address": "경북 상주시 북상주로 331 (부원동)",
+                "brand": "HDO",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 90830.0,
+              "detour_distance_m": 3311.0,
+              "detour_duration_s": 745.0,
+              "raw_detour_distance_m": 3311.0,
+              "raw_detour_duration_s": 745.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025647",
+              "station": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002,
+                "station_id": "A0025647",
+                "name": "신흥주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1850.0,
+                "price_observed_at": "2026-11-19T14:48:12+09:00",
+                "address": "경북 상주시 북상주로 427 (남적동)",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 91309.0,
+              "detour_distance_m": 0.0,
+              "detour_duration_s": 602.0,
+              "raw_detour_distance_m": -277.0,
+              "raw_detour_duration_s": 602.0,
+              "negative_delta_observed": true
+            },
+            {
+              "station_id": "A0025665",
+              "station": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424,
+                "station_id": "A0025665",
+                "name": "마성주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1855.0,
+                "price_observed_at": "2026-11-19T14:56:03+09:00",
+                "address": "경북 문경시 마성면 문경대로 1716",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 123703.0,
+              "detour_distance_m": 5882.0,
+              "detour_duration_s": 430.0,
+              "raw_detour_distance_m": 5882.0,
+              "raw_detour_duration_s": 430.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025626",
+              "station": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636,
+                "station_id": "A0025626",
+                "name": "경천주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1859.0,
+                "price_observed_at": "2026-11-19T13:39:45+09:00",
+                "address": "경북 상주시 사벌면 상풍로 403",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "DETOUR_TIME_EXCEEDED",
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 90992.0,
+              "detour_distance_m": 3869.0,
+              "detour_duration_s": 949.0,
+              "raw_detour_distance_m": 3869.0,
+              "raw_detour_duration_s": 949.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0006299",
+              "station": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058,
+                "station_id": "A0006299",
+                "name": "청수주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1865.0,
+                "price_observed_at": "2026-11-19T13:56:04+09:00",
+                "address": "충북 괴산군 연풍면 연풍로 1169",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 138039.0,
+              "detour_distance_m": 5016.0,
+              "detour_duration_s": 319.0,
+              "raw_detour_distance_m": 5016.0,
+              "raw_detour_duration_s": 319.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "rank_candidates": {
+            "recommended": null,
+            "ranked_candidates": [],
+            "excluded_candidates": [
+              {
+                "station_id": "A0025644",
+                "station": {
+                  "longitude": 128.14957858305732,
+                  "latitude": 36.64089251721979,
+                  "station_id": "A0025644",
+                  "name": "불정주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1829.0,
+                  "price_observed_at": "2026-11-19T14:58:23+09:00",
+                  "address": "경북 문경시 문경대로 949",
+                  "brand": "SOL",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 115950.0,
+                "detour_distance_m": 6273.0,
+                "detour_duration_s": 525.0,
+                "raw_detour_distance_m": 6273.0,
+                "raw_detour_duration_s": 525.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0023849",
+                "station": {
+                  "longitude": 128.1763346313601,
+                  "latitude": 36.49338363961643,
+                  "station_id": "A0023849",
+                  "name": "천마산주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1835.0,
+                  "price_observed_at": "2026-11-19T13:39:34+09:00",
+                  "address": "경북 상주시 외서면 경상대로 3913",
+                  "brand": "SOL",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 96032.0,
+                "detour_distance_m": 3336.0,
+                "detour_duration_s": 740.0,
+                "raw_detour_distance_m": 3336.0,
+                "raw_detour_duration_s": 740.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0026341",
+                "station": {
+                  "longitude": 128.16501785090327,
+                  "latitude": 36.51124542963282,
+                  "station_id": "A0026341",
+                  "name": "북상주IC주유소/충전소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1835.0,
+                  "price_observed_at": "2026-11-19T13:08:43+09:00",
+                  "address": "경북 상주시 공검면 경상대로 4155",
+                  "brand": "SOL",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": true,
+                    "CVS_YN": true
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 103384.0,
+                "detour_distance_m": 9861.0,
+                "detour_duration_s": 458.0,
+                "raw_detour_distance_m": 9861.0,
+                "raw_detour_duration_s": 458.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0025597",
+                "station": {
+                  "longitude": 128.10640394756237,
+                  "latitude": 36.719738922369864,
+                  "station_id": "A0025597",
+                  "name": "문경새재IC주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1846.0,
+                  "price_observed_at": "2026-11-16T05:59:29+09:00",
+                  "address": "경북 문경시 문경읍 문경대로 2094",
+                  "brand": "GSC",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 124302.0,
+                "detour_distance_m": 3893.0,
+                "detour_duration_s": 356.0,
+                "raw_detour_distance_m": 3893.0,
+                "raw_detour_duration_s": 356.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0025522",
+                "station": {
+                  "longitude": 128.16280460249328,
+                  "latitude": 36.4578479640637,
+                  "station_id": "A0025522",
+                  "name": "남이주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1848.0,
+                  "price_observed_at": "2026-11-19T12:20:18+09:00",
+                  "address": "경북 상주시 북상주로 331 (부원동)",
+                  "brand": "HDO",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 90830.0,
+                "detour_distance_m": 3311.0,
+                "detour_duration_s": 745.0,
+                "raw_detour_distance_m": 3311.0,
+                "raw_detour_duration_s": 745.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0025647",
+                "station": {
+                  "longitude": 128.16788740881867,
+                  "latitude": 36.46548601832002,
+                  "station_id": "A0025647",
+                  "name": "신흥주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1850.0,
+                  "price_observed_at": "2026-11-19T14:48:12+09:00",
+                  "address": "경북 상주시 북상주로 427 (남적동)",
+                  "brand": "SKE",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 91309.0,
+                "detour_distance_m": 0.0,
+                "detour_duration_s": 602.0,
+                "raw_detour_distance_m": -277.0,
+                "raw_detour_duration_s": 602.0,
+                "negative_delta_observed": true
+              },
+              {
+                "station_id": "A0025665",
+                "station": {
+                  "longitude": 128.12516667931203,
+                  "latitude": 36.69001572228424,
+                  "station_id": "A0025665",
+                  "name": "마성주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1855.0,
+                  "price_observed_at": "2026-11-19T14:56:03+09:00",
+                  "address": "경북 문경시 마성면 문경대로 1716",
+                  "brand": "SKE",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 123703.0,
+                "detour_distance_m": 5882.0,
+                "detour_duration_s": 430.0,
+                "raw_detour_distance_m": 5882.0,
+                "raw_detour_duration_s": 430.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0025626",
+                "station": {
+                  "longitude": 128.20672551427216,
+                  "latitude": 36.464315352097636,
+                  "station_id": "A0025626",
+                  "name": "경천주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1859.0,
+                  "price_observed_at": "2026-11-19T13:39:45+09:00",
+                  "address": "경북 상주시 사벌면 상풍로 403",
+                  "brand": "SKE",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": false,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED",
+                  "DETOUR_TIME_EXCEEDED"
+                ],
+                "reach_distance_m": 90992.0,
+                "detour_distance_m": 3869.0,
+                "detour_duration_s": 949.0,
+                "raw_detour_distance_m": 3869.0,
+                "raw_detour_duration_s": 949.0,
+                "negative_delta_observed": false
+              },
+              {
+                "station_id": "A0006299",
+                "station": {
+                  "longitude": 127.97706797668422,
+                  "latitude": 36.764617334058,
+                  "station_id": "A0006299",
+                  "name": "청수주유소",
+                  "fuel_type": "gasoline",
+                  "price_krw_per_l": 1865.0,
+                  "price_observed_at": "2026-11-19T13:56:04+09:00",
+                  "address": "충북 괴산군 연풍면 연풍로 1169",
+                  "brand": "SKE",
+                  "facilities": {
+                    "MAINT_YN": false,
+                    "CAR_WASH_YN": true,
+                    "CVS_YN": false
+                  }
+                },
+                "eligible": false,
+                "reason_codes": [
+                  "ARRIVAL_DEADLINE_EXCEEDED"
+                ],
+                "reach_distance_m": 138039.0,
+                "detour_distance_m": 5016.0,
+                "detour_duration_s": 319.0,
+                "raw_detour_distance_m": 5016.0,
+                "raw_detour_duration_s": 319.0,
+                "negative_delta_observed": false
+              }
+            ],
+            "sort_by": "price",
+            "ranking_fields": [
+              "price_krw_per_l",
+              "detour_duration_s",
+              "detour_distance_m",
+              "station_id"
+            ],
+            "scope": "evaluated_candidates_only"
+          },
+          "rest_area_info": null
+        },
+        "calls": [
+          {
+            "action": "base_route",
+            "station_id": null,
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 291493,
+                "duration_s": 13267,
+                "legs": [
+                  {
+                    "distance_m": 291493,
+                    "duration_s": 13267
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "798f03f5-e44b-4e7c-a732-8d7e90c55e9e",
+                "elapsed_ms": 1650.416,
+                "fetched_at": "2026-11-19T07:43:37.126975Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "search_candidates",
+            "station_id": null,
+            "inputs": {
+              "longitude": 127.98487014575099,
+              "latitude": 36.78585452014204,
+              "fuel_type": "gasoline",
+              "radius_m": 5000
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "search_gas_stations",
+              "data": {
+                "items": [
+                  {
+                    "longitude": 127.97706797668422,
+                    "latitude": 36.764617334058,
+                    "station_id": "A0006299",
+                    "name": "청수주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1865.0,
+                    "center_distance_m": 2456.7
+                  },
+                  {
+                    "longitude": 127.97385481623246,
+                    "latitude": 36.75825536809248,
+                    "station_id": "A0013109",
+                    "name": "시루봉주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1865.0,
+                    "center_distance_m": 3215.9
+                  },
+                  {
+                    "longitude": 128.00739664355203,
+                    "latitude": 36.75463738765759,
+                    "station_id": "A0017358",
+                    "name": "조령주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1875.0,
+                    "center_distance_m": 4004.1
+                  },
+                  {
+                    "longitude": 127.95160182439471,
+                    "latitude": 36.78066379792645,
+                    "station_id": "A0013186",
+                    "name": "금대주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1880.0,
+                    "center_distance_m": 3024.2
+                  },
+                  {
+                    "longitude": 128.01058384943016,
+                    "latitude": 36.754798986434096,
+                    "station_id": "A0013126",
+                    "name": "연풍주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1889.0,
+                    "center_distance_m": 4140.3
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "d56e3495-30dd-4ced-99b9-a0f3892f56d6",
+                "elapsed_ms": 190.934,
+                "fetched_at": "2026-11-19T07:43:37.318157Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "search_candidates",
+            "station_id": null,
+            "inputs": {
+              "longitude": 128.1228518944379,
+              "latitude": 36.67863814734674,
+              "fuel_type": "gasoline",
+              "radius_m": 5000
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "search_gas_stations",
+              "data": {
+                "items": [
+                  {
+                    "longitude": 128.14957858305732,
+                    "latitude": 36.64089251721979,
+                    "station_id": "A0025644",
+                    "name": "불정주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1829.0,
+                    "center_distance_m": 4821.0
+                  },
+                  {
+                    "longitude": 128.10640394756237,
+                    "latitude": 36.719738922369864,
+                    "station_id": "A0025597",
+                    "name": "문경새재IC주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1846.0,
+                    "center_distance_m": 4790.7
+                  },
+                  {
+                    "longitude": 128.12516667931203,
+                    "latitude": 36.69001572228424,
+                    "station_id": "A0025665",
+                    "name": "마성주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1855.0,
+                    "center_distance_m": 1278.5
+                  },
+                  {
+                    "longitude": 128.1253336352332,
+                    "latitude": 36.66054686124923,
+                    "station_id": "A0025661",
+                    "name": "진남주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1868.0,
+                    "center_distance_m": 2019.5
+                  },
+                  {
+                    "longitude": 128.12191677029776,
+                    "latitude": 36.7091524063047,
+                    "station_id": "A0025559",
+                    "name": "새재IC주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1875.0,
+                    "center_distance_m": 3386.1
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "270c5477-9008-4337-8b55-e29c9186f95b",
+                "elapsed_ms": 141.33,
+                "fetched_at": "2026-11-19T07:43:37.458905Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "search_candidates",
+            "station_id": null,
+            "inputs": {
+              "longitude": 128.20059875822358,
+              "latitude": 36.48058691730905,
+              "fuel_type": "gasoline",
+              "radius_m": 5000
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "search_gas_stations",
+              "data": {
+                "items": [
+                  {
+                    "longitude": 128.1763346313601,
+                    "latitude": 36.49338363961643,
+                    "station_id": "A0023849",
+                    "name": "천마산주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1835.0,
+                    "center_distance_m": 2595.6
+                  },
+                  {
+                    "longitude": 128.16501785090327,
+                    "latitude": 36.51124542963282,
+                    "station_id": "A0026341",
+                    "name": "북상주IC주유소/충전소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1835.0,
+                    "center_distance_m": 4661.3
+                  },
+                  {
+                    "longitude": 128.16280460249328,
+                    "latitude": 36.4578479640637,
+                    "station_id": "A0025522",
+                    "name": "남이주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1848.0,
+                    "center_distance_m": 4223.0
+                  },
+                  {
+                    "longitude": 128.16788740881867,
+                    "latitude": 36.46548601832002,
+                    "station_id": "A0025647",
+                    "name": "신흥주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1850.0,
+                    "center_distance_m": 3376.2
+                  },
+                  {
+                    "longitude": 128.20672551427216,
+                    "latitude": 36.464315352097636,
+                    "station_id": "A0025626",
+                    "name": "경천주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1859.0,
+                    "center_distance_m": 1886.6
+                  },
+                  {
+                    "longitude": 128.2044119720582,
+                    "latitude": 36.463458713471695,
+                    "station_id": "A0025743",
+                    "name": "사벌주유소",
+                    "fuel_type": "gasoline",
+                    "price_krw_per_l": 1898.0,
+                    "center_distance_m": 1930.1
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "66ca8630-ed25-4a2a-bb73-6cc6526363f3",
+                "elapsed_ms": 150.764,
+                "fetched_at": "2026-11-19T07:43:37.610116Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0025644",
+            "inputs": {
+              "station_id": "A0025644",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T14:58:23+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "15901ca8-7d51-4b99-b38e-37f02ae5582b",
+                "elapsed_ms": 68.754,
+                "fetched_at": "2026-11-19T07:43:37.678932Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0023849",
+            "inputs": {
+              "station_id": "A0023849",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:39:34+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "7512bd9f-a063-4e45-a898-c2024f306d3e",
+                "elapsed_ms": 65.635,
+                "fetched_at": "2026-11-19T07:43:37.730164Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0026341",
+            "inputs": {
+              "station_id": "A0026341",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:08:43+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "ab3c2ee4-e26e-497b-9b87-fb93a49a45a7",
+                "elapsed_ms": 65.398,
+                "fetched_at": "2026-11-19T07:43:37.797282Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025644",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 115950,
+                "duration_s": 5188,
+                "legs": [
+                  {
+                    "distance_m": 115950,
+                    "duration_s": 5188
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "5e698412-c445-4137-b294-5d6f538e0fbb",
+                "elapsed_ms": 402.879,
+                "fetched_at": "2026-11-19T07:43:38.213458Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025644",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 297766,
+                "duration_s": 13792,
+                "legs": [
+                  {
+                    "distance_m": 115950,
+                    "duration_s": 5188
+                  },
+                  {
+                    "distance_m": 181816,
+                    "duration_s": 8604
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "92c43965-98bf-4413-9993-4b763b422a08",
+                "elapsed_ms": 1139.898,
+                "fetched_at": "2026-11-19T07:43:39.353705Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0023849",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 96032,
+                "duration_s": 5046,
+                "legs": [
+                  {
+                    "distance_m": 96032,
+                    "duration_s": 5046
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "bec57770-38fd-44f7-a084-e864fa4801fa",
+                "elapsed_ms": 372.873,
+                "fetched_at": "2026-11-19T07:43:39.726157Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0023849",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 294829,
+                "duration_s": 14007,
+                "legs": [
+                  {
+                    "distance_m": 96032,
+                    "duration_s": 5046
+                  },
+                  {
+                    "distance_m": 198797,
+                    "duration_s": 8961
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "8df0ba95-29ec-4358-af3e-a40508254b0e",
+                "elapsed_ms": 1300.917,
+                "fetched_at": "2026-11-19T07:43:41.026849Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0026341",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 103384,
+                "duration_s": 4709,
+                "legs": [
+                  {
+                    "distance_m": 103384,
+                    "duration_s": 4709
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "11b54cb8-0672-49d7-8fa7-0b6ac0752403",
+                "elapsed_ms": 401.142,
+                "fetched_at": "2026-11-19T07:43:41.428167Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0026341",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 301354,
+                "duration_s": 13725,
+                "legs": [
+                  {
+                    "distance_m": 103384,
+                    "duration_s": 4709
+                  },
+                  {
+                    "distance_m": 197970,
+                    "duration_s": 9016
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "836778a5-75d6-4391-bf07-2a5e7cdfd123",
+                "elapsed_ms": 1228.77,
+                "fetched_at": "2026-11-19T07:43:42.657477Z"
+              }
+            },
+            "round_index": 0
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0025597",
+            "inputs": {
+              "station_id": "A0025597",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864,
+                "station_id": "A0025597",
+                "name": "문경새재IC주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1846.0,
+                "price_observed_at": "2026-11-16T05:59:29+09:00",
+                "address": "경북 문경시 문경읍 문경대로 2094",
+                "brand": "GSC",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "222c5ca3-a893-4cd1-aec6-73de6e643316",
+                "elapsed_ms": 80.998,
+                "fetched_at": "2026-11-19T07:43:42.741586Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0025522",
+            "inputs": {
+              "station_id": "A0025522",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637,
+                "station_id": "A0025522",
+                "name": "남이주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1848.0,
+                "price_observed_at": "2026-11-19T12:20:18+09:00",
+                "address": "경북 상주시 북상주로 331 (부원동)",
+                "brand": "HDO",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "1330a0fd-8804-4efa-a7a7-c49d0c26be13",
+                "elapsed_ms": 68.59,
+                "fetched_at": "2026-11-19T07:43:42.810747Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0025647",
+            "inputs": {
+              "station_id": "A0025647",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002,
+                "station_id": "A0025647",
+                "name": "신흥주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1850.0,
+                "price_observed_at": "2026-11-19T14:48:12+09:00",
+                "address": "경북 상주시 북상주로 427 (남적동)",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "b62cd483-3bb0-461a-a555-7891e597cf3c",
+                "elapsed_ms": 67.15,
+                "fetched_at": "2026-11-19T07:43:42.867695Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025597",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 124302,
+                "duration_s": 5512,
+                "legs": [
+                  {
+                    "distance_m": 124302,
+                    "duration_s": 5512
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "230923e9-315f-410f-9cac-12f0e346b4c2",
+                "elapsed_ms": 374.468,
+                "fetched_at": "2026-11-19T07:43:43.252233Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025597",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 295386,
+                "duration_s": 13623,
+                "legs": [
+                  {
+                    "distance_m": 124302,
+                    "duration_s": 5512
+                  },
+                  {
+                    "distance_m": 171084,
+                    "duration_s": 8111
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "be226d65-c438-406b-9b62-950fcd494552",
+                "elapsed_ms": 1116.088,
+                "fetched_at": "2026-11-19T07:43:44.368803Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025522",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 90830,
+                "duration_s": 4841,
+                "legs": [
+                  {
+                    "distance_m": 90830,
+                    "duration_s": 4841
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "bb02931f-0619-42ba-9bef-84b2e4c516ef",
+                "elapsed_ms": 367.877,
+                "fetched_at": "2026-11-19T07:43:44.735977Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025522",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 294804,
+                "duration_s": 14012,
+                "legs": [
+                  {
+                    "distance_m": 90830,
+                    "duration_s": 4841
+                  },
+                  {
+                    "distance_m": 203974,
+                    "duration_s": 9171
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "939f86c5-ae7e-4b2c-8198-5877c09b94a9",
+                "elapsed_ms": 1386.243,
+                "fetched_at": "2026-11-19T07:43:46.122539Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025647",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 91309,
+                "duration_s": 4876,
+                "legs": [
+                  {
+                    "distance_m": 91309,
+                    "duration_s": 4876
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "75da83cf-24b5-4a20-8caa-97d308690e09",
+                "elapsed_ms": 503.438,
+                "fetched_at": "2026-11-19T07:43:46.626105Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025647",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 291216,
+                "duration_s": 13869,
+                "legs": [
+                  {
+                    "distance_m": 91309,
+                    "duration_s": 4876
+                  },
+                  {
+                    "distance_m": 199907,
+                    "duration_s": 8993
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "7c8ddc15-7dcf-4d5f-a18d-acd272dc7cf8",
+                "elapsed_ms": 1329.289,
+                "fetched_at": "2026-11-19T07:43:47.955028Z"
+              }
+            },
+            "round_index": 1
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0025665",
+            "inputs": {
+              "station_id": "A0025665",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424,
+                "station_id": "A0025665",
+                "name": "마성주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1855.0,
+                "price_observed_at": "2026-11-19T14:56:03+09:00",
+                "address": "경북 문경시 마성면 문경대로 1716",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "c4b1544f-1ebb-4945-80ad-d34c66d87bdf",
+                "elapsed_ms": 106.712,
+                "fetched_at": "2026-11-19T07:43:48.067624Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0025626",
+            "inputs": {
+              "station_id": "A0025626",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636,
+                "station_id": "A0025626",
+                "name": "경천주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1859.0,
+                "price_observed_at": "2026-11-19T13:39:45+09:00",
+                "address": "경북 상주시 사벌면 상풍로 403",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "6a96ed2b-1b65-4378-a60f-155de7f99f05",
+                "elapsed_ms": 68.368,
+                "fetched_at": "2026-11-19T07:43:48.136182Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "station_details",
+            "station_id": "A0006299",
+            "inputs": {
+              "station_id": "A0006299",
+              "fuel_type": "gasoline"
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_station_details",
+              "data": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058,
+                "station_id": "A0006299",
+                "name": "청수주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1865.0,
+                "price_observed_at": "2026-11-19T13:56:04+09:00",
+                "address": "충북 괴산군 연풍면 연풍로 1169",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": false
+                }
+              },
+              "error": null,
+              "meta": {
+                "provider": "opinet",
+                "request_id": "3efdf5ca-29e3-481d-8d68-5a873f85a114",
+                "elapsed_ms": 79.856,
+                "fetched_at": "2026-11-19T07:43:48.216194Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025665",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 123703,
+                "duration_s": 5674,
+                "legs": [
+                  {
+                    "distance_m": 123703,
+                    "duration_s": 5674
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "2a235d21-bdec-425b-be39-d3f861b7e342",
+                "elapsed_ms": 474.338,
+                "fetched_at": "2026-11-19T07:43:48.690005Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025665",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 297375,
+                "duration_s": 13697,
+                "legs": [
+                  {
+                    "distance_m": 123703,
+                    "duration_s": 5674
+                  },
+                  {
+                    "distance_m": 173672,
+                    "duration_s": 8023
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "5733f924-66dc-4155-9450-8d0296075279",
+                "elapsed_ms": 1396.612,
+                "fetched_at": "2026-11-19T07:43:50.086806Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025626",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 90992,
+                "duration_s": 4892,
+                "legs": [
+                  {
+                    "distance_m": 90992,
+                    "duration_s": 4892
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "28a5efb2-c571-42cd-983e-1e2741d18da0",
+                "elapsed_ms": 378.811,
+                "fetched_at": "2026-11-19T07:43:50.465895Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0025626",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 295362,
+                "duration_s": 14216,
+                "legs": [
+                  {
+                    "distance_m": 90992,
+                    "duration_s": 4892
+                  },
+                  {
+                    "distance_m": 204370,
+                    "duration_s": 9324
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "362248ec-463c-4247-8c6b-c58f670fa788",
+                "elapsed_ms": 1239.64,
+                "fetched_at": "2026-11-19T07:43:51.706010Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0006299",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058
+              },
+              "via": null
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 138039,
+                "duration_s": 6005,
+                "legs": [
+                  {
+                    "distance_m": 138039,
+                    "duration_s": 6005
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "657114ef-499c-4a55-8133-8ba33f370d3c",
+                "elapsed_ms": 401.958,
+                "fetched_at": "2026-11-19T07:43:52.107953Z"
+              }
+            },
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "station_id": "A0006299",
+            "inputs": {
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "via": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058
+              }
+            },
+            "result": {
+              "ok": true,
+              "tool_name": "get_driving_route",
+              "data": {
+                "distance_m": 296509,
+                "duration_s": 13586,
+                "legs": [
+                  {
+                    "distance_m": 138039,
+                    "duration_s": 6005
+                  },
+                  {
+                    "distance_m": 158470,
+                    "duration_s": 7581
+                  }
+                ]
+              },
+              "error": null,
+              "meta": {
+                "provider": "kakao",
+                "request_id": "a979b453-1296-4be6-a74f-afab914d353c",
+                "elapsed_ms": 1170.12,
+                "fetched_at": "2026-11-19T07:43:53.277636Z"
+              }
+            },
+            "round_index": 2
+          }
+        ],
+        "steps": [
+          {
+            "action": "base_route",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "safe_range",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "search_points",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "search_candidates",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "station_details",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "candidate_routes",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "evaluate_constraints",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "rank_candidates",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 0
+          },
+          {
+            "action": "rest_area_info",
+            "status": "skipped",
+            "message": "실행할 후보·선행 결과가 없습니다.",
+            "round_index": 0
+          },
+          {
+            "action": "station_details",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 1
+          },
+          {
+            "action": "candidate_routes",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 1
+          },
+          {
+            "action": "evaluate_constraints",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 1
+          },
+          {
+            "action": "rank_candidates",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 1
+          },
+          {
+            "action": "rest_area_info",
+            "status": "skipped",
+            "message": "실행할 후보·선행 결과가 없습니다.",
+            "round_index": 1
+          },
+          {
+            "action": "station_details",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 2
+          },
+          {
+            "action": "candidate_routes",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 2
+          },
+          {
+            "action": "evaluate_constraints",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 2
+          },
+          {
+            "action": "rank_candidates",
+            "status": "completed",
+            "message": "처리 완료",
+            "round_index": 2
+          },
+          {
+            "action": "rest_area_info",
+            "status": "skipped",
+            "message": "확정 추천 후보가 없어 보조 조회를 생략했습니다.",
+            "round_index": 2
+          }
+        ],
+        "error": null,
+        "warnings": [
+          "주행 가능 거리와 소요시간은 입력·조회 응답에 따른 추정치입니다.",
+          "도착 예상은 조회 주행시간과 입력 정차시간 기준입니다. 미래 교통·대기시간을 보장하지 않습니다."
+        ],
+        "tool_call_counts": {
+          "kakao": 19,
+          "opinet": 12
+        },
+        "cache_hits": 0,
+        "unevaluated_station_ids": [
+          "A0013109",
+          "A0025661",
+          "A0017358",
+          "A0025559",
+          "A0013186",
+          "A0013126",
+          "A0025743"
+        ],
+        "replan_needed": false
+      },
+      "executor_mode": "tools",
+      "judgement": {
+        "status": "no_recommendation",
+        "safe_range_km": 144.0,
+        "candidates": [
+          {
+            "station_id": "A0025644",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T14:58:23+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 6273.0,
+              "detour_duration_s": 525.0,
+              "raw_detour_distance_m": 6273.0,
+              "raw_detour_duration_s": 525.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1829.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 115.95,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025644]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 6.273,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 8.75,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025644]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 13792.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025644].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 28.049999999999997,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:49:52",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "15901ca8-7d51-4b99-b38e-37f02ae5582b",
+              "5e698412-c445-4137-b294-5d6f538e0fbb",
+              "92c43965-98bf-4413-9993-4b763b422a08"
+            ]
+          },
+          {
+            "station_id": "A0023849",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:39:34+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 96032.0,
+              "detour_distance_m": 3336.0,
+              "detour_duration_s": 740.0,
+              "raw_detour_distance_m": 3336.0,
+              "raw_detour_duration_s": 740.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 96.032,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0023849]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 3.336,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 12.333333333333334,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0023849]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 14007.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0023849].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 47.968,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:53:27",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "7512bd9f-a063-4e45-a898-c2024f306d3e",
+              "bec57770-38fd-44f7-a084-e864fa4801fa",
+              "8df0ba95-29ec-4358-af3e-a40508254b0e"
+            ]
+          },
+          {
+            "station_id": "A0026341",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:08:43+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 458.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 458.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1835.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 103.384,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0026341]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 9.861,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 7.633333333333334,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0026341]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 13725.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0026341].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 40.616,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:48:45",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "ab3c2ee4-e26e-497b-9b87-fb93a49a45a7",
+              "11b54cb8-0672-49d7-8fa7-0b6ac0752403",
+              "836778a5-75d6-4391-bf07-2a5e7cdfd123"
+            ]
+          },
+          {
+            "station_id": "A0025597",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025597",
+              "station": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864,
+                "station_id": "A0025597",
+                "name": "문경새재IC주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1846.0,
+                "price_observed_at": "2026-11-16T05:59:29+09:00",
+                "address": "경북 문경시 문경읍 문경대로 2094",
+                "brand": "GSC",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 124302.0,
+              "detour_distance_m": 3893.0,
+              "detour_duration_s": 356.0,
+              "raw_detour_distance_m": 3893.0,
+              "raw_detour_duration_s": 356.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1846.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025597]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 124.302,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025597]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 3.893,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025597]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 5.933333333333334,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025597]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 13623.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025597].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 19.697999999999993,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:47:03",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "222c5ca3-a893-4cd1-aec6-73de6e643316",
+              "230923e9-315f-410f-9cac-12f0e346b4c2",
+              "be226d65-c438-406b-9b62-950fcd494552"
+            ]
+          },
+          {
+            "station_id": "A0025522",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025522",
+              "station": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637,
+                "station_id": "A0025522",
+                "name": "남이주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1848.0,
+                "price_observed_at": "2026-11-19T12:20:18+09:00",
+                "address": "경북 상주시 북상주로 331 (부원동)",
+                "brand": "HDO",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 90830.0,
+              "detour_distance_m": 3311.0,
+              "detour_duration_s": 745.0,
+              "raw_detour_distance_m": 3311.0,
+              "raw_detour_duration_s": 745.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1848.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025522]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 90.83,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025522]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 3.311,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025522]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 12.416666666666666,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025522]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 14012.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025522].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 53.17,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:53:32",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "1330a0fd-8804-4efa-a7a7-c49d0c26be13",
+              "bb02931f-0619-42ba-9bef-84b2e4c516ef",
+              "939f86c5-ae7e-4b2c-8198-5877c09b94a9"
+            ]
+          },
+          {
+            "station_id": "A0025647",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025647",
+              "station": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002,
+                "station_id": "A0025647",
+                "name": "신흥주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1850.0,
+                "price_observed_at": "2026-11-19T14:48:12+09:00",
+                "address": "경북 상주시 북상주로 427 (남적동)",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 91309.0,
+              "detour_distance_m": 0.0,
+              "detour_duration_s": 602.0,
+              "raw_detour_distance_m": -277.0,
+              "raw_detour_duration_s": 602.0,
+              "negative_delta_observed": true
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1850.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025647]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 91.309,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025647]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 0.0,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025647]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 10.033333333333333,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025647]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 13869.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025647].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 52.691,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:51:09",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "b62cd483-3bb0-461a-a555-7891e597cf3c",
+              "75da83cf-24b5-4a20-8caa-97d308690e09",
+              "7c8ddc15-7dcf-4d5f-a18d-acd272dc7cf8"
+            ]
+          },
+          {
+            "station_id": "A0025665",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025665",
+              "station": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424,
+                "station_id": "A0025665",
+                "name": "마성주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1855.0,
+                "price_observed_at": "2026-11-19T14:56:03+09:00",
+                "address": "경북 문경시 마성면 문경대로 1716",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 123703.0,
+              "detour_distance_m": 5882.0,
+              "detour_duration_s": 430.0,
+              "raw_detour_distance_m": 5882.0,
+              "raw_detour_duration_s": 430.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1855.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025665]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 123.703,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025665]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 5.882,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025665]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 7.166666666666667,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025665]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 13697.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025665].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 20.296999999999997,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:48:17",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "c4b1544f-1ebb-4945-80ad-d34c66d87bdf",
+              "2a235d21-bdec-425b-be39-d3f861b7e342",
+              "5733f924-66dc-4155-9450-8d0296075279"
+            ]
+          },
+          {
+            "station_id": "A0025626",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0025626",
+              "station": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636,
+                "station_id": "A0025626",
+                "name": "경천주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1859.0,
+                "price_observed_at": "2026-11-19T13:39:45+09:00",
+                "address": "경북 상주시 사벌면 상풍로 403",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "DETOUR_TIME_EXCEEDED",
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 90992.0,
+              "detour_distance_m": 3869.0,
+              "detour_duration_s": 949.0,
+              "raw_detour_distance_m": 3869.0,
+              "raw_detour_duration_s": 949.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1859.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025626]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 90.992,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0025626]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 3.869,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025626]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "failed",
+                "actual": 15.816666666666666,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한을 초과했습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0025626]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 14216.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0025626].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 53.007999999999996,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:56:56",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "6a96ed2b-1b65-4378-a60f-155de7f99f05",
+              "28a5efb2-c571-42cd-983e-1e2741d18da0",
+              "362248ec-463c-4247-8c6b-c58f670fa788"
+            ]
+          },
+          {
+            "station_id": "A0006299",
+            "status": "excluded",
+            "evaluation": {
+              "station_id": "A0006299",
+              "station": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058,
+                "station_id": "A0006299",
+                "name": "청수주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1865.0,
+                "price_observed_at": "2026-11-19T13:56:04+09:00",
+                "address": "충북 괴산군 연풍면 연풍로 1169",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 138039.0,
+              "detour_distance_m": 5016.0,
+              "detour_duration_s": 319.0,
+              "raw_detour_distance_m": 5016.0,
+              "raw_detour_duration_s": 319.0,
+              "negative_delta_observed": false
+            },
+            "checks": [
+              {
+                "code": "DETAILS",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "상세 조회 확인",
+                "sources": [
+                  "results.station_details"
+                ]
+              },
+              {
+                "code": "FUEL_TYPE_MISMATCH",
+                "status": "passed",
+                "actual": "gasoline",
+                "limit": "gasoline",
+                "unit": null,
+                "message": "요청 유종과 비교합니다.",
+                "sources": [
+                  "results.station_details",
+                  "plan.request.fuel_type"
+                ]
+              },
+              {
+                "code": "MISSING_PRICE",
+                "status": "passed",
+                "actual": 1865.0,
+                "limit": null,
+                "unit": "KRW/L",
+                "message": "실제 상세 조회 가격을 사용합니다.",
+                "sources": [
+                  "results.station_details.price_krw_per_l"
+                ]
+              },
+              {
+                "code": "ROUTE_COST",
+                "status": "passed",
+                "actual": null,
+                "limit": null,
+                "unit": null,
+                "message": "접근/경유 실제 비용 확인",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0006299]"
+                ]
+              },
+              {
+                "code": "UNREACHABLE",
+                "status": "passed",
+                "actual": 138.039,
+                "limit": 144.0,
+                "unit": "km",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "plan.request",
+                  "results.candidate_routes[A0006299]"
+                ]
+              },
+              {
+                "code": "DETOUR_DISTANCE_EXCEEDED",
+                "status": "not_requested",
+                "actual": 5.016,
+                "limit": null,
+                "unit": "km",
+                "message": "지정한 상한이 없습니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0006299]",
+                  "plan.request.max_detour_km"
+                ]
+              },
+              {
+                "code": "DETOUR_TIME_EXCEEDED",
+                "status": "passed",
+                "actual": 5.316666666666666,
+                "limit": 15.0,
+                "unit": "min",
+                "message": "상한 이내입니다.",
+                "sources": [
+                  "results.base_route",
+                  "results.candidate_routes[A0006299]",
+                  "plan.request.max_detour_min"
+                ]
+              },
+              {
+                "code": "ARRIVAL_DEADLINE_EXCEEDED",
+                "status": "failed",
+                "actual": 13586.0,
+                "limit": 60.0,
+                "unit": "s",
+                "message": "주행 예상시간만으로도 도착 상한을 초과합니다.",
+                "sources": [
+                  "results.candidate_routes[A0006299].via.duration_s",
+                  "analysis.conditions.refuel_stop_min",
+                  "analysis.conditions.arrival_deadline"
+                ]
+              }
+            ],
+            "range_margin_km": 5.961000000000013,
+            "estimated_fuel_to_station_l": null,
+            "estimated_arrival_at": null,
+            "estimated_arrival_clock": "18:46:26",
+            "arrival_day_offset": 0,
+            "tool_request_ids": [
+              "3efdf5ca-29e3-481d-8d68-5a873f85a114",
+              "657114ef-499c-4a55-8133-8ba33f370d3c",
+              "a979b453-1296-4be6-a74f-afab914d353c"
+            ]
+          }
+        ],
+        "recommendation": {
+          "recommended": null,
+          "ranked_candidates": [],
+          "excluded_candidates": [
+            {
+              "station_id": "A0025644",
+              "station": {
+                "longitude": 128.14957858305732,
+                "latitude": 36.64089251721979,
+                "station_id": "A0025644",
+                "name": "불정주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1829.0,
+                "price_observed_at": "2026-11-19T14:58:23+09:00",
+                "address": "경북 문경시 문경대로 949",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 115950.0,
+              "detour_distance_m": 6273.0,
+              "detour_duration_s": 525.0,
+              "raw_detour_distance_m": 6273.0,
+              "raw_detour_duration_s": 525.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0023849",
+              "station": {
+                "longitude": 128.1763346313601,
+                "latitude": 36.49338363961643,
+                "station_id": "A0023849",
+                "name": "천마산주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:39:34+09:00",
+                "address": "경북 상주시 외서면 경상대로 3913",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 96032.0,
+              "detour_distance_m": 3336.0,
+              "detour_duration_s": 740.0,
+              "raw_detour_distance_m": 3336.0,
+              "raw_detour_duration_s": 740.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0026341",
+              "station": {
+                "longitude": 128.16501785090327,
+                "latitude": 36.51124542963282,
+                "station_id": "A0026341",
+                "name": "북상주IC주유소/충전소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1835.0,
+                "price_observed_at": "2026-11-19T13:08:43+09:00",
+                "address": "경북 상주시 공검면 경상대로 4155",
+                "brand": "SOL",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": true
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 103384.0,
+              "detour_distance_m": 9861.0,
+              "detour_duration_s": 458.0,
+              "raw_detour_distance_m": 9861.0,
+              "raw_detour_duration_s": 458.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025597",
+              "station": {
+                "longitude": 128.10640394756237,
+                "latitude": 36.719738922369864,
+                "station_id": "A0025597",
+                "name": "문경새재IC주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1846.0,
+                "price_observed_at": "2026-11-16T05:59:29+09:00",
+                "address": "경북 문경시 문경읍 문경대로 2094",
+                "brand": "GSC",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 124302.0,
+              "detour_distance_m": 3893.0,
+              "detour_duration_s": 356.0,
+              "raw_detour_distance_m": 3893.0,
+              "raw_detour_duration_s": 356.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025522",
+              "station": {
+                "longitude": 128.16280460249328,
+                "latitude": 36.4578479640637,
+                "station_id": "A0025522",
+                "name": "남이주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1848.0,
+                "price_observed_at": "2026-11-19T12:20:18+09:00",
+                "address": "경북 상주시 북상주로 331 (부원동)",
+                "brand": "HDO",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 90830.0,
+              "detour_distance_m": 3311.0,
+              "detour_duration_s": 745.0,
+              "raw_detour_distance_m": 3311.0,
+              "raw_detour_duration_s": 745.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025647",
+              "station": {
+                "longitude": 128.16788740881867,
+                "latitude": 36.46548601832002,
+                "station_id": "A0025647",
+                "name": "신흥주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1850.0,
+                "price_observed_at": "2026-11-19T14:48:12+09:00",
+                "address": "경북 상주시 북상주로 427 (남적동)",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 91309.0,
+              "detour_distance_m": 0.0,
+              "detour_duration_s": 602.0,
+              "raw_detour_distance_m": -277.0,
+              "raw_detour_duration_s": 602.0,
+              "negative_delta_observed": true
+            },
+            {
+              "station_id": "A0025665",
+              "station": {
+                "longitude": 128.12516667931203,
+                "latitude": 36.69001572228424,
+                "station_id": "A0025665",
+                "name": "마성주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1855.0,
+                "price_observed_at": "2026-11-19T14:56:03+09:00",
+                "address": "경북 문경시 마성면 문경대로 1716",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 123703.0,
+              "detour_distance_m": 5882.0,
+              "detour_duration_s": 430.0,
+              "raw_detour_distance_m": 5882.0,
+              "raw_detour_duration_s": 430.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0025626",
+              "station": {
+                "longitude": 128.20672551427216,
+                "latitude": 36.464315352097636,
+                "station_id": "A0025626",
+                "name": "경천주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1859.0,
+                "price_observed_at": "2026-11-19T13:39:45+09:00",
+                "address": "경북 상주시 사벌면 상풍로 403",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": false,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED",
+                "DETOUR_TIME_EXCEEDED"
+              ],
+              "reach_distance_m": 90992.0,
+              "detour_distance_m": 3869.0,
+              "detour_duration_s": 949.0,
+              "raw_detour_distance_m": 3869.0,
+              "raw_detour_duration_s": 949.0,
+              "negative_delta_observed": false
+            },
+            {
+              "station_id": "A0006299",
+              "station": {
+                "longitude": 127.97706797668422,
+                "latitude": 36.764617334058,
+                "station_id": "A0006299",
+                "name": "청수주유소",
+                "fuel_type": "gasoline",
+                "price_krw_per_l": 1865.0,
+                "price_observed_at": "2026-11-19T13:56:04+09:00",
+                "address": "충북 괴산군 연풍면 연풍로 1169",
+                "brand": "SKE",
+                "facilities": {
+                  "MAINT_YN": false,
+                  "CAR_WASH_YN": true,
+                  "CVS_YN": false
+                }
+              },
+              "eligible": false,
+              "reason_codes": [
+                "ARRIVAL_DEADLINE_EXCEEDED"
+              ],
+              "reach_distance_m": 138039.0,
+              "detour_distance_m": 5016.0,
+              "detour_duration_s": 319.0,
+              "raw_detour_distance_m": 5016.0,
+              "raw_detour_duration_s": 319.0,
+              "negative_delta_observed": false
+            }
+          ],
+          "sort_by": "price",
+          "ranking_fields": [
+            "price_krw_per_l",
+            "detour_duration_s",
+            "detour_distance_m",
+            "station_id"
+          ],
+          "scope": "evaluated_candidates_only"
+        },
+        "time_constraint": {
+          "status": "ready",
+          "basis": "same_day_clock",
+          "available_s": 60.0,
+          "stop_s": 0.0,
+          "departure_at": null,
+          "deadline_at": null,
+          "departure_clock_s": 54000.0,
+          "missing_fields": []
+        },
+        "missing_fields": [],
+        "questions": [],
+        "warnings": [
+          "주행 가능 거리와 소요시간은 입력·조회 응답에 따른 추정치입니다.",
+          "도착 예상은 조회 주행시간과 입력 정차시간 기준입니다. 미래 교통·대기시간을 보장하지 않습니다."
+        ],
+        "replan_needed": true,
+        "scope": "evaluated_candidates_only"
+      },
+      "replanning": {
+        "replan_count": 2,
+        "rounds": [
+          {
+            "round_index": 0,
+            "trigger": "initial",
+            "search_points": [
+              {
+                "longitude": 127.98487014575099,
+                "latitude": 36.78585452014204,
+                "route_distance_m": 139000.0
+              },
+              {
+                "longitude": 128.1228518944379,
+                "latitude": 36.67863814734674,
+                "route_distance_m": 119000.0
+              },
+              {
+                "longitude": 128.20059875822358,
+                "latitude": 36.48058691730905,
+                "route_distance_m": 94000.0
+              }
+            ],
+            "evaluated_station_ids": [
+              "A0025644",
+              "A0023849",
+              "A0026341"
+            ],
+            "eligible_count": 0,
+            "tool_calls_added": 13
+          },
+          {
+            "round_index": 1,
+            "trigger": "evaluate_cached",
+            "search_points": [],
+            "evaluated_station_ids": [
+              "A0025597",
+              "A0025522",
+              "A0025647"
+            ],
+            "eligible_count": 0,
+            "tool_calls_added": 9
+          },
+          {
+            "round_index": 2,
+            "trigger": "evaluate_cached",
+            "search_points": [],
+            "evaluated_station_ids": [
+              "A0025665",
+              "A0025626",
+              "A0006299"
+            ],
+            "eligible_count": 0,
+            "tool_calls_added": 9
+          }
+        ],
+        "decision": {
+          "action": "stop",
+          "reason": "evaluation_budget_exhausted",
+          "search_point": null,
+          "next_input": [
+            "상한 안에서 적합 후보를 찾지 못했습니다. 전체 경로에 후보가 없다는 뜻은 아닙니다.",
+            "출발·목적의 상세 위치와 계기판 주행 가능 거리·안전 여유를 확인해 알려주세요."
+          ]
+        },
+        "stop_reason": "evaluation_budget_exhausted",
+        "next_input": [
+          "상한 안에서 적합 후보를 찾지 못했습니다. 전체 경로에 후보가 없다는 뜻은 아닙니다.",
+          "출발·목적의 상세 위치와 계기판 주행 가능 거리·안전 여유를 확인해 알려주세요."
+        ]
+      },
+      "replanner_mode": "bounded_tools"
+    },
+    "error": null,
+    "meta": {
+      "provider": "gms",
+      "request_id": "b5b2cd37-bcfc-4494-8edd-e16f4149b571",
+      "elapsed_ms": 24517.475,
+      "fetched_at": "2026-11-19T07:43:53.312369Z"
+    }
+  },
+  "scope": {
+    "live_replan_limit": true,
+    "live_replan_success": false,
+    "mock_success_branches": [
+      "cached_candidates",
+      "expanded_search_point",
+      "expanded_then_cached"
+    ],
+    "note": "도착 상한은 의도적인 불충족 사례이며 실제 미래 도착을 예측한 결과가 아니다. 성공 분기는 모의 제공사로 검증했다."
+  },
+  "offline_verification": {
+    "pytest_passed": 319,
+    "new_replanning_tests": 27,
+    "warnings_as_errors": true,
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "pip_check": "passed",
+    "unchanged_public_tool_contracts": 7,
+    "secret_scan": "passed",
+    "health_status_code": 200,
+    "mock_success_is_separate_from_live_limit_case": true
+  }
+}
