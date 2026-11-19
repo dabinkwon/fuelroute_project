@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005 분석·자동 좌표 변환, F3006 계획, F3007 조회·F3008 판정·F3009 최대2회 그래프 재계획 연결. Memory·최종 문장·로깅·HTTP·화면 연결은 후속
+> **구현 상태:** F3005 분석·자동 좌표 변환, F3006 계획, F3007 조회·F3008 판정·F3009 재계획·F3010 세션별 조건 맥락 연결. 최종 문장·로깅·HTTP·화면 연결은 후속
 
 ## 단계별 진행 기록
 
@@ -23,6 +23,7 @@
 | 12. F3007 Agent·CLI 연결 | 분석→계획→실행 노드와 `run` 명령, 지명 해석·입력 보완·핵심 실패 연결 | 테스트255개·Ruff·의존성 검사 통과, 기존 실호출 근거 보존. [실행 기록](docs/DEVELOPMENT.md#f3007-implementation) | `1d55b4d` |
 | 13. F3008 제약 판단 | 실제 도달·우회·가격·유종 재판정, 명시 날짜·시각·정차시간과 도착 상한 비교 | 테스트288개·Ruff 통과, 기존 GMS1회 추출·기록 응답 재판정. [판정 기록](docs/DEVELOPMENT.md#f3008-judgement) | `d11e437` |
 | 14. 기능별 폴더 재구성 | Agent·계산·API 클라이언트·Tool·스키마·공통 기반·HTTP·CLI 분리 | 전체292개·Ruff 통과, 공개 Tool 계약 보존. [이동 기록](docs/DEVELOPMENT.md#package-layout) | `ac21f80` |
+| 15. F3009 그래프 재계획 | 요청별 캐시·미평가 후보 우선·최대2회와 전체 평가 예산 | 전체319개·실제 후보9곳/추가2회 상한 종료. [재계획 기록](docs/DEVELOPMENT.md#f3009-replanning) | `1dc3228` |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -157,7 +158,8 @@ project-root/
 │   │   ├── planning.py      # F3006 계획 구성·의존 순서 검증
 │   │   ├── execution.py     # 요청별 최초/추가 회차·캐시·결과 통합
 │   │   ├── replanning.py    # F3009 재계획 정책·기존 독립 실행기
-│   │   └── llm.py           # GMS 요청 분석·계획 프롬프트
+│   │   ├── llm.py           # GMS 요청 분석·계획 프롬프트
+│   │   └── memory.py        # 현재 조건 병합·짧은 대화 요약
 │   ├── calculations/        # 외부 호출 없는 계산·판정
 │   │   ├── driving_range.py # 안전 주행거리
 │   │   ├── coordinates.py   # WGS84↔KATEC
@@ -169,6 +171,7 @@ project-root/
 │   ├── tools/               # fuel_tools.py 정규화 조회·registry.py 등록
 │   ├── schemas/             # 분석·계획·실행·판정·경로 등 공유 모델
 │   ├── core/                # 설정·공통 응답·오류·비밀값 정제
+│   ├── storage/             # 세션별 SQLite 맥락 저장·충돌 검출
 │   ├── api/app.py           # FastAPI /health
 │   └── cli/                 # 명령 처리·GMS 검증·경로 진단
 ├── tests/              # 실제 키를 사용하지 않는 단위·HTTP 모의 테스트
@@ -241,7 +244,7 @@ python -m fuelroute station-detail --station-id A0010207 --fuel-type gasoline
 python -m fuelroute rest-search --point 128.806648 37.758206 --radius-m 3000 --direction 하행
 ```
 
-`stations`는 WGS84 좌표를 KATEC로 변환하고 `data.items`에 ID·가격·위치를 반환한다. `station-detail`은 해당 ID로 상세·가격 기준시각을 반환한다. `rest-search`는 전체 휴게소 페이지를 읽고 반경·노선·방향을 필터한다. 휴게소 `match_status=unverified`는 가까운 참고 정보라는 뜻이며 같은 주유소라는 의미가 아니다. 자연어 추천·판정·재계획은 아래 run 명령으로 연결했다. Memory·최종 문장·HTTP/화면은 후속이다.
+`stations`는 WGS84 좌표를 KATEC로 변환하고 `data.items`에 ID·가격·위치를 반환한다. `station-detail`은 해당 ID로 상세·가격 기준시각을 반환한다. `rest-search`는 전체 휴게소 페이지를 읽고 반경·노선·방향을 필터한다. 휴게소 `match_status=unverified`는 가까운 참고 정보라는 뜻이며 같은 주유소라는 의미가 아니다. 자연어 추천·판정·재계획은 아래 run 명령으로 연결했다. 세션별 조건 맥락은 아래 F3010을 따르며 최종 문장·HTTP/화면은 후속이다.
 
 실제 응답의 값·필드·실패 사례는 [`2026-11-18 검증 기록`](docs/verification/2026-11-18.json)에 남겼다. 로컬 상세 원본과 임시 스크립트가 있던 `artifacts`는 2026-11-19 사용자 요청으로 삭제했으며, Git에 기록한 검증 자료는 유지한다. Opinet은 잘못된 키에도 빈 배열을 반환했으므로 0건만으로 인증 성공이나 실패를 단정할 수 없다.
 
@@ -271,7 +274,7 @@ python -m fuelroute analyze --message '대구에서 서울로 가는데 휘발�
 
 결과는 `data.analysis`에 조건과 기준/선호/제약 분류, 누락·오류·미확인 필드, 추가 질문, `ready_for_planning`을 담는다. 원문 구절과 숫자·단위를 대조하며 알 수 없는 좌표나 연료를 추측하지 않는다. 기본 필수값은 주행 가능 거리·안전 여유(km)이며 연료량이나 연비를 요구하지 않는다. 안전 여유의 임의 기본값도 없다. 기존 L/연비 입력은 별도로 지원하며 혼용은 거절한다. km·L·km/L·분 단위 누락/불일치는 입력 보완 대상으로 둔다. 준비 상태는 입력 검증 결과이며 실제 추천이나 시간 제약 충족을 뜻하지 않는다.
 
-첨부 예제처럼 `State`, `make_graph`, 모델 호출 함수를 분리했다. `analyze` 명령의 추천 그래프는 `START→analyze→resolve_locations→END`이며 다른 의도는 분석 뒤 종료한다. `plan`은 계획까지, `run`은 조회까지 연결한다. Memory·최종 문장·로깅은 후속 작업이다. [분석 기록](docs/DEVELOPMENT.md#f3005-implementation), [자동 변환 기록](docs/DEVELOPMENT.md#f3005-geocoding), [실호출 근거](docs/verification/2026-11-19-geocoding.json)를 참고한다.
+첨부 예제처럼 `State`, `make_graph`, 모델 호출 함수를 분리했다. `analyze` 명령의 추천 그래프는 `START→analyze→resolve_locations→END`이며 다른 의도는 분석 뒤 종료한다. `plan`은 계획까지, `run`은 조회까지 연결한다. 조건 맥락은 아래 F3010에서 연결했으며 최종 문장·로깅은 후속 작업이다. [분석 기록](docs/DEVELOPMENT.md#f3005-implementation), [자동 변환 기록](docs/DEVELOPMENT.md#f3005-geocoding), [실호출 근거](docs/verification/2026-11-19-geocoding.json)를 참고한다.
 
 <a id="f3006-task-plan"></a>
 
@@ -323,7 +326,7 @@ python -m fuelroute run --message '대구에서 서울로 휘발유 주유 추�
 
 <a id="f3009-replanning"></a>
 
-### F3009 그래프 재계획 — 구현·검증·사용자 확인 완료
+### F3009 그래프 재계획 — 커밋 완료(`1dc3228`)
 
 `run`은 `analyze→resolve_locations→build_plan→execute_plan→judge→replan`으로 실행한다. 필요하면 `replan→judge`를 최대2회 반복하고 종료 뒤에만 `enrich→END`로 간다. 분석·계획 모델을 다시 부르거나 최초 실행기를 중첩 실행하지 않는다.
 
@@ -333,6 +336,24 @@ python -m fuelroute run --message '대구에서 서울로 휘발유 주유 추�
 - `data.replanning`의 `replan_count`, `rounds`, `stop_reason`, `next_input`으로 실제 회차·종료 이유·다음 입력 안내를 확인한다. `execution.calls/steps[].round_index`는 최초0/추가1~2다.
 
 신규27개·전체319개 테스트와 실제 상한 종료 검증을 통과했다. 대구→서울 요청에 의도적으로1분 도착 상한을 주어 후보9곳·추가2회 뒤 `evaluation_budget_exhausted`로 종료했다. 실제 GMS2·길찾기19·Opinet12회였고 Local·휴게소는0회다. 후보 재사용·새 검색점에서의 추천 성공 분기는 모의 검증이며 실제 추천 성공으로 합치지 않는다. [상세 기록](docs/DEVELOPMENT.md#f3009-replanning), [실제 실행 근거](docs/verification/2026-11-19-graph-replanning.json)를 참고한다.
+
+<a id="f3010-memory"></a>
+
+### F3010 대화 맥락 — 구현·검증·사용자 확인 완료
+
+`analyze`, `plan`, `run`에 같은 `--session-id`를 주면 검증된 조건·짧은 직전 요청/응답 요약을 SQLite에서 이어받는다. 기본 DB는 `data/fuelroute.sqlite3`이고 선택 `DATABASE_PATH`로 바꿀 수 있다. 키를 추가할 필요는 없다. ID를 생략하면 기존처럼 단독 실행하며 DB를 만들지 않는다.
+
+```bash
+python -m fuelroute analyze --session-id trip-demo --message '대구에서 서울로 휘발유 주유 추천해줘. 주행 가능180km야.'
+python -m fuelroute analyze --session-id trip-demo --message '안전 여유30km야.'
+python -m fuelroute run --session-id trip-demo --message '우회10분 이내로 바꿔서 추천해줘.'
+```
+
+미언급 값만 이어받고 잘못된 새 입력을 이전 정상값으로 숨기지 않는다. 새 지명은 이전 좌표를 지운 뒤 다시 해석한다. km/L량 방식을 바꾸면 반대 방식의 연료량은 지우고 필요한 값을 다시 묻는다. `새 여행/초기화`와 `우회 제한 없애줘` 같은 명시 요청도 현재 원문을 검사한다. 인사·설명만 하면 기존 조건으로 추천하지 않고 여행 맥락을 보존한다.
+
+`data.analysis.field_sources`는 이번 요청/이전 맥락을, `data.session`은 ID·저장 버전·상속 필드를 보여준다. **경로·가격·전체 Tool 응답과 실행 캐시는 다음 발언에 저장하지 않는다.** 후속 `run`은 현재 데이터로 다시 조회한다. 같은 세션을 동시에 갱신하면 `MEMORY_CONFLICT`, 손상·저장 실패는 `MEMORY_ERROR`이며 무조건 덮어쓰거나 자동 재시도하지 않는다.
+
+메모리35개·저장소 의존성1개를 추가해 전체355개 테스트를 통과했다. 실제 GMS4회로 같은 세션의 우회/안전 여유 변경과 다른 세션 분리를 확인했고 데이터 API는0회였다. 두 턴의 전체 추천·가격 재조회는 모의 전송으로 별도 검증했다. [상세 기록](docs/DEVELOPMENT.md#f3010-memory), [실제 분석·SQLite 근거](docs/verification/2026-11-19-conversation-memory.json)를 참고한다.
 
 ### 기존 명시적 조건의 추천·재계획 실행
 
@@ -385,7 +406,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-현재는 **F3009 그래프 재계획의 사용자 확인을 마치고 기능별 커밋으로 기록하는 단계**다. 전체319개 테스트와 실제2회 상한 종료를 확인했으며 다음 개발 작업은 F3010 대화 맥락 유지다. F3008과 폴더 재구성 커밋 이력은 위 표에 보존했다.
+F3009는 `1dc3228`에 커밋했다. 현재는 **F3010 대화 맥락의 사용자 확인을 마치고 별도 기능 커밋으로 기록하는 단계**다. 전체355개 테스트와 실제 GMS4회 맥락 분석을 확인했다. 다음은 F3011 최종 응답 생성이다.
 
 완료된 내용:
 

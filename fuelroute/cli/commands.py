@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     출력이다. 예: doctor 또는 --help. 명령을 정의하는 과정에서 HTTP를 실행하지 않는다.
     analyze는 F3005 분석·필요한 위치 검색, plan은 준비된 입력의 F3006 계획까지 수행한다.
     run은 조회·판정 후 필요할 때 최대2회 재계획하며 모델은 추가 호출하지 않는다.
-    DB·최종 문장은 후속 단계다.
+    세션ID를 지정하면 검증 조건·요약을 SQLite에 저장한다. 실행 로그·최종 문장은 후속이다.
     """
     parser = argparse.ArgumentParser(description="FuelRoute 환경·API 독립 검증")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -43,11 +43,17 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("analyze", "F3005 분석·위치 해석·누락/오류 확인 (GMS 1회)"),
         ("plan", "F3006 작업 순서 수립 (GMS 최대 2회, 실행 Tool 호출 없음)"),
-        ("run", "F3007~F3009 조회·제약 판정·최대2회 재계획 (GMS 최대 2회와 데이터 API 호출)"),
+        (
+            "run",
+            "F3007~F3010 조회·제약 판정·재계획·선택 대화 맥락 (GMS 최대 2회와 데이터 API 호출)",
+        ),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("--message", required=True, help="주행 조건을 포함한 요청 원문")
         command.add_argument("--reference-date", help="상대 날짜 기준 YYYY-MM-DD, 기본 실행일 KST")
+        command.add_argument(
+            "--session-id", help="같은 대화에 재사용할 ID; 지정하면 검증 조건·요약을 SQLite에 저장"
+        )
     gms = commands.add_parser("gms", help="GMS 텍스트·조건 추출·Tool 왕복 검증")
     gms.add_argument("--mode", choices=["text", "conditions", "tool"], default="text")
     nearby = commands.add_parser("opinet-nearby", help="KATEC 직접 입력으로 Opinet 인증 확인")
@@ -116,7 +122,9 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
     tool-schemas는 HTTP 없이 계약만 반환한다. 두 명령도 LLM이나 DB를 사용하지 않는다.
     analyze는 GMS1회·필요한 Local 검색, plan은 준비된 요청에 계획 GMS1회를 추가한다.
     run은 준비된 계획을 조회·판정·상한 있는 재계획에 연결하고 핵심 실패는 종료1이다. 계획 보류/
-    생략은 성공 데이터로 구분한다. 재계획 종료 근거도 출력하며 DB·로그 파일은 쓰지 않는다.
+    생략은 성공 데이터로 구분하고 재계획 종료 근거도 출력한다.
+    --session-id가 있으면 설정의 SQLite에 조건/요약만 저장하고
+    지정하지 않으면 DB를 만들지 않는다. 같은 세션의 경로/가격은 재조회하며 로그 파일은 없다.
     """
     if args.command == "doctor":
         status = {
@@ -147,6 +155,7 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
             reference_date=TypeAdapter(date).validate_python(args.reference_date)
             if args.reference_date
             else None,
+            **({"session_id": args.session_id} if args.session_id is not None else {}),
         )
     async with httpx.AsyncClient() as client:
         if args.command == "tool-schemas":

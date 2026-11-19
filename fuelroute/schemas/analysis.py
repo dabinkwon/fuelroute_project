@@ -37,8 +37,35 @@ class RawCoordinate(BaseModel):
     latitude: float = Field(description="사용자가 명시한 WGS84 위도(도)")
 
 
+class ConditionRemoval(BaseModel):
+    """현재 발언에서 명시적으로 제거·미정 처리한 조건과 해당 원문 근거."""
+
+    model_config = ConfigDict(extra="forbid")
+    field: Literal[
+        "origin_label",
+        "destination_label",
+        "origin",
+        "destination",
+        "trip_date",
+        "arrival_date",
+        "departure_time",
+        "arrival_deadline",
+        "fuel_type",
+        "sort_by",
+        "remaining_range_km",
+        "reserve_range_km",
+        "current_fuel_l",
+        "reserve_fuel_l",
+        "avg_efficiency_kmpl",
+        "max_detour_min",
+        "max_detour_km",
+        "refuel_stop_min",
+    ] = Field(description="명시적으로 없애거나 모름/미정으로 바꾼 조건명; 단순 미언급은 제외")
+    quote: str = Field(min_length=1, max_length=1000, description="제거 요청을 복사한 현재 원문")
+
+
 class ExtractedRequest(BaseModel):
-    """모델 출력 양식. 모든 미언급 조건은 null이며 기본 연료·좌표를 만들지 않는다."""
+    """현재 발언의 추출 양식. 미언급 조건은null, 초기화/제거는 명시 원문이 있을 때만 채운다."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     intent: Literal["recommend", "greeting", "explain", "other"] = Field(
@@ -78,6 +105,14 @@ class ExtractedRequest(BaseModel):
     max_detour_km: Mention[float] | None = Field(default=None, description="허용 추가 거리(km)")
     refuel_stop_min: Mention[float] | None = Field(
         default=None, description="사용자가 예상한 주유·정차 시간(분), 0도 명시값이며 기본값 없음"
+    )
+    reset_context: Mention[Literal[True]] | None = Field(
+        default=None, description="새 여행/처음부터/초기화를 명시한 현재 원문만; 그 밖에는 null"
+    )
+    clear_fields: list[ConditionRemoval] = Field(
+        default_factory=list,
+        max_length=18,
+        description="현재 발언에서 명시적으로 제거한 조건만; 미언급 조건은 여기 넣지 않음",
     )
 
 
@@ -124,9 +159,14 @@ class RequestAnalysis(BaseModel):
         default_factory=dict
     )
     warnings: list[str] = Field(default_factory=list)
+    field_sources: dict[str, Literal["current", "memory"]] = Field(
+        default_factory=dict, description="이번 요청의 원문·위치 해석 또는 같은 세션의 검증 조건"
+    )
 
 
 FIELD_LABELS = {
+    "context_reset": "새 여행을 시작하거나 이전 조건을 초기화할지 여부",
+    "condition_removal": "제거하거나 미정으로 바꿀 조건",
     "origin": "출발 위치(지명·주소)",
     "destination": "목적 위치(지명·주소)",
     "origin_label": "출발 지명",

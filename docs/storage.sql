@@ -1,5 +1,12 @@
 -- 오늘 검증할 저장 설계. 실제 서비스 Repository/CRUD 구현은 후속 작업이다.
+-- F3010 conversation_memory만 실제 Repository로 연결했다. 로그/계획 CRUD는 후속이다.
 PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS conversation_memory (
+    session_id TEXT PRIMARY KEY NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    context_json TEXT NOT NULL CHECK (json_valid(context_json))
+);
 
 CREATE TABLE IF NOT EXISTS execution_sessions (
     session_id TEXT PRIMARY KEY NOT NULL,

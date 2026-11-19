@@ -1,4 +1,4 @@
-"""함수 주입으로 구성한 F3005~F3009 분석·계획·실행·판정·재계획 그래프."""
+"""함수 주입으로 구성한 F3005~F3010 분석·계획·판정·재계획·대화 맥락 그래프."""
 
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from fuelroute.agent.analysis import analyze_conditions, refresh_analysis
 from fuelroute.agent.execution import PlanExecutionSession, enrich_rest_area
 from fuelroute.agent.llm import llm_analyze, llm_plan
+from fuelroute.agent.memory import merge_conditions, remember_turn
 from fuelroute.agent.planning import finalize_plan, prepare_plan
 from fuelroute.agent.replanning import replan_stop_reason, stop_replanning
 from fuelroute.calculations.constraints import apply_judgement, judge_execution
@@ -19,14 +20,17 @@ from fuelroute.clients.kakao_local import resolve_location
 from fuelroute.core.config import Settings
 from fuelroute.core.contracts import ToolResult
 from fuelroute.core.errors import ProbeFailure
+from fuelroute.core.redaction import redact
 from fuelroute.core.results import run_probe
 from fuelroute.schemas.analysis import AnalysisInput, ExtractedRequest, RequestAnalysis
 from fuelroute.schemas.coordinates import Coordinate
 from fuelroute.schemas.execution import PlanExecution
 from fuelroute.schemas.judgement import TripJudgement
 from fuelroute.schemas.locations import LocationMatchSet
+from fuelroute.schemas.memory import ConversationMemory, SessionKey
 from fuelroute.schemas.planning import PlanProposal, WorkPlan
 from fuelroute.schemas.replanning import ReplanOutcome, ReplanRound, ReplanState
+from fuelroute.storage.conversations import ConversationStore, SQLiteConversationStore
 
 Analyzer = Callable[[str], Awaitable[ExtractedRequest]]
 
@@ -49,7 +53,7 @@ Replanner = Callable[[WorkPlan, PlanExecution, TripJudgement, int], Awaitable[Re
 
 
 class State(TypedDict, total=False):
-    """원문·분석·계획·실행·판정·재계획 횟수/근거를 전달한다. Memory·이벤트는 후속 작업이다."""
+    """원문·검증 조건·짧은 대화 맥락·계획·실행·판정·재계획 근거. 이벤트 저장은 후속이다."""
 
     user: str
     analysis: dict
@@ -58,6 +62,8 @@ class State(TypedDict, total=False):
     execution: dict
     judgement: dict
     replanning: dict
+    session_id: str | None
+    memory: dict
 
 
 def make_graph(
@@ -70,6 +76,7 @@ def make_graph(
     judge: Judge | None = None,
     enricher: Enricher | None = None,
     replanner: Replanner | None = None,
+    memory: ConversationMemory | None = None,
 ) -> CompiledStateGraph:
     """분석·선택 위치 검색·선택 계획 함수를 주입받아 실행 전 그래프를 만든다.
 
@@ -84,8 +91,9 @@ def make_graph(
     executor가 있으면 계획 뒤 execute_plan을 연결하고 준비된 계획만 한 회차 실행한다.
     executor를 쓰려면 llm_plan_fn도 필요하다. 구성 오류는ValueError이며 실행 실패는
     State.execution에 보존한다. judge가 있으면 실행 뒤 순수 제약 판정과 선택 보조 조회를
-    연결한다. judge에는executor, enricher에는judge가 필요하다. Memory·DB·이벤트·최종
-    문장은 후속 단계다. 추가 판정은 API/LLM을 사용하지 않는다. replanner에는judge가
+    연결한다. judge에는executor, enricher에는judge가 필요하다. memory는 같은 ID의 검증 조건·요약이며
+    병합 노드에서만 읽는다. DB 저장은 상위 진입점이 담당하고 이벤트·최종 문장은 후속이다.
+    추가 판정은 API/LLM을 사용하지 않는다. replanner에는judge가
     필요하며 judge→replan→judge로 추가 회차를최대2번 실행한다. 최초실행기는반복하지
     않고 주입 재계획기만 한 회차씩 호출한다. 인증/입력/평가/회차 상한은호출전에검사한다.
     State.replanning에회차·종료사유·입력안내를남기며 최종판정뒤에만enrich한다.
@@ -94,8 +102,10 @@ def make_graph(
     async def analyze(state: State) -> dict:
         """원문을 검증해 주입 분석기를 호출하고 조건·누락·오류를 State에 갱신한다.
 
-        현재 요청만 읽으며 이전 analysis를 참고하지 않는다. 잘못된 원문은 모델 호출
-        전에 거절한다. 모델의 값은 원문 근거와 다시 대조하며 Tool 실행·저장은 없다.
+        현재 원문만 근거로 추출값을 검증하고 같은 세션의 memory가 있으면 미언급 조건만
+        병합한다. 잘못된 원문은 모델 호출 전에 거절하며 새 지명/무효 값이 이전 정상값에
+        가려지지 않게 한다. 반환 analysis는 범위·필수값·출처를 재검사한다. 이 노드에서는
+        Tool·DB 저장을 하지 않는다. 예:우회10분만 바꿔도 기존 출발/목적을 이어받는다.
         """
         query = AnalysisInput(user=state.get("user", ""))
         if not query.user.strip():
@@ -104,8 +114,19 @@ def make_graph(
             extracted = ExtractedRequest.model_validate(await llm_analyze_fn(query.user))
         except ValidationError as exc:
             raise ProbeFailure("INVALID_RESPONSE", "요청 분석 출력 계약을 확인하세요.") from exc
-        result = analyze_conditions(query.user, extracted, reference_date)
-        return {"analysis": result.model_dump(mode="json")}
+        current = analyze_conditions(query.user, extracted, reference_date)
+        result = merge_conditions(query.user, extracted, current, memory)
+        return {
+            "analysis": result.model_dump(mode="json"),
+            "session_id": memory.session_id if memory else None,
+            "memory": {
+                "revision": memory.revision,
+                "last_request_summary": memory.last_request_summary,
+                "last_response_summary": memory.last_response_summary,
+            }
+            if memory
+            else {},
+        }
 
     if executor is not None and llm_plan_fn is None:
         raise ValueError("실행 노드에는 계획 함수가 필요합니다.")
@@ -386,6 +407,7 @@ def make_graph(
                         Coordinate(longitude=selected.longitude, latitude=selected.latitude),
                     )
                     analysis.coordinate_sources[field] = selected.source
+                    analysis.field_sources[field] = "current"
                     if selected.match_level == "area":
                         role = "출발" if field == "origin" else "도착"
                         analysis.warnings.append(
@@ -417,18 +439,21 @@ async def analyze_request(
     analyzer: Analyzer | None = None,
     reference_date: date | None = None,
     location_resolver: LocationResolver | None = None,
+    session_id: str | None = None,
+    memory_store: ConversationStore | None = None,
 ) -> ToolResult[dict]:
-    """분석 전용 그래프를 실행하고 성공·예상 가능한 실패를 공통 JSON으로 반환한다.
+    """분석·위치 해석·선택 세션 병합을 실행하고 성공/예상 실패를 공통 형식으로 반환한다.
 
-    user는 1~5000자 원문이다. reference_date 기본값은 실행 시점 KST 날짜다. analyzer가
-    없으면 설정된 GMS를 1회 호출하고, 테스트 주입이면 GMS 설정·클라이언트를 사용하지
-    않는다. 실제 GMS 경로에서는 지명만 있는 위치를 Kakao Local로 자동 검색하며 위치당
-    주소 1회·필요할 때 키워드 1회, 두 위치 최대 4회다. 테스트 분석기만 주입하면 자동
-    네트워크 검색을 하지 않으며 location_resolver도 주입해 검증할 수 있다.
-    누락/범위 오류는 성공 data.analysis의 입력 보완 상태로, 설정·인증·출력
-    오류는 공통 error로 구분한다. 아직 추천을 실행하거나 대화 맥락을 유지하지 않는다.
-    예: await analyze_request('서울 가는 길에 주유', settings)는 누락 목록을 반환한다.
-    DB·로그 파일·길찾기·주유소 API·재시도는 없다. 비밀값은 run_probe에서 정제한다.
+    user는1~5000자, reference_date는 선택 date이며 기본은 실행일KST다. analyzer가 없으면
+    GMS1회, 주입이면 해당 분석 함수를 사용한다. 실제 GMS 경로의 지명은 Local로 최대4회
+    해석하며 주입 분석기만 있으면 자동 위치 검색을 하지 않는다. location_resolver도
+    주입할 수 있다. 누락/무효 입력은 data.analysis의 보완 상태이고 인증/출력은 공통 오류다.
+    session_id가 있으면 최대64자 ID를 검사한 뒤 memory_store 또는 기본 SQLite에서 조건을
+    읽고 이번에 바뀐 값만 병합한다. 미지정은 기존 단독 요청이며 DB를 만들지 않는다.
+    같은 ID의 완료한 분석은 정제된 조건/짧은 요약으로 저장하고 data.session에 버전을 준다.
+    저장소 손상은MEMORY_ERROR, 동시 갱신은MEMORY_CONFLICT이며 자동 재시도는 없다.
+    길찾기·주유소 조회·추천·로그 파일·추가 요약 LLM은 없다. 예:같은 ID의 두 번째
+    '안전 여유30km'는 이전 출발/목적·주행거리와 합쳐 누락 여부를 다시 확인한다.
     """
     return await _run_request(
         user,
@@ -438,6 +463,8 @@ async def analyze_request(
         location_resolver=location_resolver,
         include_plan=False,
         planner=None,
+        session_id=session_id,
+        memory_store=memory_store,
     )
 
 
@@ -449,17 +476,20 @@ async def plan_request(
     planner: Planner | None = None,
     reference_date: date | None = None,
     location_resolver: LocationResolver | None = None,
+    session_id: str | None = None,
+    memory_store: ConversationStore | None = None,
 ) -> ToolResult[dict]:
-    """F3005 분석·위치 해석 뒤 F3006 작업 계획까지 실행해 공통 결과를 반환한다.
+    """분석·선택 맥락 병합·위치 해석 뒤 검증된 작업 계획을 공통 결과로 반환한다.
 
-    user는1~5000자, 기준일은 선택 date이며 기본 실행일 KST다. 실제 경로는 GMS 분석1회,
-    필요한 위치 조회 최대4회, 준비된 추천에 한해 GMS 계획1회다. analyzer/planner와 선택
-    location_resolver를 각각 주입하면 같은 그래프를 오프라인 검증한다. 테스트 분석기를
-    주입한 경우 자동 위치 조회는 없으며 계획기 미주입이면 준비된 요청은 GMS를 사용한다.
-    성공 data.analysis와 data.plan을 반환하고 계획 보류/생략은 성공 상태 안에서 구분한다.
-    ready는 순서 준비이며 조회·추천 성공이 아니다. 모델 출력/순서/인증 오류는 공통 실패다.
-    예: 연료가 없으면 plan.status=needs_user_input이고 계획 모델 호출은0회다.
-    길찾기·주유소·휴게소 조회 실행·계산·DB·Memory·이벤트·자동 재시도는 없다.
+    user는1~5000자, 선택 기준일은 date이며 기본 KST다. GMS는 분석1회와 준비된 추천의
+    계획1회, Local은 최대4회다. analyzer/planner/location_resolver를 각각 주입할 수 있다.
+    성공 data.analysis/plan의 ready는 입력·순서 준비이며 실제 추천 성공이 아니다.
+    session_id와 memory_store는 analyze_request와 같은 세션/저장 계약이다. 현재 발언에
+    없는 검증 조건은 이어받되 무효 새 값은 이전 정상값으로 숨기지 않는다. 준비 안 된
+    요청은 계획 모델을 호출하지 않는다. 계획까지 그래프가 완료되면 조건/요약을 저장하고
+    버전을 반환한다. 분석/계획 모델 오류로 그래프가 실패하면 저장본을 변경하지 않는다.
+    설정/인증/출력/메모리 실패는 공통 오류다. 경로·가격 조회·추천·이벤트·자동 재시도는
+    없다. 예:두 번째 우회10분 요청은 기존 출발·목적을 포함한 새 계획을 만든다.
     """
     return await _run_request(
         user,
@@ -469,6 +499,8 @@ async def plan_request(
         location_resolver=location_resolver,
         include_plan=True,
         planner=planner,
+        session_id=session_id,
+        memory_store=memory_store,
     )
 
 
@@ -485,17 +517,21 @@ async def _run_request(
     executor: Executor | None = None,
     client: httpx.AsyncClient | None = None,
     replanner: Replanner | None = None,
+    session_id: str | None = None,
+    memory_store: ConversationStore | None = None,
 ) -> ToolResult[dict]:
-    """분석/계획/실행 진입점의 요청별 그래프·의존성·클라이언트 수명을 관리한다.
+    """분석/계획/실행 진입점의 요청별 그래프·메모리·클라이언트 수명을 관리한다.
 
-    원문1~5000자와 선택 기준일을 AnalysisInput으로 검사한다. include_plan만 계획기를,
-    include_execution만 최초 실행·판정·상한 있는 재계획·최종 보조 연결을 활성화한다.
-    기본 실행은 요청별 Session의 캐시를 최대2추가회차까지 유지하고 종료 시 폐기한다.
-    사용자 주입 executor에는 명시한 replanner만 연결하며 임의 네트워크 재계획을 하지
-    않는다. 주입 client는 닫지 않고 직접 생성한 것만 닫는다. 핵심 실행 실패는 공통
-    error/data=None, 정상 부분 실패는 구조화 결과에 보존한다. 프로그래밍 오류는 숨기지
-    않는다. DB·Memory·최종 문장·동일 실패 재시도는 없다. 예:include_plan=False면 기존
-    분석 CLI의 호출/출력을 유지하고, 실행이면 data.replanning에 회차·종료 근거를 더한다.
+    원문1~5000자·선택 date를 검사한다. include_plan은 계획기를, include_execution은 최초
+    실행·판정·최대2회 재계획·마지막 보조를 활성화한다. 세션 ID가 있을 때만 SQLite 또는
+    주입 저장소를 읽고 정제한 맥락을 분석 모델·병합 노드에 전달한다. ID 없는 단독 요청은
+    DB에 접근하지 않는다. 그래프 완료 후 조건·짧은 요약만 CAS로 저장한다. 실제 Tool
+    캐시·경로·가격은 다음 발언에 저장/재사용하지 않고 항상 현재 요청에서 조회한다.
+    주입 executor에는 명시 replanner만 연결한다. 주입 HTTP client는 닫지 않고 내부 생성
+    client만 닫는다. 핵심 조회 실패는 data=None/error이며 그래프가 반환한 확인 조건은
+    저장한다. 분석/계획 실패는 이전 메모리를 유지한다. 메모리 손상/충돌은 전용 공통
+    오류이고 프로그래밍 오류는 숨기지 않는다. 로그·계획 DB CRUD·최종 문장·자동 재시도는
+    없다. 예:같은 세션이라도 새 요청의 경로·주유 가격은 이전 Tool 응답을 재사용하지 않는다.
     """
 
     async def operation() -> dict:
@@ -507,10 +543,25 @@ async def _run_request(
         """
         query = AnalysisInput(user=user, reference_date=reference_date)
         today = query.reference_date or datetime.now(timezone(timedelta(hours=9))).date()
+        previous = None
+        store = None
+        if session_id is None and memory_store is not None:
+            raise ProbeFailure("INVALID_INPUT", "맥락 저장소를 사용하려면 session_id가 필요합니다.")
+        if session_id is not None:
+            key = SessionKey(session_id=session_id)
+            store = memory_store or SQLiteConversationStore(settings.database_path)
+            previous = await store.load(key.session_id) or ConversationMemory(
+                session_id=key.session_id
+            )
+            if previous.session_id != key.session_id:
+                raise ProbeFailure("MEMORY_ERROR", "다른 세션의 대화 맥락을 사용할 수 없습니다.")
+            previous = ConversationMemory.model_validate(
+                redact(previous.model_dump(mode="json"), settings.secret_values())
+            )
 
         async def gms_analyze(message: str) -> ExtractedRequest:
             """현재 설정·기준일만 캡처해 GMS 호출 함수를 주입 가능한 계약으로 맞춘다."""
-            return await llm_analyze(message, settings, today)
+            return await llm_analyze(message, settings, today, memory=previous)
 
         async def gms_plan(analysis: RequestAnalysis) -> PlanProposal:
             """현재 요청의 정규화 분석을 GMS 계획기에 전달한다. 실행 Tool은 호출하지 않는다."""
@@ -556,6 +607,7 @@ async def _run_request(
                 replanner=(replanner or session.replan)
                 if include_execution and (executor is None or replanner is not None)
                 else None,
+                memory=previous,
             )
             output = await graph.ainvoke({"user": query.user})
             return output, [name for name in graph.get_graph().nodes if not name.startswith("__")]
@@ -576,6 +628,34 @@ async def _run_request(
         }
         if include_plan:
             data.update(plan=output["plan"], planner_mode="injected" if planner else "gms")
+        if store is not None:
+            remembered = remember_turn(
+                previous,
+                RequestAnalysis.model_validate(output["analysis"]),
+                execution=PlanExecution.model_validate(output["execution"])
+                if include_execution
+                else None,
+                judgement=TripJudgement.model_validate(output["judgement"])
+                if include_execution
+                else None,
+            )
+            remembered = ConversationMemory.model_validate(
+                redact(remembered.model_dump(mode="json"), settings.secret_values())
+            )
+            await store.save(remembered, previous.revision)
+            data["session"] = {
+                "session_id": remembered.session_id,
+                "revision": remembered.revision,
+                "memory_loaded": previous.revision > 0,
+                "inherited_fields": [
+                    name
+                    for name, source in output["analysis"]["field_sources"].items()
+                    if source == "memory"
+                ],
+                "last_request_summary": remembered.last_request_summary,
+                "last_response_summary": remembered.last_response_summary,
+                "memory_saved": True,
+            }
         if include_execution:
             execution = PlanExecution.model_validate(output["execution"])
             if execution.error:
@@ -619,21 +699,24 @@ async def execute_request(
     executor: Executor | None = None,
     client: httpx.AsyncClient | None = None,
     replanner: Replanner | None = None,
+    session_id: str | None = None,
+    memory_store: ConversationStore | None = None,
 ) -> ToolResult[dict]:
-    """자연어 분석·계획·실제 조회·제약 판정과 최대2회 재계획 뒤 보조정보를 반환한다.
+    """조건 맥락을 이어 분석·계획·실제 조회·판정·최대2회 재계획과 보조정보를 반환한다.
 
-    user는1~5000자, reference_date는 선택 date이며 기본은 실행일 KST다. GMS는 분석1회와
-    준비된 추천의 계획1회뿐이다. 위치 검색은 최대4회, 이후 최초+최대2추가회차를 수행한다.
-    미평가 후보를 먼저 사용하고 없을 때 안전 구간의 앞쪽 검색점을 하나 추가한다.
-    주행 조건·안전 여유는 완화하지 않고 기본 회차3곳/전체9곳 평가를 넘지 않는다.
-    기본 조회 상한은 Opinet14·Mobility19·휴게소1논리조회(최대10HTTP)이며 최초만이면6/7회다.
-    성공 data에는 analysis/plan/results/execution/judgement/replanning과 의존성 모드가 있다.
-    replanning은 추가 횟수·회차·종료 사유·다음 입력 안내다. 시간 입력 부족·인증·한도는
-    재계획하지 않고, 보조정보 실패는 확정 추천을 유지한다. 핵심 실패는 공통error/data=None다.
-    analyzer/planner/resolver/executor/client/replanner는 오프라인 주입용이며 executor를
-    주입하면 replanner도 명시해야 추가 회차가 활성화된다. 주입 client는 닫지 않는다.
-    DB·Memory·이벤트·최종 문장·동일 실패 재시도는 없다. 예:km 누락은 조회 없이 입력 보완,
-    전체 제외는 상한까지 기존 후보를 평가하고 정해진 종료 이유를 반환한다.
+    user는1~5000자, 기준일은 선택 date이며 기본KST다. GMS는 분석1회+준비된 추천의 계획1회,
+    Local은 최대4회다. 재계획은 미평가 후보 우선이며 기본 회차3/전체9곳·추가2회에서 멈춘다.
+    안전 여유·유종·우회/시간 상한은 완화하지 않는다. 전체 조회 상한은Opinet14/Mobility19,
+    휴게소1논리조회/최대10HTTP다. 입력 부족·핵심 인증/한도는 추가 회차를 하지 않는다.
+    data는analysis/plan/results/execution/judgement/replanning과 의존성 모드를 포함한다.
+    session_id가 있으면 같은 세션의 검증 조건과 요약만 이어받고 data.session에 ID/버전/
+    상속 필드를 준다. 기본 SQLite는 settings.database_path, 주입은 memory_store다.
+    현재 발언의 경로·가격은 새로 조회하고 이전 요청의 Tool 캐시를 다음 발언에 쓰지 않는다.
+    모델/resolver/executor/client/replanner는 오프라인 주입용이며 주입 executor의 재계획은
+    replanner를 함께 명시해야 한다. 주입 client는 닫지 않는다. 핵심 오류는공통data=None,
+    보조 실패는 확정 추천을 유지한다. DB 맥락 실패/충돌도 공통 코드로 알리며 이벤트·계획
+    CRUD·최종 문장·동일 실패 재시도는 후속이다. 예:두 번째 '우회10분'은 같은 ID의 위치·
+    km 조건을 유지해 현재 데이터로 다시 추천한다.
     """
     return await _run_request(
         user,
@@ -647,4 +730,6 @@ async def execute_request(
         executor=executor,
         client=client,
         replanner=replanner,
+        session_id=session_id,
+        memory_store=memory_store,
     )

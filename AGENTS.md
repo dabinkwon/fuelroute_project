@@ -60,11 +60,13 @@ FuelRoute는 계기판의 주행 가능 거리(km)에서 안전 여유(km)를 �
 | `core/` | 설정·공통 응답·오류·비밀값 정제 |
 | `api/` | FastAPI 서버와 HTTP 라우터 |
 | `cli/` | 터미널 명령·GMS 검증·경로 연결 진단 실행기 |
+| `storage/` | SQLite 저장소; 현재 대화 맥락, 이후 계획/로그 Repository는 별도 책임으로 추가 |
 
 - `core`는 다른 업무 계층을 가져오지 않는다. `schemas`는 `core`와 다른 `schemas`만 참조한다.
 - `calculations`는 `core`·`schemas`·다른 계산 모듈만 참조하고 API·LLM·Agent·Tool 실행을 하지 않는다.
 - `clients`는 `core`·`schemas`·다른 클라이언트만 참조한다. Agent 실행 순서나 추천 정책을 넣지 않는다.
 - 공유 모델을 사용하려고 상위 실행 모듈을 import하지 말고 `schemas`에서 직접 가져온다. 계산식·API 정책 변경과 파일 이동은 별도 변경으로 구분해 검증·커밋한다.
+- 같은 대화의 조건은 `agent/memory.py`, 입력·저장 계약은 `schemas/memory.py`, 실제 SQLite I/O는 `storage/conversations.py`에서 관리한다. 세션을 넘나들어 조건·원본 Tool 결과·실행 캐시를 공유하지 않는다.
 
 - HTTP 라우터, Agent 흐름, 외부 API 클라이언트·Tool, 계산 서비스, 저장소의 책임을 분리한다.
 - LLM은 요청 분석·계획·Tool 선택·결과 설명을 맡는다. 거리·연료·비용 계산과 제약 판정은 일반 코드로 구현한다.
@@ -126,6 +128,7 @@ FuelRoute는 계기판의 주행 가능 거리(km)에서 안전 여유(km)를 �
 | `OPINET_API_KEY` | Opinet 인증키 |
 | `KAKAO_REST_API_KEY` | Kakao REST API 인증키 |
 | `DATA_GO_KR_SERVICE_KEY` | 휴게소 데이터 API 인증키 |
+| `DATABASE_PATH` | 선택 로컬 SQLite 파일 경로; 기본 `data/fuelroute.sqlite3`, 세션 ID 사용 시 생성 |
 
 - 로컬 키는 `.env`로 분리한다. `.env.example`에는 비밀키를 빈 값으로 두고 공개 설정 예시만 넣는다.
 - `.env`, `.venv/`, 로컬 DB와 민감한 응답 파일은 Git에서 제외한다. 키·인증 헤더·키가 포함된 요청 URL을 코드·UI·로그·샘플에 노출하지 않는다.

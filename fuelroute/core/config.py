@@ -1,5 +1,6 @@
 """환경변수·로컬 .env 설정과 제공사별 필수값 검사. 비밀키는 SecretStr로 보관한다."""
 
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
@@ -24,6 +25,23 @@ class Settings(BaseSettings):
     kakao_rest_api_key: SecretStr | None = None
     data_go_kr_service_key: SecretStr | None = None
     http_timeout_seconds: float = Field(default=20, gt=0, le=120, allow_inf_nan=False)
+    database_path: Path = Field(
+        default=Path("data/fuelroute.sqlite3"),
+        description="로컬 SQLite 파일, 세션 기능 사용 시 생성",
+    )
+
+    @field_validator("database_path", mode="before")
+    @classmethod
+    def file_database(cls, value: object) -> object:
+        """대화 맥락에는 스레드·프로세스 간 재사용할 실제 SQLite 파일 경로를 요구한다.
+
+        기본값은data/fuelroute.sqlite3이며 설정만으로 파일을 생성하지 않는다. 빈 경로나
+        :memory:는ValueError로 거절해 CLI에서CONFIG_ERROR로 안내한다. 다른 경로 검사는
+        저장소의 파일 열기 단계가 담당한다. HTTP·DB·로그 부작용은 없다.
+        """
+        if str(value).strip() in {"", ":memory:"}:
+            raise ValueError("SQLite 파일 경로를 설정하세요.")
+        return value
 
     @field_validator(
         "gms_api_key",

@@ -34,7 +34,7 @@ python -m fuelroute tool-schemas
 
 LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하고 실행 wrapper가 Pydantic으로 같은 입력을 검사한다. `ainvoke(dict)`와 객체형 `ToolCall.args`를 사용한다. JSON 객체 대신 문자열을 넘기면 SDK가 wrapper 실행 전에 거절할 수 있다. `ToolMessage`를 받은 실행기는 본문의 `ok`를 확인해야 한다. 등록만으로 HTTP·LLM·DB 호출은 없고, `AsyncClient`의 종료는 호출자 책임이다. [LangChain 공식 Tool 문서](https://docs.langchain.com/oss/python/langchain/tools)
 
-실제 응답 기반 추천 연결과 기존 비용의 로컬 재판정은 [추천 검증 기록](verification/2026-11-18-recommendation.json)에 구분했다. 재계획·캐시·오류 분기는 모의 응답으로 검증했으며 F3009까지 조회·판정·재계획 그래프를 연결했고 Memory·최종 문장·HTTP API·화면은 후속이다.
+실제 응답 기반 추천 연결과 기존 비용의 로컬 재판정은 [추천 검증 기록](verification/2026-11-18-recommendation.json)에 구분했다. 재계획·캐시·오류 분기는 모의 응답으로 검증했으며 F3009까지 조회·판정·재계획 그래프를 연결했고 조건 맥락은 F3010에서 연결했고 최종 문장·HTTP API·화면은 후속이다.
 
 ## F3007의 계획 실행 연결
 
@@ -50,3 +50,8 @@ LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하�
 새 모델 Tool을 등록하지 않는다. 그래프는 기존 외부 조회 네 종류와 일반 코드 계산을 요청별 세션으로 재사용하며 추가 모델 호출 없이 최대2회·전체 평가 예산에서 종료한다. 공개 일곱 Tool의 직렬화 설명·스키마는 기존 JSON과 같다. 추가 검색은 미평가 후보가 없을 때 한 점만, 상세/경로는 이전에 평가하지 않은 ID만 진행한다. 같은 경로의 성공/실패는 캐시한다.
 
 `data.replanning`은 회차·종료 사유·다음 입력 안내, `execution.calls/steps[].round_index`는 최초0/추가1~2를 반환한다. 기존 ToolResult 최상위 계약은 바꾸지 않는다. 보조 조회는 모든 판정/재계획 종료 뒤 확정 후보 한 곳에만 연결한다. 실제 상한 종료와 모의 성공 분기는 [검증 기록](DEVELOPMENT.md#f3009-replanning)에서 구분한다.
+
+
+## F3010의 조건 맥락
+
+Memory는 새 Tool이 아니며 기존 일곱 공개 Tool의 설명/스키마는 바꾸지 않는다. 세션에는 검증 조건과 짧은 요청/응답 요약만 저장하고 후보/상세/경로 Tool 응답이나 실행 캐시는 저장하지 않는다. 후속 run은 병합한 조건으로 현재 경로·가격을 조회한다. `analysis.field_sources`와 `data.session`으로 조건의 출처/세션 버전을 구분한다. 같은 요청 안의 F3009 캐시와 다른 요청 사이의 F3010 조건 맥락을 구분한다. [검증 기록](DEVELOPMENT.md#f3010-memory)을 따른다.

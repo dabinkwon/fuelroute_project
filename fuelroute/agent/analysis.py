@@ -137,13 +137,59 @@ def _grounded(field: str, mention: Mention, user: str, reference_date: date) -> 
     return bool(value.strip()) and value in quote
 
 
+def condition_issues(conditions: TripConditions, mode: str) -> list[str]:
+    """한 발언 또는 세션 통합 뒤의 조건에 같은 수치·입력 방식 검사를 적용한다.
+
+    conditions는 유한값의 TripConditions, mode는 distance/fuel이다. 주행 가능거리·연료·
+    연비는 양수, 여유/상한은 비음수이며 여유<현재량이어야 한다. km와L량 혼용은range_input.
+    누락은 refresh_analysis가 별도로 처리한다. 반환은 무효 필드명 목록이고 보정·계산·
+    HTTP·저장 부작용은 없다. 예:주행거리를20km로 바꾸고 여유30km를 이어받으면 여유가 무효다.
+    """
+    invalid = []
+    for field in (
+        "remaining_range_km",
+        "reserve_range_km",
+        "current_fuel_l",
+        "avg_efficiency_kmpl",
+        "reserve_fuel_l",
+        "max_detour_min",
+        "max_detour_km",
+        "refuel_stop_min",
+    ):
+        value = getattr(conditions, field)
+        if value is not None and (
+            value < 0
+            or field in {"remaining_range_km", "current_fuel_l", "avg_efficiency_kmpl"}
+            and value == 0
+        ):
+            invalid.append(field)
+    for current, reserve in [
+        ("current_fuel_l", "reserve_fuel_l"),
+        ("remaining_range_km", "reserve_range_km"),
+    ]:
+        if getattr(conditions, current) is not None and getattr(conditions, reserve) is not None:
+            if getattr(conditions, reserve) >= getattr(conditions, current):
+                invalid.append(reserve)
+    distance = any(getattr(conditions, field) is not None for field in DISTANCE_FIELDS)
+    fuel = any(getattr(conditions, field) is not None for field in FUEL_FIELDS[:2])
+    if distance and fuel:
+        invalid.append("range_input")
+    fields = DISTANCE_FIELDS if mode == "distance" else FUEL_FIELDS
+    if all(getattr(conditions, field) is not None for field in fields) and not invalid:
+        RangeConditions.model_validate(
+            conditions.model_dump(include=set(RangeConditions.model_fields))
+        )
+    return list(dict.fromkeys(invalid))
+
+
 def analyze_conditions(
     user: str, extracted: ExtractedRequest, reference_date: date
 ) -> RequestAnalysis:
     """추출 근거·필수값·주행거리/연료/좌표 범위를 코드로 검사해 F3005 결과를 만든다.
 
-    user는 이번 요청 원문이고 reference_date는 상대 날짜 해석 기준이다. 과거 대화는
-    사용하지 않는다(F3010 후속 작업). 기본 필수값은 출발/목적 좌표·유종·주행 가능 거리와
+    user는 이번 요청 원문이고 reference_date는 상대 날짜 해석 기준이다. 현재 발언만
+    검증하며 과거 조건 병합은 memory.merge_conditions가 뒤에서 수행한다.
+    기본 필수값은 출발/목적 좌표·유종·주행 가능 거리와
     안전 여유(km)다. L 연료량이 명시되고 km 입력이 없을 때만 기존 L/연비 방식을 선택한다.
     두 방식의 연료량을 혼용하면 입력 방식을 다시 묻는다. 연비만 있으면 km 방식을 유지한다.
     지명만 있으면 지명을 보존해 후속 위치 검색에 넘긴다. 불명확한 값은 제외하고
@@ -169,41 +215,12 @@ def analyze_conditions(
                     continue
             values[field] = value
     conditions = TripConditions.model_validate(values)
-    for field in (
-        "remaining_range_km",
-        "reserve_range_km",
-        "current_fuel_l",
-        "avg_efficiency_kmpl",
-        "reserve_fuel_l",
-        "max_detour_min",
-        "max_detour_km",
-        "refuel_stop_min",
-    ):
-        value = getattr(conditions, field)
-        if value is not None and (
-            value < 0
-            or (
-                field in {"remaining_range_km", "current_fuel_l", "avg_efficiency_kmpl"}
-                and value == 0
-            )
-        ):
-            invalid.append(field)
-    if conditions.current_fuel_l is not None and conditions.reserve_fuel_l is not None:
-        if conditions.reserve_fuel_l >= conditions.current_fuel_l:
-            invalid.append("reserve_fuel_l")
-    if conditions.remaining_range_km is not None and conditions.reserve_range_km is not None:
-        if conditions.reserve_range_km >= conditions.remaining_range_km:
-            invalid.append("reserve_range_km")
     distance_mentioned = any(getattr(extracted, field) is not None for field in DISTANCE_FIELDS)
     fuel_mentioned = any(getattr(extracted, field) is not None for field in FUEL_FIELDS[:2])
     mode = "fuel" if fuel_mentioned and not distance_mentioned else "distance"
     if distance_mentioned and fuel_mentioned:
         invalid.append("range_input")
-    range_fields = DISTANCE_FIELDS if mode == "distance" else FUEL_FIELDS
-    if all(getattr(conditions, field) is not None for field in range_fields) and not invalid:
-        RangeConditions.model_validate(
-            conditions.model_dump(include=set(RangeConditions.model_fields))
-        )
+    invalid.extend(condition_issues(conditions, mode))
     result = RequestAnalysis(
         intent=extracted.intent,
         reason=extracted.reason,

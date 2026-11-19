@@ -1,0 +1,470 @@
+{
+  "verification_kind": "live_gms_conversation_memory_analysis",
+  "started_at": "2026-11-19T08:12:22.826856+00:00",
+  "completed_at": "2026-11-19T08:12:32.791573+00:00",
+  "elapsed_ms": 9964.355,
+  "model": "gpt-5.4-mini",
+  "http_call_counts": {
+    "gms": 4
+  },
+  "turns": [
+    {
+      "session_id": "trip-demo",
+      "message": "출발(128.6014,35.8714)에서 목적(126.9780,37.5665)으로 휘발유 주유 추천해줘. 주행 가능180km, 안전 여유30km야.",
+      "result": {
+        "ok": true,
+        "tool_name": "analyze_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "주유 추천을 요청했고 출발·목적 좌표와 휘발유, 주행 가능 거리, 안전 여유를 함께 제시했다.",
+            "conditions": {
+              "origin_label": null,
+              "destination_label": null,
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "arrival_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": null,
+              "remaining_range_km": 180.0,
+              "reserve_range_km": 30.0,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": null,
+              "max_detour_km": null,
+              "refuel_stop_min": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type"
+              ],
+              "constraints": [
+                "remaining_range_km",
+                "reserve_range_km"
+              ]
+            },
+            "missing_fields": [],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": false,
+            "ready_for_planning": true,
+            "questions": [],
+            "range_input_mode": "distance",
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": [],
+            "field_sources": {
+              "origin": "current",
+              "destination": "current",
+              "fuel_type": "current",
+              "remaining_range_km": "current",
+              "reserve_range_km": "current"
+            }
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "session": {
+            "session_id": "trip-demo",
+            "revision": 1,
+            "memory_loaded": false,
+            "inherited_fields": [],
+            "last_request_summary": "의도=recommend; 이번에 확인한 조건=origin,destination,fuel_type,remaining_range_km,reserve_range_km",
+            "last_response_summary": "{\"status\": \"ready\", \"recommended_station_id\": null, \"missing_fields\": [], \"reason_codes\": [], \"error_code\": null}",
+            "memory_saved": true
+          }
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "713bf2b5-ac61-4c13-a8e1-58cfe2062df0",
+          "elapsed_ms": 2348.762,
+          "fetched_at": "2026-11-19T08:12:25.178749Z"
+        }
+      }
+    },
+    {
+      "session_id": "trip-demo",
+      "message": "우회10분으로 바꿔줘",
+      "result": {
+        "ok": true,
+        "tool_name": "analyze_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "이전 여행 조건에서 우회 시간 제한을 10분으로 변경해 다시 추천을 요청했다.",
+            "conditions": {
+              "origin_label": null,
+              "destination_label": null,
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "arrival_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": null,
+              "remaining_range_km": 180.0,
+              "reserve_range_km": 30.0,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": 10.0,
+              "max_detour_km": null,
+              "refuel_stop_min": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type"
+              ],
+              "constraints": [
+                "remaining_range_km",
+                "reserve_range_km",
+                "max_detour_min"
+              ]
+            },
+            "missing_fields": [],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": false,
+            "ready_for_planning": true,
+            "questions": [],
+            "range_input_mode": "distance",
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": [],
+            "field_sources": {
+              "origin": "memory",
+              "destination": "memory",
+              "fuel_type": "memory",
+              "remaining_range_km": "memory",
+              "reserve_range_km": "memory",
+              "max_detour_min": "current"
+            }
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "session": {
+            "session_id": "trip-demo",
+            "revision": 2,
+            "memory_loaded": true,
+            "inherited_fields": [
+              "origin",
+              "destination",
+              "fuel_type",
+              "remaining_range_km",
+              "reserve_range_km"
+            ],
+            "last_request_summary": "의도=recommend; 이번에 확인한 조건=max_detour_min",
+            "last_response_summary": "{\"status\": \"ready\", \"recommended_station_id\": null, \"missing_fields\": [], \"reason_codes\": [], \"error_code\": null}",
+            "memory_saved": true
+          }
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "904d4ec2-3bfe-4476-a4aa-7f4e6c6cbf7a",
+          "elapsed_ms": 3839.026,
+          "fetched_at": "2026-11-19T08:12:29.018386Z"
+        }
+      }
+    },
+    {
+      "session_id": "trip-demo",
+      "message": "안전 여유는 50km로 바꿔줘",
+      "result": {
+        "ok": true,
+        "tool_name": "analyze_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "안전 여유 거리 조건을 50km로 변경해 달라는 기존 여행 조건 보완 요청이다.",
+            "conditions": {
+              "origin_label": null,
+              "destination_label": null,
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "arrival_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": null,
+              "remaining_range_km": 180.0,
+              "reserve_range_km": 50.0,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": 10.0,
+              "max_detour_km": null,
+              "refuel_stop_min": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type"
+              ],
+              "constraints": [
+                "remaining_range_km",
+                "reserve_range_km",
+                "max_detour_min"
+              ]
+            },
+            "missing_fields": [],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": false,
+            "ready_for_planning": true,
+            "questions": [],
+            "range_input_mode": "distance",
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": [],
+            "field_sources": {
+              "origin": "memory",
+              "destination": "memory",
+              "fuel_type": "memory",
+              "remaining_range_km": "memory",
+              "reserve_range_km": "current",
+              "max_detour_min": "memory"
+            }
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "session": {
+            "session_id": "trip-demo",
+            "revision": 3,
+            "memory_loaded": true,
+            "inherited_fields": [
+              "origin",
+              "destination",
+              "fuel_type",
+              "remaining_range_km",
+              "max_detour_min"
+            ],
+            "last_request_summary": "의도=recommend; 이번에 확인한 조건=reserve_range_km",
+            "last_response_summary": "{\"status\": \"ready\", \"recommended_station_id\": null, \"missing_fields\": [], \"reason_codes\": [], \"error_code\": null}",
+            "memory_saved": true
+          }
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "bea54049-4471-4a7d-9474-692434eb1f6c",
+          "elapsed_ms": 1771.036,
+          "fetched_at": "2026-11-19T08:12:30.789118Z"
+        }
+      }
+    },
+    {
+      "session_id": "another-trip",
+      "message": "주유 추천해줘. 우회10분 이내로.",
+      "result": {
+        "ok": true,
+        "tool_name": "analyze_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "주유 추천 요청이며 우회 시간 조건이 함께 제시되었다.",
+            "conditions": {
+              "origin_label": null,
+              "destination_label": null,
+              "origin": null,
+              "destination": null,
+              "trip_date": null,
+              "arrival_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": null,
+              "sort_by": null,
+              "remaining_range_km": null,
+              "reserve_range_km": null,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": 10.0,
+              "max_detour_km": null,
+              "refuel_stop_min": null
+            },
+            "condition_groups": {
+              "basis": [],
+              "preferences": [],
+              "constraints": [
+                "max_detour_min"
+              ]
+            },
+            "missing_fields": [
+              "origin",
+              "destination",
+              "fuel_type",
+              "remaining_range_km",
+              "reserve_range_km"
+            ],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": true,
+            "ready_for_planning": false,
+            "questions": [
+              "출발 위치(지명·주소)을 알려주세요.",
+              "목적 위치(지명·주소)을 알려주세요.",
+              "유종(휘발유/경유)을 알려주세요.",
+              "계기판의 주행 가능 거리(km)을 알려주세요.",
+              "남겨둘 안전 여유 거리(km, 주행 가능 거리보다 적게)을 알려주세요."
+            ],
+            "range_input_mode": "distance",
+            "location_results": {},
+            "coordinate_sources": {},
+            "warnings": [],
+            "field_sources": {
+              "max_detour_min": "current"
+            }
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "session": {
+            "session_id": "another-trip",
+            "revision": 1,
+            "memory_loaded": false,
+            "inherited_fields": [],
+            "last_request_summary": "의도=recommend; 이번에 확인한 조건=max_detour_min",
+            "last_response_summary": "{\"status\": \"needs_user_input\", \"recommended_station_id\": null, \"missing_fields\": [\"origin\", \"destination\", \"fuel_type\", \"remaining_range_km\", \"reserve_range_km\"], \"reason_codes\": [], \"error_code\": null}",
+            "memory_saved": true
+          }
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "21ed5c65-0285-4d0c-8245-4bfeb5fbd0b1",
+          "elapsed_ms": 2001.913,
+          "fetched_at": "2026-11-19T08:12:32.791122Z"
+        }
+      }
+    }
+  ],
+  "persisted_snapshot": {
+    "session_id": "trip-demo",
+    "schema_version": 1,
+    "revision": 3,
+    "has_trip": true,
+    "conditions": {
+      "origin_label": null,
+      "destination_label": null,
+      "origin": {
+        "longitude": 128.6014,
+        "latitude": 35.8714
+      },
+      "destination": {
+        "longitude": 126.978,
+        "latitude": 37.5665
+      },
+      "trip_date": null,
+      "arrival_date": null,
+      "departure_time": null,
+      "arrival_deadline": null,
+      "fuel_type": "gasoline",
+      "sort_by": null,
+      "remaining_range_km": 180.0,
+      "reserve_range_km": 50.0,
+      "current_fuel_l": null,
+      "reserve_fuel_l": null,
+      "avg_efficiency_kmpl": null,
+      "max_detour_min": 10.0,
+      "max_detour_km": null,
+      "refuel_stop_min": null
+    },
+    "range_input_mode": "distance",
+    "invalid_fields": [],
+    "unverified_fields": [],
+    "coordinate_sources": {
+      "origin": "user",
+      "destination": "user"
+    },
+    "location_notes": {},
+    "pending_fields": [],
+    "last_request_summary": "의도=recommend; 이번에 확인한 조건=reserve_range_km",
+    "last_response_summary": "{\"status\": \"ready\", \"recommended_station_id\": null, \"missing_fields\": [], \"reason_codes\": [], \"error_code\": null}",
+    "updated_at": "2026-11-19T08:12:30.782060Z"
+  },
+  "scope": {
+    "real_gms_analysis": true,
+    "sqlite_reopened_between_turns": true,
+    "price_route_queries": false,
+    "full_run_requery": "mock transport verification",
+    "temporary_database_removed": true,
+    "note": "같은 세션의 검증 조건·짧은 요약만 이어받는다. 경로·가격·전체 Tool 응답은 저장하지 않는다."
+  },
+  "offline_verification": {
+    "pytest_passed": 355,
+    "new_tests": 36,
+    "conversation_tests": 35,
+    "storage_boundary_tests": 1,
+    "warnings_as_errors": true,
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "pip_check": "passed",
+    "public_tool_contracts_unchanged": 7,
+    "health_status_code": 200,
+    "cli_session_flag": "passed",
+    "secret_scan": "passed",
+    "local_sqlite_files_git_ignored": true,
+    "stateless_requests_create_no_database": true,
+    "full_run_requery_is_mock_transport": true
+  }
+}

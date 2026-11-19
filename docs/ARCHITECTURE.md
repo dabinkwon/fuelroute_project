@@ -274,7 +274,7 @@ created_at
 
 계획은 로그 삭제와 독립적으로 남아야 한다. 세션 로그 삭제 시 이벤트는 함께 삭제하고 계획의 세션 참조는 `NULL`로 바꾸는 정책을 설계한다. 시각은 시간대가 있는 ISO 8601 기준으로 처리하고 화면에서 KST로 표시한다. 오늘은 스키마·관계·샘플 저장 형식을 검증하며 전체 CRUD 구현은 후속 단계다.
 
-실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. 실제 서비스 DB나 Repository는 아직 생성하지 않는다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 `planned_start_at/end_at`으로 시간 충돌 안내를 설계한다. 실제 샘플은 최종 추천이 아닌 `draft-validation-sample`로 구분했다.
+실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. F3010의 conversation_memory만 실제 SQLite Repository로 연결했으며 로그/계획 Repository는 후속이다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 `planned_start_at/end_at`으로 시간 충돌 안내를 설계한다. 실제 샘플은 최종 추천이 아닌 `draft-validation-sample`로 구분했다.
 
 ---
 
@@ -607,7 +607,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 ## F3005~F3008 구현 상태 — 2026-11-19
 
-첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. `analyze` 명령의 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. F3006의 `plan` 명령은 위치 해석 뒤 `build_plan→END`를 연결한다. 비추천 의도는 위치 검색 없이 `build_plan`에서 계획 생략을 기록한다. 분석·계획·위치 검색 함수를 각각 주입할 수 있다. F3008 판정·F3009 재계획은 아래 구현 계약을 따른다. 전체 설계의 Memory·최종 응답은 후속이다.
+첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. `analyze` 명령의 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. F3006의 `plan` 명령은 위치 해석 뒤 `build_plan→END`를 연결한다. 비추천 의도는 위치 검색 없이 `build_plan`에서 계획 생략을 기록한다. 분석·계획·위치 검색 함수를 각각 주입할 수 있다. F3008 판정·F3009 재계획은 아래 구현 계약을 따른다. 조건 맥락은 아래 F3010을 따르며 최종 문장은 후속이다.
 
 `ExtractedRequest`는 명시된 값과 원문 `quote`를 받고, `analyze_conditions`는 원문 존재·숫자와 단위·좌표 범위·상대 날짜/시각·유종/정렬 별칭을 검사한다. 원문과 대조할 수 없는 값은 `unverified_fields`, 사용자 범위 오류는 `invalid_fields`, 필수값 부재는 `missing_fields`로 반환한다. 기준·선호·제약은 `condition_groups`로 구분한다. 같은 숫자가 다른 의미로 사용된 경우 등 의미 분류의 정확성은 모델에 의존하므로 원문 대조가 모든 해석 오류를 보장하지는 않는다.
 
@@ -615,7 +615,7 @@ KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/
 
 위치 검색은 위치당 최대 2회·요청당 최대 4회이며 동일 실행 내 동일 지명은 캐시한다. 빈 결과·잘못된 개별 지명 외의 제공사 장애/권한/한도 오류가 나면 다음 위치도 반복 조회하지 않는다. 좌표 검색 뒤 누락 목록·질문·계획 준비 상태를 다시 계산한다. L/리터·km/L·분/min·km 단위만 현재 추출 검사에서 채택하고 다른 단위는 확인을 요청한다. 날짜 미언급 시 날짜를 채우지 않으며 상대 날짜는 선택 기준일 또는 실행일 KST를 사용한다.
 
-누락·잘못된 사용자 값은 성공 결과 안의 `needs_user_input`으로 안내하고, GMS 설정/인증/통신·모델 출력 형식 오류는 공통 실패로 반환한다. 위치 검색 실패는 해당 `location_results`의 공통 오류와 입력 보완 상태로 남긴다. `ready_for_planning`은 입력 준비 상태이며 시간 제약 충족이나 추천 성공 판정이 아니다. 아직 Memory·최종 자연어 응답·이벤트·로그 저장은 수행하지 않는다. 한 회차 조회는 아래 F3007 계약으로 연결했다. [분석 기록](DEVELOPMENT.md#f3005-implementation), [위치 해석 기록](DEVELOPMENT.md#f3005-geocoding)을 따른다.
+누락·잘못된 사용자 값은 성공 결과 안의 `needs_user_input`으로 안내하고, GMS 설정/인증/통신·모델 출력 형식 오류는 공통 실패로 반환한다. 위치 검색 실패는 해당 `location_results`의 공통 오류와 입력 보완 상태로 남긴다. `ready_for_planning`은 입력 준비 상태이며 시간 제약 충족이나 추천 성공 판정이 아니다. 단독 분석에는 맥락을 쓰지 않으며 F3010의 선택 세션 ID를 지정하면 아래 맥락 계약을 적용한다. 최종 문장·이벤트·로그 저장은 후속이다. 한 회차 조회는 아래 F3007 계약으로 연결했다. [분석 기록](DEVELOPMENT.md#f3005-implementation), [위치 해석 기록](DEVELOPMENT.md#f3005-geocoding)을 따른다.
 
 ### F3006 작업 계획 계약
 
@@ -664,7 +664,7 @@ F3007 당시 그래프는 `START→analyze→resolve_locations→build_plan→ex
 
 기본 입력 준비는 `analysis.ready_for_planning`, 최종 제약 상태는 `judgement.status`다. 상태는 `recommended/no_recommendation/needs_user_input/unavailable/not_required`이며 입력 보완 질문은 `missing_fields/questions`에 있다. ETA는 주행 응답과 정차 예상값에 따른 추정치이고 미래 교통을 보장하지 않는다. 시간 판정 자체는 HTTP/LLM0회다.
 
-기본 그래프 실행기는 보조 조회를 미룬 뒤 확정 판정의 후보만 `enrich_rest_area`에 넘긴다. 다른 후보의 보조정보는 지우고 같은 ID의 과거 보조 호출은 성공/실패 모두 재사용한다. 직접 `execute_work_plan`의 기본값은 기존 한 회차 계약을 유지하며 판정 그래프는 `PlanExecutionSession(defer_rest_info=True)`를 사용한다. 시간 제약으로 후보가 모두 제외되면 보조 HTTP0회다. 그래프 재계획은 아래 F3009에서 연결했으며 Memory·최종 문장·이벤트/저장은 후속 범위다. [F3008 기록](DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](verification/2026-11-19-constraint-judgement.json)를 따른다.
+기본 그래프 실행기는 보조 조회를 미룬 뒤 확정 판정의 후보만 `enrich_rest_area`에 넘긴다. 다른 후보의 보조정보는 지우고 같은 ID의 과거 보조 호출은 성공/실패 모두 재사용한다. 직접 `execute_work_plan`의 기본값은 기존 한 회차 계약을 유지하며 판정 그래프는 `PlanExecutionSession(defer_rest_info=True)`를 사용한다. 시간 제약으로 후보가 모두 제외되면 보조 HTTP0회다. 그래프 재계획은 아래 F3009에서 연결했으며 조건 맥락은 F3010에서 연결했고 최종 문장·이벤트/로그 저장은 후속이다. [F3008 기록](DEVELOPMENT.md#f3008-judgement), [추출·재판정 근거](verification/2026-11-19-constraint-judgement.json)를 따른다.
 
 ### F3009 그래프 재계획 계약
 
@@ -686,7 +686,23 @@ F3007 당시 그래프는 `START→analyze→resolve_locations→build_plan→ex
 
 `execute_request`의 모델/실행기 주입을 유지한다. 사용자 주입 executor만 있으면 임의 재계획은 비활성화하며 같은 소유권의 replanner를 함께 명시해야 반복한다. 생산 경로는 내부 Session.start/replan을 연결한다. 그래프 자체도 주입 콜백 전에 횟수/평가 상한을 검사하고 누적 결과·진행 없는 출력을 거절한다. 보조 조회는 마지막 확정 후보에만 최대1회이며 실패가 추천을 지우지 않는다.
 
-기본 전체 호출 상한은 GMS2·Local4·Opinet14·Mobility19·휴게소1논리조회/최대10HTTP다. [검증 기록](DEVELOPMENT.md#f3009-replanning)과 [실제 상한 종료](verification/2026-11-19-graph-replanning.json)를 따른다. Memory·최종 문장·이벤트/저장은 후속이다.
+기본 전체 호출 상한은 GMS2·Local4·Opinet14·Mobility19·휴게소1논리조회/최대10HTTP다. [검증 기록](DEVELOPMENT.md#f3009-replanning)과 [실제 상한 종료](verification/2026-11-19-graph-replanning.json)를 따른다. 조건 맥락은 F3010 계약을 따르고 최종 문장·이벤트/로그 저장은 후속이다.
+
+### F3010 세션 맥락 계약
+
+`analyze_request`/`plan_request`/`execute_request`의 선택 `session_id`는 영문·숫자·_·- 최대64자다. 같은 ID만 저장본을 읽으며 ID가 없으면 기존 단독 요청이고 DB를 만들지 않는다. 기본 파일은 `Settings.database_path`=`data/fuelroute.sqlite3`, 선택 환경변수는DATABASE_PATH다. 파일 기반 SQLite를 쓰며 :memory:는 거절한다. ID와 DB 경로는 별개로 취급하고 SQL은 파라미터 바인딩을 쓴다.
+
+`State.session_id/memory`는 현재 ID·읽은 버전·직전 요청/응답 요약을, `analysis.conditions`는 통합 조건을 담는다. GMS에는 검증 조건·보완 대상·직전 요약을 참고 데이터 JSON으로 전달한다. 현재 원문에 실제 있는 값/단위/quote만 추출하고 과거 값을 새 Mention으로 복사하지 않는다. `agent/memory.py`가 미언급 값만 이어받고 변경한 값의 무효/미확인은 기존 정상값으로 숨기지 않는다. 병합 뒤 필수값·숫자·여유 관계·단위 방식을 재검사한다.
+
+새 지명은 이전 좌표/출처를 비우고 Local로 다시 해석한다. 이미 확인한 지명이 유지되면 좌표·지역 수준 안내를 재사용한다. 새 직접 좌표는 이전 지명을 지운다. km와L량을 바꾸면 반대 방식의 연료량만 비우고 역산하지 않는다. 원문에 명시된 새 여행/초기화와 조건 제거만 반영한다. 도착 상한을 없애면 도착 날짜도 비워 날짜만 남아 같은 제약을 재요구하지 않게 한다. 인사/설명은 추천 없이 기존 여행을 보존한다.
+
+`schemas/memory.py`의 ConversationMemory는 ID/revision/검증 조건/오류·보완 필드/좌표 출처·지역 안내/직전 요약/UTC 갱신 시각을 가진다. 요청 요약은 변경한 필드명 중심 최대1000자, 응답 요약은 상태·추천ID·제외 코드·보완 대상 중심 최대2000자다. 전체 발언·Tool 응답·실행 캐시·경로·가격·시설 원문·인증은 보관하지 않는다. 메모리 입력/저장 전 설정된 비밀값을 정제하며 원본 가격과 경로는 후속 요청에서 다시 조회한다. 요약용 LLM은 호출하지 않는다.
+
+`storage/conversations.py`는 대화 테이블만 만들고 동기 SQLite I/O는 작업 스레드에서 처리한다. 연결은 매 작업 후 닫는다. 대화/로그/계획은 별도 테이블이며 맥락 테이블은 로그/계획 CRUD 완료를 뜻하지 않는다. save는 예상 revision과 같은 행만 갱신하는 CAS다. 그래프가 완료하면 새 revision을 저장하고 data.session에ID/버전/상속 필드/저장 여부/최신 요약을 반환한다. `analysis.field_sources`는 current(이번 원문/위치 해석) 또는 memory(이전 검증 조건)다.
+
+손상/파일 오류는MEMORY_ERROR, 동시 변경은MEMORY_CONFLICT다. 모르는 필드/다른ID/버전 불일치는 모델 호출 전에 거절하며 자동 덮어쓰기·재시도는 없다. 분석/계획 모델 실패는 저장본을 유지하고 그래프가 종료한 핵심 Tool 실패는 확인한 입력과 짧은 오류 코드를 저장한다. 이때 외부 응답의 기존 공통error/data=null 계약은 유지한다. 이는 로컬 세션 분리이며 HTTP 사용자 인증은 후속 서버 범위다.
+
+실제 GMS4회로 같은 세션3턴의 부분 변경과 다른 세션 분리를 확인했고 데이터 API는0회였다. 두 턴의 전체 추천/가격 재조회·모든 분기는 모의 전송으로 구분했다. [개발 기록](DEVELOPMENT.md#f3010-memory), [실제 분석·SQLite 근거](verification/2026-11-19-conversation-memory.json)를 따른다.
 
 ## 전체 Agent 연결 설계
 
@@ -742,7 +758,7 @@ END
 
 ## 재계획 실행 정책 — 확정·서비스 구현 완료
 
-`agent/replanning.py`의 `recommend_route`는 명시적 조건을 받는 실행기다. 아래는 독립 CLI의 정책이다. F3009 그래프는 위 Session/판정 계약으로 같은 예산·검색점 정책을 적용한다. 대화 Memory·최종 문장은 후속이다.
+`agent/replanning.py`의 `recommend_route`는 명시적 조건을 받는 실행기다. 아래는 독립 CLI의 정책이다. F3009 그래프는 위 Session/판정 계약으로 같은 예산·검색점 정책을 적용한다. 선택 대화 맥락은 F3010을 따르고 최종 문장은 후속이다.
 
 - 재계획은 최대 2회, 최초 실행 포함 최대 3회차다. `max_replans=0`이면 최초 회차만 실행한다.
 - 검색 결과가 없거나 평가한 후보가 전부 제외되면 이미 조회한 미평가 후보를 먼저 사용한다. 미평가 후보가 없을 때만 안전 구간의 앞쪽 검색점을 회차당 한 곳 추가한다. 기본 139/119/94km 이후 추가 지점은 69/44km다.
