@@ -48,13 +48,14 @@ def test_reject_direct_or_unsafe_gms_url(url: str) -> None:
 
 
 def test_safe_range_and_registered_tool_schema() -> None:
-    """15L/3L/12km/L의 144km와 실제 Tool 설명·필드 스키마·실행 연결을 검증한다."""
+    """km와 기존 L 입력의 계산 및 실제 Tool의 단위 설명·조건부 필수 스키마를 확인한다."""
     assert calculate_safe_range(15, 3, 12) == 144
     tool = safe_range_tool()
     schema = tool.args_schema.model_json_schema()
-    assert "안전 잔량" in tool.description
+    assert "안전 여유" in tool.description
     assert all(field.get("description") for field in schema["properties"].values())
-    assert set(schema["required"]) == {"current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl"}
+    assert schema["anyOf"][0]["required"] == ["remaining_range_km", "reserve_range_km"]
+    assert tool.invoke({"remaining_range_km": 180, "reserve_range_km": 30}) == 150
     assert (
         tool.invoke({"current_fuel_l": 15, "reserve_fuel_l": 3, "avg_efficiency_kmpl": 12}) == 144
     )

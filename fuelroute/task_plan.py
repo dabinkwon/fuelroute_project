@@ -93,9 +93,8 @@ STEP_SPECS: dict[Action, dict] = {
         "tool_name": None,
         "depends_on": [],
         "inputs_from": [
-            "request.current_fuel_l",
-            "request.reserve_fuel_l",
-            "request.avg_efficiency_kmpl",
+            "request.remaining_range_km",
+            "request.reserve_range_km",
         ],
         "run_when": "once",
         "failure_policy": "stop",
@@ -171,12 +170,31 @@ EXTERNAL_TOOL_NAMES = frozenset(
 )
 
 
+def plan_step_specs(request: PlanningRequest) -> dict[Action, dict]:
+    """검증된 요청의 입력 방식에 맞게 안전거리 작업의 입력 출처만 선택한다.
+
+    km 방식은 주행 가능/안전 여유 두 km 필드를, 기존 연료 방식은 L/L/km/L 세 필드를
+    참조한다. 사양 dict를 복사해 반환하므로 요청 간 전역 사양을 변경하지 않는다.
+    수치·순서·예산·Tool 이름·실패 정책 변경이나 계산·외부 호출·DB·예외는 없다.
+    예:180km/30km 요청은 remaining_range_km,reserve_range_km를 다음 계산에 전달한다.
+    """
+    specs = {action: dict(spec) for action, spec in STEP_SPECS.items()}
+    if request.remaining_range_km is None:
+        specs["safe_range"]["inputs_from"] = [
+            "request.current_fuel_l",
+            "request.reserve_fuel_l",
+            "request.avg_efficiency_kmpl",
+        ]
+    return specs
+
+
 def prepare_plan(analysis: RequestAnalysis) -> WorkPlan | PlanningRequest:
     """입력 준비 상태를 재확인해 계획 생략 결과 또는 모델에 전달할 검증 요청을 만든다.
 
     F3005 위치 해석 뒤 호출하며 analysis는 변경하지 않는다. 추천 외 의도는not_required,
     누락·오류·미확인 값은needs_user_input의 빈 WorkPlan으로 반환한다. 준비된 추천이면
-    PlanningRequest로 좌표(도)·연료(L)·연비(km/L)·우회(분/km)를 재검증한다. 검색 반경
+    PlanningRequest로 좌표(도)·주행 가능/안전 여유(km)·우회(분/km)를 재검증한다. km 입력은
+    연비가 필요 없고 기존 L/연비 방식도 지원한다. 검색 반경
     5000m·검색점3개·후보3개/회·재계획2회·전체 평가9개·가격 우선은 기존 실행 기본값이며
     사용자 발언으로 취급하지 않는다. 서로 모순된 준비 상태는ProbeFailure(INVALID_INPUT)다.
     외부 호출·수치 계산·DB·재시도·시간 적합성 판정은 없다. 예: 연료 누락은 WorkPlan,
@@ -239,8 +257,9 @@ def finalize_plan(analysis: RequestAnalysis, proposal: PlanProposal) -> WorkPlan
     if len(actions) != len(set(actions)) or set(actions) != set(STEP_SPECS):
         raise ProbeFailure("INVALID_RESPONSE", "작업 계획의 필수 단계·중복을 확인하세요.")
     seen = set()
+    specs = plan_step_specs(request)
     for step in proposal.steps:
-        spec = STEP_SPECS[step.action]
+        spec = specs[step.action]
         if not set(spec["depends_on"]).issubset(seen):
             raise ProbeFailure("INVALID_RESPONSE", "작업 계획의 선행 단계 순서를 확인하세요.")
         plan.steps.append(PlanStep(action=step.action, reason=step.reason, **spec))

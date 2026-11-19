@@ -69,7 +69,8 @@ async def recommend_route(
 ) -> ToolResult[dict]:
     """현재 조건을 유지한 채 후보 평가와 최대 두 번의 재계획으로 한 곳을 추천한다.
 
-    입력 좌표·연료·우회 상한은 실행 중 완화하지 않는다. 최초 검색 후 회차별 최대
+    입력 좌표·주행 가능 거리/안전 여유(km) 또는 기존 연료·우회 상한은 완화하지 않는다.
+    km 입력에는 연비가 필요 없고 안전거리는 주행 가능-안전 여유다. 최초 검색 후 회차별 최대
     max_candidates개, 총 max_evaluations개만 평가한다. 추천이 없으면 미평가 캐시 후보를
     먼저 사용하고, 없을 때만 새로운 앞쪽 검색점을 한 곳 추가한다. 최초 실행에
     max_replans(0~2)를 더한 회차가 상한이다. 상한이면 부분 결과와 종료 사유를 반환한다.
@@ -88,10 +89,16 @@ async def recommend_route(
             raise ProbeFailure("CONFIG_ERROR", "미설정 환경변수: " + ", ".join(missing))
         try:
             safe_range = calculate_safe_range(
-                request.current_fuel_l, request.reserve_fuel_l, request.avg_efficiency_kmpl
+                request.current_fuel_l,
+                request.reserve_fuel_l,
+                request.avg_efficiency_kmpl,
+                remaining_range_km=request.remaining_range_km,
+                reserve_range_km=request.reserve_range_km,
             )
         except ValueError as exc:
-            raise ProbeFailure("INVALID_INPUT", "연료 조건의 계산 범위를 확인하세요.") from exc
+            raise ProbeFailure(
+                "INVALID_INPUT", "주행 가능 거리·안전 여유 입력을 확인하세요."
+            ) from exc
         tools = FuelTools(settings, client)
         calls = []
         route_cache = {}

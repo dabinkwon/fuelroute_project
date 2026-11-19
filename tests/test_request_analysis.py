@@ -90,7 +90,7 @@ def test_full_analysis_uses_reference_graph_structure_and_groups() -> None:
 
 
 def test_missing_conditions_and_labels_do_not_create_fuel_or_coordinates() -> None:
-    """지명만 있는 요청에서 지명은 유지하고 좌표·연료·연비·잔량·유종을 요구한다."""
+    """지명만 있는 요청에서 위치·유종·km 범위를 요구하며 L 연료량이나 연비는 요구하지 않는다."""
     user = "대구에서 서울 가는 길에 주유 추천해줘"
     raw = ExtractedRequest(
         intent="recommend",
@@ -107,9 +107,8 @@ def test_missing_conditions_and_labels_do_not_create_fuel_or_coordinates() -> No
         "origin",
         "destination",
         "fuel_type",
-        "current_fuel_l",
-        "reserve_fuel_l",
-        "avg_efficiency_kmpl",
+        "remaining_range_km",
+        "reserve_range_km",
     }
     assert data["needs_user_input"] and not data["ready_for_planning"]
 

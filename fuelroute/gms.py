@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from fuelroute.config import Settings
 from fuelroute.contracts import ToolResult
 from fuelroute.probes import ProbeFailure, run_probe
-from fuelroute.services import FuelConditions, calculate_safe_range
+from fuelroute.services import FuelConditions, RangeConditions, calculate_safe_range
 
 
 class ExtractedConditions(BaseModel):
@@ -34,14 +34,16 @@ class ExtractedConditions(BaseModel):
 def safe_range_tool() -> StructuredTool:
     """안전거리 계산 함수를 설명·단위·범위가 포함된 LangChain Tool로 등록한다.
 
-    인자·키 없이 등록할 수 있다. 반환 Tool은 FuelConditions 스키마와 함수 docstring을
-    모델에 전달하고 호출 시 일반 Python 계산만 수행한다. 예: tool.invoke({...}) → km.
+    인자·키 없이 등록할 수 있다. 반환 Tool은 RangeConditions 스키마와 함수 설명을
+    모델에 전달한다. 기본은 주행 가능/안전 여유 두 km 입력이며 연비를 요구하지 않는다.
+    기존 L/연비도 지원하지만 두 방식의 연료량은 혼용할 수 없다. 일반 코드 계산만 수행하며
+    예: tool.invoke({'remaining_range_km':180,'reserve_range_km':30}) →150km다.
     외부 HTTP·DB·재계획 부작용이 없으며 유효하지 않은 입력은 ValidationError다.
     """
     return StructuredTool.from_function(
         func=calculate_safe_range,
         name="calculate_safe_range",
-        args_schema=FuelConditions,
+        args_schema=RangeConditions,
         description=calculate_safe_range.__doc__,
     )
 

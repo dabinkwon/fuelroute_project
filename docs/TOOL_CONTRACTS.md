@@ -1,4 +1,4 @@
-# Tool 실행 계약 — 2026-11-18
+# Tool 실행 계약 — 2026-11-19 km 입력 반영
 
 `ToolRegistry`는 아래 일곱 함수를 등록한다. 입력·출력의 전체 타입·단위·필수값·설명·실패 코드는 [TOOL_CONTRACTS.json](TOOL_CONTRACTS.json)이 기준이다. 다음 Bash 명령으로 같은 명세를 확인할 수 있다. HTTP·LLM 호출은 없다.
 
@@ -10,13 +10,15 @@
 
 ## 명세와 독립 확인
 
+안전거리의 기본 입력은 `remaining_range_km`와 `reserve_range_km`이며 `180 - 30 = 150km`로 계산한다. 연비를 요구하지 않고 L를 역산하지 않는다. `RangeConditions`의 `anyOf`는 km 두 필드 또는 기존 L/L/km/L 세 필드의 조건부 필수를 표현하며 런타임 검증도 수행한다. 안전 여유는 0 이상/주행 가능 거리 미만이고 임의 기본값은 없다. km와 L 연료량을 섞으면 `INVALID_INPUT`이다. km 방식에 선택 연비가 있어도 차감식은 바꾸지 않는다.
+
 ```bash
 python -m fuelroute tool-schemas
 ```
 
 | Tool | 주요 입력 | 성공 `data` / 다음 단계 |
 |---|---|---|
-| `calculate_safe_range` | 현재 연료 L, 안전 잔량 L, 연비 km/L | `safe_range_km` → 검색 범위·도달 판정 |
+| `calculate_safe_range` | 주행 가능 거리·안전 여유 km; 기존 L/연비 방식도 별도 지원 | `safe_range_km` → 검색 범위·도달 판정 |
 | `get_driving_route` | WGS84 출발·목적 좌표, 선택 단일 경유 좌표 | `distance_m`, `duration_s`, `legs` → 기본·접근·경유 비용 평가 |
 | `search_gas_stations` | WGS84 검색점, 유종, 반경 m | `items[].station_id`, 위치·가격 → 상세·경로 조회 |
 | `get_station_details` | 확보한 Opinet ID, 유종 | ID·위치·가격·가격 기준시각 → 평가·설명 |

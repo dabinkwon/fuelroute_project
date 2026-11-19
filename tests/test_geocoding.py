@@ -265,9 +265,8 @@ def test_analysis_location_node_preserves_user_values_and_reuses_results(mode: s
             assert len(calls) == 2 and analysis["needs_user_input"]
             assert set(analysis["missing_fields"]) == {
                 "fuel_type",
-                "current_fuel_l",
-                "reserve_fuel_l",
-                "avg_efficiency_kmpl",
+                "remaining_range_km",
+                "reserve_range_km",
             }
             assert (
                 analysis["conditions"]["origin"] is not None

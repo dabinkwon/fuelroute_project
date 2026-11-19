@@ -1,0 +1,400 @@
+{
+  "task": "km-based-range-input",
+  "verified_at": "2026-11-19T05:42:52.270688+00:00",
+  "model": "gpt-5.4-mini",
+  "api_call_counts": {
+    "gms": 3,
+    "kakao_local": 0,
+    "kakao_mobility": 0,
+    "opinet": 0,
+    "rest_area": 0
+  },
+  "scenarios": [
+    {
+      "scenario": "complete",
+      "verification": "live",
+      "request": "대구(128.6014,35.8714)에서 서울(126.9780,37.5665)로 휘발유 주유 추천해줘. 계기판 주행 가능 거리는180km이고 안전 여유30km를 남기고 싶어.",
+      "calls": [
+        {
+          "stage": "analyze",
+          "elapsed_ms": 2113.758,
+          "completed_at": "2026-11-19T05:42:46.633303+00:00"
+        },
+        {
+          "stage": "build_plan",
+          "elapsed_ms": 3464.726,
+          "completed_at": "2026-11-19T05:42:50.110576+00:00"
+        }
+      ],
+      "response": {
+        "ok": true,
+        "tool_name": "plan_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "휘발유 주유 추천 요청이며 출발지와 목적지, 주행 가능 거리와 안전 여유가 함께 제시됐다.",
+            "conditions": {
+              "origin_label": "대구",
+              "destination_label": "서울",
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": null,
+              "remaining_range_km": 180.0,
+              "reserve_range_km": 30.0,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": null,
+              "max_detour_km": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin_label",
+                "destination_label",
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type"
+              ],
+              "constraints": [
+                "remaining_range_km",
+                "reserve_range_km"
+              ]
+            },
+            "missing_fields": [],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": false,
+            "ready_for_planning": true,
+            "questions": [],
+            "range_input_mode": "distance",
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": []
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "build_plan",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "plan": {
+            "status": "ready",
+            "reason": "기본 경로와 안전 잔량을 먼저 확정한 뒤, 안전 구간 위의 검색점과 후보를 찾고 상세 가격이 확인된 후보만 경로·제약 평가 후 정렬하는 순서가 필요합니다. 추천 후보가 생기면 그때만 휴게소 보조정보를 확인해도 되며, 보조정보 실패는 후보 제외 사유로 쓰지 않습니다.",
+            "request": {
+              "remaining_range_km": 180.0,
+              "reserve_range_km": 30.0,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "fuel_type": "gasoline",
+              "radius_m": 5000,
+              "max_search_points": 3,
+              "max_candidates": 3,
+              "max_detour_min": null,
+              "max_detour_km": null,
+              "max_replans": 2,
+              "max_evaluations": 9,
+              "sort_by": "price"
+            },
+            "steps": [
+              {
+                "action": "base_route",
+                "reason": "출발지와 목적지 사이의 기본 경로를 먼저 확보해야 이후 안전 구간과 후보 경유 경로 비교의 기준이 됩니다.",
+                "kind": "external_tool",
+                "tool_name": "get_driving_route",
+                "depends_on": [],
+                "inputs_from": [
+                  "request.origin",
+                  "request.destination"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "safe_range",
+                "reason": "현재 잔량과 예비 잔량으로 안전 주행 가능 범위를 먼저 계산해 후보 탐색의 전제가 됩니다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [],
+                "inputs_from": [
+                  "request.remaining_range_km",
+                  "request.reserve_range_km"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "search_points",
+                "reason": "기본 경로와 안전 범위를 바탕으로 검색할 경유 후보 지점을 정해야 주유소 탐색 범위를 구체화할 수 있습니다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [
+                  "base_route",
+                  "safe_range"
+                ],
+                "inputs_from": [
+                  "base_route",
+                  "safe_range",
+                  "request.radius_m",
+                  "request.max_search_points"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "search_candidates",
+                "reason": "정해진 검색점 주변에서 주유소 후보를 찾아야 상세 가격 조회 대상이 생깁니다.",
+                "kind": "external_tool",
+                "tool_name": "search_gas_stations",
+                "depends_on": [
+                  "search_points"
+                ],
+                "inputs_from": [
+                  "search_points",
+                  "request.fuel_type",
+                  "request.radius_m"
+                ],
+                "run_when": "per_search_point",
+                "failure_policy": "replan_if_empty"
+              },
+              {
+                "action": "station_details",
+                "reason": "상세 가격이 있는 후보만 경로 평가 대상이므로, 먼저 후보별 가격과 기본 정보를 확인해야 합니다.",
+                "kind": "external_tool",
+                "tool_name": "get_station_details",
+                "depends_on": [
+                  "search_candidates"
+                ],
+                "inputs_from": [
+                  "search_candidates.station_id",
+                  "request.fuel_type",
+                  "request.max_candidates"
+                ],
+                "run_when": "per_candidate",
+                "failure_policy": "exclude_candidate"
+              },
+              {
+                "action": "candidate_routes",
+                "reason": "가격이 확인된 후보에 대해서만 출발→후보 접근과 후보 경유 경로를 조회해 실제 경로 대안을 만듭니다.",
+                "kind": "external_tool",
+                "tool_name": "get_driving_route",
+                "depends_on": [
+                  "station_details"
+                ],
+                "inputs_from": [
+                  "request.origin",
+                  "station_details",
+                  "request.destination"
+                ],
+                "run_when": "per_priced_candidate",
+                "failure_policy": "exclude_candidate"
+              },
+              {
+                "action": "evaluate_constraints",
+                "reason": "기본 경로와 안전 범위, 후보 경유 경로를 함께 놓고 제약 충족 여부를 판단해야 합니다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [
+                  "base_route",
+                  "safe_range",
+                  "candidate_routes"
+                ],
+                "inputs_from": [
+                  "base_route",
+                  "safe_range",
+                  "candidate_routes",
+                  "request"
+                ],
+                "run_when": "per_priced_candidate",
+                "failure_policy": "exclude_candidate"
+              },
+              {
+                "action": "rank_candidates",
+                "reason": "제약을 통과한 후보들만 가격 기준으로 정렬해 우선순위를 정해야 합니다.",
+                "kind": "local",
+                "tool_name": null,
+                "depends_on": [
+                  "evaluate_constraints"
+                ],
+                "inputs_from": [
+                  "station_details",
+                  "evaluate_constraints",
+                  "request.sort_by"
+                ],
+                "run_when": "once",
+                "failure_policy": "stop"
+              },
+              {
+                "action": "rest_area_info",
+                "reason": "추천 후보가 있을 때만 주변 휴게소 보조정보를 확인해 참고 정보를 보강할 수 있습니다.",
+                "kind": "external_tool",
+                "tool_name": "search_rest_area_info",
+                "depends_on": [
+                  "rank_candidates"
+                ],
+                "inputs_from": [
+                  "rank_candidates.recommended",
+                  "request.radius_m"
+                ],
+                "run_when": "if_recommended",
+                "failure_policy": "optional"
+              }
+            ],
+            "warnings": []
+          },
+          "planner_mode": "gms"
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "f5008c4a-fce3-492d-8ac0-74e6029e27a3",
+          "elapsed_ms": 5738.167,
+          "fetched_at": "2026-11-19T05:42:50.110576Z"
+        }
+      }
+    },
+    {
+      "scenario": "missing_reserve",
+      "verification": "live",
+      "request": "대구(128.6014,35.8714)에서 서울(126.9780,37.5665)로 휘발유 주유 추천해줘. 계기판 주행 가능 거리는180km야.",
+      "calls": [
+        {
+          "stage": "analyze",
+          "elapsed_ms": 2030.845,
+          "completed_at": "2026-11-19T05:42:52.270688+00:00"
+        }
+      ],
+      "response": {
+        "ok": true,
+        "tool_name": "plan_request",
+        "data": {
+          "analysis": {
+            "intent": "recommend",
+            "reason": "휘발유 주유 추천을 요청했고 출발지와 목적지, 현재 주행 가능 거리도 함께 제시했다.",
+            "conditions": {
+              "origin_label": "대구",
+              "destination_label": "서울",
+              "origin": {
+                "longitude": 128.6014,
+                "latitude": 35.8714
+              },
+              "destination": {
+                "longitude": 126.978,
+                "latitude": 37.5665
+              },
+              "trip_date": null,
+              "departure_time": null,
+              "arrival_deadline": null,
+              "fuel_type": "gasoline",
+              "sort_by": null,
+              "remaining_range_km": 180.0,
+              "reserve_range_km": null,
+              "current_fuel_l": null,
+              "reserve_fuel_l": null,
+              "avg_efficiency_kmpl": null,
+              "max_detour_min": null,
+              "max_detour_km": null
+            },
+            "condition_groups": {
+              "basis": [
+                "origin_label",
+                "destination_label",
+                "origin",
+                "destination"
+              ],
+              "preferences": [
+                "fuel_type"
+              ],
+              "constraints": [
+                "remaining_range_km"
+              ]
+            },
+            "missing_fields": [
+              "reserve_range_km"
+            ],
+            "invalid_fields": [],
+            "unverified_fields": [],
+            "needs_user_input": true,
+            "ready_for_planning": false,
+            "questions": [
+              "남겨둘 안전 여유 거리(km, 주행 가능 거리보다 적게)을 알려주세요."
+            ],
+            "range_input_mode": "distance",
+            "location_results": {},
+            "coordinate_sources": {
+              "origin": "user",
+              "destination": "user"
+            },
+            "warnings": []
+          },
+          "reference_date": "2026-11-19",
+          "graph_nodes": [
+            "analyze",
+            "build_plan",
+            "resolve_locations"
+          ],
+          "analyzer_mode": "gms",
+          "plan": {
+            "status": "needs_user_input",
+            "reason": "누락·오류·위치 모호성을 먼저 해결한 뒤 작업을 계획합니다.",
+            "request": null,
+            "steps": [],
+            "warnings": []
+          },
+          "planner_mode": "gms"
+        },
+        "error": null,
+        "meta": {
+          "provider": "gms",
+          "request_id": "20f01aec-4a4c-40d2-b965-52efc1eb6bc7",
+          "elapsed_ms": 2166.997,
+          "fetched_at": "2026-11-19T05:42:52.270688Z"
+        }
+      }
+    }
+  ],
+  "local_safe_range_km": 150.0,
+  "entrypoint": "await plan_request(message, settings, reference_date=date(2026, 11, 19))",
+  "offline_verification": {
+    "new_tests_passed": 26,
+    "all_tests_passed": 215,
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "pip_check": "passed",
+    "registered_km_tool_schema_and_execution": "passed",
+    "legacy_liter_input_regression": "passed",
+    "mock_executor_search_boundary": "passed",
+    "live_and_mock_results_separate": true
+  },
+  "next_stage_fields": [
+    "data.analysis.range_input_mode",
+    "data.analysis.conditions.remaining_range_km",
+    "data.analysis.conditions.reserve_range_km",
+    "data.plan.request",
+    "data.plan.steps"
+  ]
+}

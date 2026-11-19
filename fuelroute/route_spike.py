@@ -11,12 +11,12 @@ from fuelroute.contracts import ToolResult
 from fuelroute.probes import Coordinate, ProbeFailure, probe_route, run_probe
 from fuelroute.route_contracts import DrivingRoute
 from fuelroute.routing import build_route_path, generate_search_points
-from fuelroute.services import FuelConditions, calculate_safe_range
+from fuelroute.services import RangeConditions, calculate_safe_range
 from fuelroute.tools import FuelTools
 
 
-class RouteSpikeRequest(FuelConditions):
-    """실험의 명시적 사용자 조건. 주소 해석·LLM 추출 없이 WGS84 좌표와 연료값을 받는다."""
+class RouteSpikeRequest(RangeConditions):
+    """WGS84 좌표와 km 기반 주행 가능/안전 여유 또는 기존 L/연비를 받는 실험 입력."""
 
     origin: Coordinate = Field(description="출발 WGS84 좌표")
     destination: Coordinate = Field(description="목적 WGS84 좌표")
@@ -141,7 +141,7 @@ async def run_route_spike(
 ) -> ToolResult[dict]:
     """연료 조건→안전 구간 검색점→후보 중복 제거→상세·실제 경로 평가를 순서대로 실행한다.
 
-    request는 검증된 좌표·연료·유종·상한이다. 설정은 Kakao/Opinet 키만 필요하며
+    request는 검증된 좌표·km 범위 또는 기존 연료·유종·상한이다. 설정은 Kakao/Opinet 키만 필요하며
     client의 종료 책임은 호출자에게 있다. 기본 경로 1회, 검색 최대 3회, 후보당 상세·
     접근·경유 각 최대 1회다. 기본값이면 Opinet 최대 6회/Kakao 최대 7회다.
     검색점은 안전 구간 안에 두며 후보는 ID로 합친 뒤 가격순 일부만 평가한다.
@@ -150,7 +150,7 @@ async def run_route_spike(
     실행 완료 시 후보가 없거나 모두 제외돼도 status로 명시한다. 이는 조회 Tool의
     EMPTY_RESULT를 성공으로 바꾼 것이 아니라 실험 실행 결과다. 전체 탐색·전역 최저가
     추천은 보장하지 않는다. LLM·DB·자동 재시도·추가 재계획은 없다.
-    예: CLI route-spike로 15L/3L/12km/L, 144km 안전 구간을 검증한다.
+    예: 주행 가능180km/안전 여유30km이면150km 구간을 탐색한다. 기존 L 입력도 지원한다.
     """
 
     async def operation() -> dict:
@@ -160,10 +160,16 @@ async def run_route_spike(
             raise ProbeFailure("CONFIG_ERROR", "미설정 환경변수: " + ", ".join(missing))
         try:
             safe_range = calculate_safe_range(
-                request.current_fuel_l, request.reserve_fuel_l, request.avg_efficiency_kmpl
+                request.current_fuel_l,
+                request.reserve_fuel_l,
+                request.avg_efficiency_kmpl,
+                remaining_range_km=request.remaining_range_km,
+                reserve_range_km=request.reserve_range_km,
             )
         except ValueError as exc:
-            raise ProbeFailure("INVALID_INPUT", "연료 조건의 계산 범위를 확인하세요.") from exc
+            raise ProbeFailure(
+                "INVALID_INPUT", "주행 가능 거리·안전 여유 입력을 확인하세요."
+            ) from exc
         calls = []
 
         def record(result: ToolResult[dict], inputs: dict) -> None:

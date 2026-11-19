@@ -13,7 +13,7 @@ from fuelroute.probes import Coordinate, ProbeFailure, probe_route, run_probe
 from fuelroute.recommendation import RecommendationRequest, RecommendationResult, rank_candidates
 from fuelroute.route_contracts import DrivingRoute
 from fuelroute.route_spike import assess_candidate_routes
-from fuelroute.services import FuelConditions, calculate_safe_range
+from fuelroute.services import RangeConditions, calculate_safe_range
 from fuelroute.tools import (
     CandidateSearch,
     FuelTools,
@@ -118,7 +118,7 @@ class ToolRegistry:
                 _Definition(
                     "calculate_safe_range",
                     "local",
-                    FuelConditions,
+                    RangeConditions,
                     SafeRangeOutput,
                     ("data.safe_range_km",),
                     calculate_safe_range.__doc__,

@@ -74,9 +74,13 @@ def build_parser() -> argparse.ArgumentParser:
     spike = commands.add_parser("route-spike", help="안전 구간 검색→후보→실제 도달·우회 검증")
     spike.add_argument("--origin", nargs=2, type=float, required=True, metavar=("LON", "LAT"))
     spike.add_argument("--destination", nargs=2, type=float, required=True, metavar=("LON", "LAT"))
-    spike.add_argument("--current-fuel-l", type=float, required=True)
-    spike.add_argument("--reserve-fuel-l", type=float, required=True)
-    spike.add_argument("--efficiency-kmpl", type=float, required=True)
+    spike.add_argument("--remaining-range-km", type=float, help="계기판 주행 가능 거리(km)")
+    spike.add_argument(
+        "--reserve-range-km", type=float, help="남길 안전 여유(km), 임의 기본값 없음"
+    )
+    spike.add_argument("--current-fuel-l", type=float, help="기존 입력 방식의 현재 연료(L)")
+    spike.add_argument("--reserve-fuel-l", type=float, help="기존 입력 방식의 안전 잔량(L)")
+    spike.add_argument("--efficiency-kmpl", type=float, help="평균 연비(km/L); km 입력에서는 선택")
     spike.add_argument("--fuel-type", choices=["gasoline", "diesel"], default="gasoline")
     spike.add_argument("--radius-m", type=int, default=5000)
     spike.add_argument("--max-search-points", type=int, default=3)
@@ -150,6 +154,8 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
             values = dict(
                 origin=Coordinate(longitude=args.origin[0], latitude=args.origin[1]),
                 destination=Coordinate(longitude=args.destination[0], latitude=args.destination[1]),
+                remaining_range_km=args.remaining_range_km,
+                reserve_range_km=args.reserve_range_km,
                 current_fuel_l=args.current_fuel_l,
                 reserve_fuel_l=args.reserve_fuel_l,
                 avg_efficiency_kmpl=args.efficiency_kmpl,

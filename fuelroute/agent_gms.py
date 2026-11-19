@@ -23,9 +23,9 @@ from fuelroute.probes import ProbeFailure
 from fuelroute.request_analysis import ExtractedRequest, RequestAnalysis
 from fuelroute.task_plan import (
     EXTERNAL_TOOL_NAMES,
-    STEP_SPECS,
     PlanProposal,
     WorkPlan,
+    plan_step_specs,
     prepare_plan,
 )
 from fuelroute.tool_registry import ToolRegistry
@@ -57,7 +57,12 @@ async def llm_analyze(user: str, settings: Settings, reference_date: date) -> Ex
                     "인사와 추천이 함께 있으면 recommend다. "
                     "reason은 분류 이유 한 문장이다. "
                     "지명만 있으면 label만 추출하고 좌표는 null이다. "
-                    "좌표·연료·연비·안전 잔량·유종은 추측하지 않는다. "
+                    "기본 입력은 계기판 주행 가능 거리 remaining_range_km와 "
+                    "남길 안전 여유 거리 reserve_range_km다. 둘 다 km이고 미언급이면 null이다. "
+                    "주행 가능 거리를 목적지 거리나 우회거리와 혼동하지 않는다. "
+                    "km 입력에서 연비나 L 연료량을 역산하지 않는다. "
+                    "L 연료량·연비를 사용자가 직접 말한 경우에만 기존 해당 필드로 추출한다. "
+                    "좌표·주행 가능 거리·안전 여유·연료·연비·유종은 추측하지 않는다. "
                     "기본값을 채우거나 숫자 단위를 변환하지 않는다. "
                     "정렬 선호는 명시된 경우만 추출한다. 날짜는 YYYY-MM-DD, 시각은 HH:MM이다. "
                     f"상대 날짜 기준일(KST)은 {reference_date.isoformat()}다. "
@@ -96,7 +101,7 @@ async def llm_plan(analysis: RequestAnalysis, settings: Settings) -> PlanProposa
     context = {
         "conditions": analysis.conditions.model_dump(mode="json", exclude_none=True),
         "request": request.model_dump(mode="json"),
-        "actions": STEP_SPECS,
+        "actions": plan_step_specs(request),
         "external_tools": tools,
     }
     return await _structured_response(

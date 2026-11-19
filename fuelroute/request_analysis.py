@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from fuelroute.contracts import ToolResult
 from fuelroute.geocoding import LocationMatchSet
 from fuelroute.probes import Coordinate
-from fuelroute.services import FuelConditions
+from fuelroute.services import RangeConditions
 
 T = TypeVar("T")
 
@@ -56,6 +56,12 @@ class ExtractedRequest(BaseModel):
     sort_by: Mention[Literal["price", "detour_time"]] | None = Field(
         default=None, description="명시된 가격 우선 또는 우회시간 우선 선호"
     )
+    remaining_range_km: Mention[float] | None = Field(
+        default=None, description="계기판의 현재 주행 가능 거리(km); 목적지 거리·우회거리와 구분"
+    )
+    reserve_range_km: Mention[float] | None = Field(
+        default=None, description="남길 안전 여유 거리(km); 미언급 시 null이며 기본값을 만들지 않음"
+    )
     current_fuel_l: Mention[float] | None = Field(default=None, description="현재 연료(L)")
     reserve_fuel_l: Mention[float] | None = Field(default=None, description="남길 안전 잔량(L)")
     avg_efficiency_kmpl: Mention[float] | None = Field(default=None, description="평균 연비(km/L)")
@@ -76,6 +82,8 @@ class TripConditions(BaseModel):
     arrival_deadline: time | None = None
     fuel_type: Literal["gasoline", "diesel"] | None = None
     sort_by: Literal["price", "detour_time"] | None = None
+    remaining_range_km: float | None = None
+    reserve_range_km: float | None = None
     current_fuel_l: float | None = None
     reserve_fuel_l: float | None = None
     avg_efficiency_kmpl: float | None = None
@@ -96,6 +104,7 @@ class RequestAnalysis(BaseModel):
     needs_user_input: bool
     ready_for_planning: bool
     questions: list[str]
+    range_input_mode: Literal["distance", "fuel"] = "distance"
     location_results: dict[str, ToolResult[LocationMatchSet]] = Field(default_factory=dict)
     coordinate_sources: dict[str, Literal["user", "kakao_address", "kakao_keyword"]] = Field(
         default_factory=dict
@@ -109,6 +118,9 @@ FIELD_LABELS = {
     "origin_label": "출발 지명",
     "destination_label": "목적 지명",
     "fuel_type": "유종(휘발유/경유)",
+    "remaining_range_km": "계기판의 주행 가능 거리(km)",
+    "reserve_range_km": "남겨둘 안전 여유 거리(km, 주행 가능 거리보다 적게)",
+    "range_input": "주행 가능 거리(km) 또는 연료량(L) 중 한 가지 입력 방식",
     "current_fuel_l": "현재 연료량(L)",
     "reserve_fuel_l": "안전 잔량(L, 현재 연료보다 적게)",
     "avg_efficiency_kmpl": "평균 연비(km/L)",
@@ -119,16 +131,14 @@ FIELD_LABELS = {
     "arrival_deadline": "도착 상한 시각(HH:MM)",
     "sort_by": "가격/우회시간 우선 선호",
 }
-REQUIRED_FIELDS = (
-    "origin",
-    "destination",
-    "fuel_type",
-    "current_fuel_l",
-    "reserve_fuel_l",
-    "avg_efficiency_kmpl",
-)
+BASE_REQUIRED_FIELDS = ("origin", "destination", "fuel_type")
+DISTANCE_FIELDS = ("remaining_range_km", "reserve_range_km")
+FUEL_FIELDS = ("current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl")
+REQUIRED_FIELDS = BASE_REQUIRED_FIELDS + DISTANCE_FIELDS
 NUMBER = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?")
 QUANTITY_UNITS = {
+    "remaining_range_km": r"(?:km(?![a-z/])|킬로미터)",
+    "reserve_range_km": r"(?:km(?![a-z/])|킬로미터)",
     "current_fuel_l": r"(?:l(?![a-z])|리터)",
     "reserve_fuel_l": r"(?:l(?![a-z])|리터)",
     "avg_efficiency_kmpl": r"(?:km\s*/\s*l|kmpl|킬로미터\s*/\s*리터)",
@@ -234,11 +244,13 @@ def _grounded(field: str, mention: Mention, user: str, reference_date: date) -> 
 def analyze_conditions(
     user: str, extracted: ExtractedRequest, reference_date: date
 ) -> RequestAnalysis:
-    """추출 근거·필수값·연료/좌표 범위를 일반 코드로 검사해 F3005 결과를 만든다.
+    """추출 근거·필수값·주행거리/연료/좌표 범위를 코드로 검사해 F3005 결과를 만든다.
 
     user는 이번 요청 원문이고 reference_date는 상대 날짜 해석 기준이다. 과거 대화는
-    사용하지 않는다(F3010 후속 작업). 추천 요청은 출발/목적 좌표·유종·연료·잔량·연비가
-    필수다. 지명만 있으면 지명을 보존해 후속 위치 검색에 넘긴다. 불명확한 값은 제외하고
+    사용하지 않는다(F3010 후속 작업). 기본 필수값은 출발/목적 좌표·유종·주행 가능 거리와
+    안전 여유(km)다. L 연료량이 명시되고 km 입력이 없을 때만 기존 L/연비 방식을 선택한다.
+    두 방식의 연료량을 혼용하면 입력 방식을 다시 묻는다. 연비만 있으면 km 방식을 유지한다.
+    지명만 있으면 지명을 보존해 후속 위치 검색에 넘긴다. 불명확한 값은 제외하고
     unverified_fields로 알린다. 인사/설명은 주행 필수값을 요구하지 않는다.
     날짜/시각은 추출만 하며 도착 적합성·Tool 실행·계획·저장·재계획·최종 설명은 수행하지
     않는다. 예: '서울 가는 길에 주유'는 연료를 채우지 않고 누락 목록을 반환한다.
@@ -262,6 +274,8 @@ def analyze_conditions(
             values[field] = value
     conditions = TripConditions.model_validate(values)
     for field in (
+        "remaining_range_km",
+        "reserve_range_km",
         "current_fuel_l",
         "avg_efficiency_kmpl",
         "reserve_fuel_l",
@@ -270,23 +284,28 @@ def analyze_conditions(
     ):
         value = getattr(conditions, field)
         if value is not None and (
-            value < 0 or (field in {"current_fuel_l", "avg_efficiency_kmpl"} and value == 0)
+            value < 0
+            or (
+                field in {"remaining_range_km", "current_fuel_l", "avg_efficiency_kmpl"}
+                and value == 0
+            )
         ):
             invalid.append(field)
     if conditions.current_fuel_l is not None and conditions.reserve_fuel_l is not None:
         if conditions.reserve_fuel_l >= conditions.current_fuel_l:
             invalid.append("reserve_fuel_l")
-    if (
-        all(
-            getattr(conditions, field) is not None
-            for field in ("current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl")
-        )
-        and not invalid
-    ):
-        FuelConditions.model_validate(
-            conditions.model_dump(
-                include={"current_fuel_l", "reserve_fuel_l", "avg_efficiency_kmpl"}
-            )
+    if conditions.remaining_range_km is not None and conditions.reserve_range_km is not None:
+        if conditions.reserve_range_km >= conditions.remaining_range_km:
+            invalid.append("reserve_range_km")
+    distance_mentioned = any(getattr(extracted, field) is not None for field in DISTANCE_FIELDS)
+    fuel_mentioned = any(getattr(extracted, field) is not None for field in FUEL_FIELDS[:2])
+    mode = "fuel" if fuel_mentioned and not distance_mentioned else "distance"
+    if distance_mentioned and fuel_mentioned:
+        invalid.append("range_input")
+    range_fields = DISTANCE_FIELDS if mode == "distance" else FUEL_FIELDS
+    if all(getattr(conditions, field) is not None for field in range_fields) and not invalid:
+        RangeConditions.model_validate(
+            conditions.model_dump(include=set(RangeConditions.model_fields))
         )
     result = RequestAnalysis(
         intent=extracted.intent,
@@ -299,6 +318,7 @@ def analyze_conditions(
         needs_user_input=False,
         ready_for_planning=False,
         questions=[],
+        range_input_mode=mode,
     )
     return refresh_analysis(result)
 
@@ -308,7 +328,9 @@ def refresh_analysis(analysis: RequestAnalysis) -> RequestAnalysis:
 
     RequestAnalysis를 복사해 원문 대조·범위 오류를 유지하고 조건 그룹을 갱신한다.
     위치가 모호하면 지역/주소를 보완하게 하고 검색 장애를 좌표 추측으로 대신하지 않는다.
-    외부 호출·DB 변경은 없다. 예: 위치가 확정되면 origin은 누락 질문에서 제거한다.
+    range_input_mode에 따라 km 두 값 또는 기존 연료 세 값만 필수로 요구한다. km 방식에서
+    연비를 요구하지 않는다. 외부 호출·DB 변경은 없다. 예: 위치가 확정되면 origin은
+    누락 질문에서 제거하고 주행 가능 거리만 있으면 안전 여유(km)를 묻는다.
     """
     result = analysis.model_copy(deep=True)
     conditions = result.conditions
@@ -316,7 +338,10 @@ def refresh_analysis(analysis: RequestAnalysis) -> RequestAnalysis:
     missing = (
         [
             field
-            for field in REQUIRED_FIELDS
+            for field in (
+                BASE_REQUIRED_FIELDS
+                + (DISTANCE_FIELDS if result.range_input_mode == "distance" else FUEL_FIELDS)
+            )
             if getattr(conditions, field) is None and field not in invalid
         ]
         if result.intent == "recommend"
@@ -333,6 +358,8 @@ def refresh_analysis(analysis: RequestAnalysis) -> RequestAnalysis:
         ],
         "preferences": ["fuel_type", "sort_by"],
         "constraints": [
+            "remaining_range_km",
+            "reserve_range_km",
             "current_fuel_l",
             "reserve_fuel_l",
             "avg_efficiency_kmpl",
