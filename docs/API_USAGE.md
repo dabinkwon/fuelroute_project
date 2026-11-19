@@ -1,11 +1,12 @@
 # 외부 API 호출 한도와 공개 이용조건
 
-2026-11-18 확인. 공개 문서 조사와 사용자 제공 계정 정보를 구분한다. 이 기록은 개별 계약이나 상용 서비스에 대한 승인 자체를 뜻하지 않는다.
+2026-11-18 계정 확인값과 2026-11-19 Kakao Local 추가 검증을 기록한다. 공개 문서 조사와 사용자 제공 계정 정보를 구분한다. 이 기록은 개별 계약이나 상용 서비스에 대한 승인 자체를 뜻하지 않는다.
 
 | API | 현재 계정 한도·기간 | 확인 근거 |
 |---|---|---|
 | Opinet 일반 API | 300회/일, 별도 상향 없음 | 사용자 확인값 및 [일반 API 안내](https://www.opinet.co.kr/user/custapi/custApiInfo.do) |
 | Kakao Mobility 자동차 길찾기 | 10,000회/일 | 사용자 확인값 및 [공개 쿼터 안내](https://developers.kakao.com/docs/ko/getting-started/quota) |
+| Kakao Local 주소/장소 검색 | 실제 앱 쿼터 수치 미확인, 2026-11-19 카카오맵 활성화 완료 | [사용자 확인·남은 확인](TASKS.md#plan-2026-11-19); 자동차 길찾기 한도와 구분 |
 | 전국휴게소정보표준데이터 | 개발계정, 10,000회/일, 2028-11-18까지 | [사용자가 전달한 확인값](TASKS.md#completed-2026-11-18) |
 
 ## Opinet
@@ -24,6 +25,15 @@
 - 개발에서는 동일 옵션의 기본·접근·경유 요청을 제한된 횟수로 실행한다. 일시적 경로 계산에는 원본 좌표를 사용하고, 개발 기록에는 필요한 거리·시간·요약만 남긴다.
 
 근거: [쿼터](https://developers.kakao.com/docs/ko/getting-started/quota), [운영정책 제6조](https://developers.kakao.com/terms/ko/site-policies), [서비스 약관](https://developers.kakao.com/terms/ko/site-terms), [자동차 길찾기 명세](https://developers.kakaomobility.com/guide/navi-api/directions.html).
+
+## Kakao Local 주소·장소 검색 — 입력 위치 해석
+
+- 주소 검색 `https://dapi.kakao.com/v2/local/search/address.json`을 먼저 호출하고 0건일 때만 `https://dapi.kakao.com/v2/local/search/keyword.json`을 호출한다. 기존 `KAKAO_REST_API_KEY`를 사용하며 해당 앱의 카카오맵 활성화가 필요하다.
+- 현재 앱은 초기 403/비활성 응답 후 사용자가 활성화했다고 확인했고, 대구·서울 검색의 정상 응답을 확인했다. 자동차 길찾기 10,000회/일을 Local 한도로 옮겨 적지 않는다. 실제 앱 무료 쿼터 적용과 주소/장소 검색 한도 수치는 콘솔 확인 전이다.
+- 코드 상한은 위치당 최대 2회, 요청당 출발/목적 최대 4회다. 첫 페이지 5건만 요청하며 전체 결과가 여러 개면 자동 선택하지 않는다. 동일 실행의 동일 지명은 재사용하고 실패한 요청을 자동 재시도하지 않는다. HTTP 400의 제공사 code=-10도 호출 한도 오류로 분류한다.
+- `analyze`는 GMS 1회와 필요할 때 위 위치 검색만 수행한다. `recommend`·`route-spike`의 기존 호출 예산과 별도이며, 현재 자동으로 길찾기·주유소 조회를 이어서 실행하지 않는다.
+
+근거: [주소/장소 API](https://developers.kakao.com/docs/ko/local/dev-guide), [카카오맵 활성화·이용 정책](https://developers.kakao.com/docs/ko/kakaomap/common), [실제 검증](verification/2026-11-19-geocoding.json).
 
 ## 전국휴게소정보표준데이터
 

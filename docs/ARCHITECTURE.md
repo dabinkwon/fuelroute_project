@@ -589,11 +589,25 @@ Kakao 경로 좌표
 
 KATEC는 Korean 1985(EPSG:4162)의 Bessel datum에 TM128 투영(원점 위도38/경도128, 축척0.9999, X오프셋400000m/Y오프셋600000m)을 적용한다. EPSG:5178/5179로 대체하지 않는다. `always_xy=True`, `allow_ballpark=False`를 사용한다.
 
-[Naver 공식 좌표계 정의](https://api-fin.ncloud-docs.com/docs/ai-naver-mapsreversegeocoding-gc)와 [TMAP의 WGS84↔KATECH 기준점](https://tmap-skopenapi.readme.io/reference/자동차-경로안내)을 대조했다. 서울·부산·대전 세 기준점의 최대 차이는 2.9405m로 검증 허용치 5m 이내다. 실제 Kakao 경로 좌표→변환→Opinet 후보/상세 주소로 지역 연결도 확인한다. Kakao Local 변환 API는 현재 앱에서 비활성(403)이지만 서비스가 그 API에 의존하지 않으므로 추가 활성화는 필요 없다.
+[Naver 공식 좌표계 정의](https://api-fin.ncloud-docs.com/docs/ai-naver-mapsreversegeocoding-gc)와 [TMAP의 WGS84↔KATECH 기준점](https://tmap-skopenapi.readme.io/reference/자동차-경로안내)을 대조했다. 서울·부산·대전 세 기준점의 최대 차이는 2.9405m로 검증 허용치 5m 이내다. 실제 Kakao 경로 좌표→변환→Opinet 후보/상세 주소로 지역 연결도 확인한다. 이 좌표계 변환은 pyproj가 처리한다. 2026-11-19 추가한 지명/주소→WGS84 위치 해석은 별도 Kakao Local 검색이며, 사용자가 카카오맵을 활성화한 뒤 실제 성공을 확인했다.
 
 ---
 
 # 10. Agent 구조 설계안
+
+## F3005 구현 상태 — 2026-11-19
+
+첨부 `step3_agent.py`의 `State`·노드·`make_graph` 구조와 `step4_agent_gms.py`의 모델 함수 주입을 참고했다. 현재 추천 의도는 `START→analyze→resolve_locations→END`, 인사/설명 등은 분석 뒤 종료한다. 모델 함수와 위치 검색 함수를 각각 주입할 수 있다. 아래 전체 흐름은 F3006 이후에 연결할 설계이며 현재 구현 범위와 구분한다.
+
+`ExtractedRequest`는 명시된 값과 원문 `quote`를 받고, `analyze_conditions`는 원문 존재·숫자와 단위·좌표 범위·상대 날짜/시각·유종/정렬 별칭을 검사한다. 원문과 대조할 수 없는 값은 `unverified_fields`, 사용자 범위 오류는 `invalid_fields`, 필수값 부재는 `missing_fields`로 반환한다. 기준·선호·제약은 `condition_groups`로 구분한다. 같은 숫자가 다른 의미로 사용된 경우 등 의미 분류의 정확성은 모델에 의존하므로 원문 대조가 모든 해석 오류를 보장하지는 않는다.
+
+추천의 내부 필수 입력은 출발/목적 WGS84 좌표·유종·현재 연료·안전 잔량·연비다. 사용자에게 좌표 입력을 필수로 요구하지 않고, 지명/주소만 있으면 Kakao Local 주소 검색 후 0건일 때만 장소 검색으로 보완한다. 유일한 결과만 채우고 여러 후보는 상세 주소·장소명을 다시 묻는다. 유효한 입력 좌표와 입력 오류는 검색 결과로 덮어쓰지 않는다. `coordinate_sources`·`location_results`에 출처·후보·실패를 남기고 지역/도로 수준 결과는 `warnings`로 표시한다.
+
+위치 검색은 위치당 최대 2회·요청당 최대 4회이며 동일 실행 내 동일 지명은 캐시한다. 빈 결과·잘못된 개별 지명 외의 제공사 장애/권한/한도 오류가 나면 다음 위치도 반복 조회하지 않는다. 좌표 검색 뒤 누락 목록·질문·계획 준비 상태를 다시 계산한다. L/리터·km/L·분/min·km 단위만 현재 추출 검사에서 채택하고 다른 단위는 확인을 요청한다. 날짜 미언급 시 날짜를 채우지 않으며 상대 날짜는 선택 기준일 또는 실행일 KST를 사용한다.
+
+누락·잘못된 사용자 값은 성공 결과 안의 `needs_user_input`으로 안내하고, GMS 설정/인증/통신·모델 출력 형식 오류는 공통 실패로 반환한다. 위치 검색 실패는 해당 `location_results`의 공통 오류와 입력 보완 상태로 남긴다. `ready_for_planning`은 입력 준비 상태이며 시간 제약 충족이나 추천 성공 판정이 아니다. 아직 Memory·계획·주유소 조회·최종 자연어 응답·이벤트·로그 저장은 수행하지 않는다. [분석 기록](DEVELOPMENT.md#f3005-implementation), [위치 해석 기록](DEVELOPMENT.md#f3005-geocoding)을 따른다.
+
+## 전체 Agent 연결 설계
 
 ```text
 START
