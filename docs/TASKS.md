@@ -120,8 +120,8 @@
 - [x] **F3015 — 계획 저장·조회:** 추천 주유소·계획 날짜·입력 시각·조건·가격/기준시각·도달/우회 비용·근거·보조정보·감사 시각을 SQLite에 저장하고 목록/상세를 조회한다. 알 수 없는 시각은 `None`으로 보존한다. 전체 420개 테스트 통과. [상세 근거](DEVELOPMENT.md#f3015-plan-storage)
 - [x] 같은 날짜에 시간이 겹치는 계획도 저장하고 충돌 계획을 반환한다. 시작/종료 중 하나라도 없으면 `not_comparable`, 맞닿은 반개구간은 비충돌로 검증했다. [상세 근거](DEVELOPMENT.md#f3015-plan-storage)
 - [x] **F3016 — 계획 수정·삭제 Backend:** revision 기반으로 날짜·조건·입력된 시작/종료시각을 수정하고 선택 계획을 삭제한다. 핵심값 변경은 기존 추천을 `revalidation_required`로 표시하며 동시 수정 충돌을 검출한다. 화면 목록 반영은 F3018에서 실제 API와 함께 검증한다. 전체 424개 테스트 통과. [상세 근거](DEVELOPMENT.md#f3016-plan-update-delete)
-- [ ] **F3017 — 백엔드 API 서버:** FastAPI에 대화 `POST /api/chat`, 계획 CRUD `/api/plans`, 로그 `/api/logs`를 별도 경로로 연결하고 Pydantic 입출력과 일관된 오류 형식을 제공한다(p.19~20).
-- [ ] 서버 재시작 후 저장 보존, 잘못된 입력·없는 ID·계획 충돌·로그 삭제 후 계획 보존을 검증한다. API 명세와 실제 `/docs` 화면을 맞춘다.
+- [x] **F3017 — 백엔드 API 서버:** FastAPI에 대화 `POST /api/chat`, 계획 CRUD `/api/plans`, 기존 로그 `/api/logs`를 별도 연결했다. 대화는 Agent·Memory·이벤트 로그를 한 요청으로 연결하고 Pydantic 응답/공통 오류를 제공한다. [상세 근거](DEVELOPMENT.md#f3017-backend-api)
+- [x] 새 SQLite 저장소 객체의 계획 보존, 잘못된 입력·없는 ID·계획 충돌·로그 삭제 후 계획 보존, 실제 ASGI `/docs` 200과 OpenAPI 메서드를 검증했다. 전체 429개 테스트 통과. 브라우저 시각 확인은 F3018~F3019에서 화면과 함께 수행한다. [상세 근거](DEVELOPMENT.md#f3017-backend-api)
 
 ### 2. 화면·상태 표시 — F3018~F3019
 

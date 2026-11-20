@@ -970,3 +970,38 @@ F3018에서 F3017 HTTP API를 실제 호출하며 검증하므로 이번 단계�
 
 다음은 **F3017 — FastAPI 백엔드 서버 연결**이다. `/api/chat`과 `/api/plans` CRUD를 기존
 `/api/logs`와 분리하고 Pydantic/OpenAPI·공통 오류·실행 로그 저장을 검증한다.
+
+<a id="f3017-backend-api"></a>
+
+## 34. F3017 FastAPI 백엔드 서버 — 2026-11-20
+
+UI 작업 직전 단계로 대화 Agent, 대화 Memory, 실행 로그와 계획 CRUD를 FastAPI에 연결했다.
+기존 Netlify 소개 화면과 `frontend/`는 변경하지 않았다.
+
+### 구현
+
+- `api/chat.py`의 `POST /api/chat`은 session ID가 없으면 새 대화 ID를 만들고, 요청마다 별도
+  execution ID를 만든다. 전체 `execute_request`에 SQLite Memory와 요청별 EventBus를 넘기고
+  Logging Agent를 먼저 구독시켜 같은 실행을 `/api/logs/{execution_id}`에서 조회할 수 있다.
+- Chat 응답은 분석·판정·재계획·F3011 최종 응답, 이벤트 건수와 로그 전달 실패 수만 typed
+  모델로 노출한다. 내부 작업 계획·Tool 원문·캐시·모델 추론은 HTTP 응답에 넣지 않는다.
+  로깅 장애는 EventBus 정책대로 정상 응답을 막지 않고 실패 수로 구분한다.
+- `api/plans.py`는 POST/GET 목록/GET 상세/PATCH/DELETE를 F3015~F3016 Repository에 연결했다.
+  저장 충돌은 201 성공 안에 알리고, revision 충돌409·없는 ID404·입력422·저장 장애503을
+  기존 `{error:{code,message,request_id}}` 형식으로 정제한다.
+- `api/app.py`에 Chat·Plans router를 Logs와 별도 등록했다. `/health`는 계속 DB/키와 독립적이며
+  로그에는 PATCH/PUT을 추가하지 않았다. 함수/필드 설명은 OpenAPI에 전달된다.
+
+### 검증
+
+신규 HTTP 테스트 **5개**, 전체 **429개**와 Ruff/포맷 검사를 통과했다. 실제 Agent의 인사
+분기를 오프라인 분석기로 실행해 Chat 응답의 새 IDs와 이벤트 저장, 이어지는 Logs 상세의
+동일 event_count를 확인했다. 계획 HTTP 전체 CRUD, 프로세스 재연결에 해당하는 새 Repository
+객체 조회, 재검증 상태, 시간 겹침 201, 오래된 revision 409, 잘못된 요청422, 없는 ID404,
+Agent 설정 실패503의 공통 오류와 원문 비노출을 확인했다. 기존 F3014 테스트로 로그 삭제 후
+계획 본문 보존도 유지했다. 생성 OpenAPI의 메서드 집합과 ASGI `GET /docs` 200/Swagger HTML을
+확인했다.
+
+이번 검증은 임시 SQLite·ASGI와 오프라인 인사 분기다. 실제 GMS/데이터 API 추천 HTTP 호출,
+실제 uvicorn 브라우저 화면과 Netlify 연결은 수행하지 않았다. 다음은 **F3018 UI**이며 사용자
+레퍼런스를 받은 뒤 화면 구조·스타일을 먼저 맞추고 실제 Backend API를 연결한다.

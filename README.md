@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3015의 전체 추천 흐름과 계획 저장·목록·상세 SQLite 연결 완료. 계획 수정·삭제·추천/계획 HTTP·화면은 후속
+> **구현 상태:** F3005~F3017의 전체 추천 흐름, 계획 CRUD, 대화·계획·로그 FastAPI 연결 완료. 기능 UI는 F3018부터 진행
 
 ## 단계별 진행 기록
 
@@ -30,7 +30,8 @@
 | 19. F3013 로그 저장 | Logging Agent 구독, SQLite 순서/불변 저장과 장애 격리 | 전체408개·세션 분리/비밀값 재정제/실제 DB 장애 검증. [저장 기록](docs/DEVELOPMENT.md#f3013-logging) | `40918f4` |
 | 20. F3014 로그 API | 최근 목록·일관된 상세·삭제, 공통 오류와 계획 행 보존 | 전체414개·OpenAPI GET/DELETE 및 404/422/503 검증. [API 기록](docs/DEVELOPMENT.md#f3014-log-api) | `ebad540` |
 | 21. F3015 계획 저장 | 입력·추천·근거 스냅샷 저장, 목록/상세, 비차단 시간 충돌 | 전체420개·재시작 영속성/알 수 없는 시각/구간 경계 검증. [저장 기록](docs/DEVELOPMENT.md#f3015-plan-storage) | `14a4303` |
-| 22. F3016 계획 수정·삭제 | revision 기반 핵심값 수정, 재검증 상태, 선택 삭제 | 전체424개·동시 수정/충돌 재판정/명시 시각 삭제 검증. [CRUD 기록](docs/DEVELOPMENT.md#f3016-plan-update-delete) | 커밋 후 기록 |
+| 22. F3016 계획 수정·삭제 | revision 기반 핵심값 수정, 재검증 상태, 선택 삭제 | 전체424개·동시 수정/충돌 재판정/명시 시각 삭제 검증. [CRUD 기록](docs/DEVELOPMENT.md#f3016-plan-update-delete) | `4392797` |
+| 23. F3017 Backend API | 대화 Agent·Memory·로그 연결과 계획 CRUD FastAPI/OpenAPI | 전체429개·HTTP 정상/오류/충돌/영속성/`/docs` 검증. [API 기록](docs/DEVELOPMENT.md#f3017-backend-api) | F3017 기능 커밋 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -218,7 +219,16 @@ Linux/macOS의 Bash에서는 가상환경 활성화 명령을 `source .venv/bin/
 python -m uvicorn fuelroute.api.app:app --reload
 ```
 
-`http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 현재 HTTP 경로는 `/health`만 구현했다. 추천은 아래 CLI에서 실행하며 Chat·추천 HTTP API·계획 CRUD 연결은 후속 단계다.
+`http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 대화는 `POST /api/chat`, 계획은
+`/api/plans`의 POST/GET/PATCH/DELETE, 실행 로그는 `/api/logs`의 GET/DELETE로 분리했다.
+대화 요청은 새 `session_id`와 `execution_id`를 반환하며, 후속 대화에는 session ID를
+재사용하고 실행 과정은 log ID로 조회한다. 예시는 Bash 기준이다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"대구에서 서울 가는데 휘발유이고 주행 가능180km, 안전 여유30km로 추천해줘."}'
+```
 
 ### API별 독립 검증
 
@@ -497,6 +507,6 @@ F3014는 `ebad540`에 커밋했다. 다음 개발 작업은 F3015 계획 저장�
 - 검색점 전략·후보 평가 범위의 고도화
 - 같은 주유소·진행 방향임을 입증하는 휴게소 매칭 고도화
 - 공개 데이터 재배포 범위를 확대할 때의 상세 이용허락 조건 재확인 및 공유 일일 한도 집계
-- 계획 CRUD, Backend 추천 API·UI 연동 구현
+- F3018 기능 UI와 Backend 연동, F3019 실행상태 표시
 
 다음에 수행할 일과 완료 체크는 [`docs/TASKS.md`](docs/TASKS.md)의 날짜별 목록을 따른다. 기존 개발 TASK 이력과 상세 구현·검증 근거는 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)에 보존한다.

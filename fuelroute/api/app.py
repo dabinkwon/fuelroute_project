@@ -1,14 +1,18 @@
-"""FastAPI 서버 진입점. health와 F3014 실행 로그 조회·삭제 API를 제공한다."""
+"""FastAPI 서버 진입점. F3017 대화·계획 CRUD와 실행 로그 API를 제공한다."""
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
+from fuelroute.api.chat import router as chat_router
 from fuelroute.api.errors import ApiFailure, api_failure_handler, request_validation_handler
 from fuelroute.api.logs import router as logs_router
+from fuelroute.api.plans import router as plans_router
 
 app = FastAPI(title="FuelRoute Agent", version="0.1.0")
 app.add_exception_handler(ApiFailure, api_failure_handler)
 app.add_exception_handler(RequestValidationError, request_validation_handler)
+app.include_router(chat_router)
+app.include_router(plans_router)
 app.include_router(logs_router)
 
 

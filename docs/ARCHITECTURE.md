@@ -1,6 +1,6 @@
 # ARCHITECTURE — FuelRoute Agent
 
-> **상태:** API·독립 Tool·저장/API 설계와 안전 구간 후보·실제 도달·우회비용 연결 검증 완료 / 전체 Agent 연결은 후속  
+> **상태:** 전체 Agent·계획 CRUD·대화/계획/로그 FastAPI 연결 완료 / 기능 UI는 F3018부터 진행
 > 실제 API 호출과 기술 타당성 검증 결과에 따라 수정한다.  
 > 요구사항 기준은 [`PRD.md`](PRD.md)를 따른다.
 
@@ -78,7 +78,7 @@ HTTP_TIMEOUT_SECONDS=20
 
 - `frontend/dist/`: 카카오 등록용 서비스 소개 프론트를 Sites에 선배포한 뒤 사용자 요청으로 Netlify에 배포했다. `netlify.toml`에서 정적 폴더만 지정한다. Backend 미연결이며 API 키를 사용하지 않는다. 배포 주소와 외부 공개 상태는 README에서 관리한다.
 - `fuelroute/core/config.py`: `.env`보다 OS 환경변수를 우선하고 빈 값을 미설정으로 처리한다. 키는 `SecretStr`로 보관하며 `doctor`는 누락 변수명만 출력한다.
-- `fuelroute/api/app.py`: 실제 구현된 Endpoint는 `GET /health`다. Chat·계획·로그 API는 아래 설계안대로 후속 구현한다.
+- `fuelroute/api/app.py`: `GET /health`, 대화 `POST /api/chat`, 계획 CRUD `/api/plans`, 실행 로그 조회·삭제 `/api/logs`를 등록한다.
 - `fuelroute/core/contracts.py`: `ToolResult[T]`의 성공/실패 필드 불변조건과 완료 시각의 시간대를 검증한다.
 - `fuelroute/calculations/driving_range.py`와 `schemas/driving.py`: 연료 입력의 단위·범위·유한성을 검증하고 안전거리를 계산한다. LLM용 Tool에도 설명과 입력 스키마를 등록했다.
 - `fuelroute/cli/gms_probe.py`: GMS ChatOpenAI 텍스트·구조화 조건 추출·단일 로컬 Tool 왕복을 실제 계정에서 검증했다.
@@ -278,9 +278,9 @@ created_at
 
 ---
 
-# 6. API 설계안
+# 6. API 설계와 구현
 
-`GET /health`와 F3014의 `GET/DELETE /api/logs` 계열은 구현했다. Chat·계획 Endpoint는 **설계안**이다.
+`GET /health`, F3014의 `GET/DELETE /api/logs`, F3017의 Chat·계획 Endpoint를 구현했다.
 
 ## POST `/api/chat`
 
@@ -295,19 +295,27 @@ created_at
 }
 ```
 
-- **Response 개념:**
+- **Response 핵심 필드 예시:**
 
 ```json
 {
   "session_id": "string",
+  "execution_id": "string",
+  "status": "recommended",
   "answer": "string",
-  "recommendation": null,
   "needs_user_input": false,
-  "execution_summary": []
+  "missing_fields": [],
+  "event_count": 12,
+  "log_delivery_failures": 0,
+  "analysis": {},
+  "judgement": {},
+  "replanning": {},
+  "final_response": {}
 }
 ```
 
-실제 schema는 Agent State 확정 후 결정한다.
+실제 응답은 `ChatResponse`이며 분석·판정·재계획·최종 응답과 실행 로그 ID/건수를 typed
+필드로 반환한다. 내부 Tool 원문·캐시·모델 추론은 포함하지 않는다.
 
 ## Plans
 
@@ -319,7 +327,8 @@ created_at
 | PATCH | `/api/plans/{plan_id}` | 계획 수정 | FR-010 |
 | DELETE | `/api/plans/{plan_id}` | 계획 삭제 | FR-010 |
 
-계획 시간 충돌은 저장을 막지 않고 응답에 충돌 정보를 포함해야 한다.
+계획 시간 충돌은 저장을 막지 않고 응답의 `conflicts`에 포함한다. 시각이 부족하면
+`conflict_check=not_comparable`이다. PATCH는 예상 revision을 요구한다.
 
 ## Logs
 
@@ -343,15 +352,17 @@ created_at
 | 실행상태·이력 | 단계·Tool 성공/실패·재계획·로그 조회/삭제 | `/api/logs` 계열 |
 | 계획 관리 | 저장·목록·상세·수정·삭제, 시간 충돌 안내 | `/api/plans` 계열 |
 
-오늘은 입력·결과 필드와 화면의 연결을 확정한다. 세 필수 조회 TODO의 개별 검증은 Python 함수 또는 CLI로 수행하며, 검증을 위해 공개 디버그 Endpoint를 추가할 필요는 없다.
+세 필수 조회 TODO의 개별 검증은 Python 함수 또는 CLI로 수행하며, 검증용 공개 디버그
+Endpoint는 추가하지 않는다.
 
-## 오늘 확정한 HTTP 입출력 계약 — 구현은 후속
+## 구현한 HTTP 입출력 계약
 
-실제 조회 Tool의 데이터를 바탕으로 아래 계약을 설계한다. `GET /health` 외 HTTP Endpoint가 이미 동작한다고 해석하지 않는다.
+실제 조회 Tool과 저장 모델을 바탕으로 아래 계약을 구현했다. 상세 JSON schema는 `/docs`와
+`/openapi.json`에서 확인한다.
 
 | Endpoint | 입력 | 성공 응답·상태 |
 |---|---|---|
-| `POST /api/chat` | `message: string`, `session_id: string 또는 null`; UI 입력 시 `trip: TripContext 또는 null` | 200, `session_id`, `answer`, `recommendation: FuelPlan 또는 null`, `needs_user_input: bool`, `missing_fields: string[]`, `execution_summary: EventSummary[]`, `warnings: string[]` |
+| `POST /api/chat` | `message: string`, `session_id: string 또는 null` | 200, 대화/실행 ID, 분석·판정·재계획·최종 응답, 이벤트 건수·로그 저장 실패 수 |
 | `POST /api/plans` | 주행 입력 스냅샷·검증된 추천 스냅샷·`trip_date`·선택 계획 시작/종료시각 | 201, `plan: FuelPlan`, `conflicts: [{plan_id, reason}]`; 충돌을 이유로 저장을 거절하지 않음 |
 | `GET /api/plans` | 선택 `trip_date: YYYY-MM-DD` | 200, `{items: FuelPlan[]}` |
 | `GET /api/plans/{plan_id}` | 저장한 계획 ID | 200, `FuelPlan` |
@@ -366,9 +377,11 @@ created_at
 - `ExecutionEvent`는 11장의 세션/순서/Tool/요청ID/시각과 마스킹된 payload를 사용한다. 원본 인증 URL·헤더·내부 예외 trace는 응답에 포함하지 않는다.
 - HTTP 오류는 `{error: {code, message, request_id}}`로 통일한다. 잘못된 입력은 422, 없는 계획/로그는 404, 일시 외부 장애로 핵심 판단 불가 시 503이다. 후보 없음·추가 입력·보조정보 실패는 대화 상태로 표현하고 UI가 `warnings`와 근거를 표시한다.
 - 화면 상태: 요청 중은 처리 중 표시, 필수값 누락은 입력 보완, 추천 없음은 근거 안내, 휴게소만 실패하면 보조정보 미확인 표시다. 로그 화면은 수정 버튼을 제공하지 않는다.
-- 계획 시간 충돌은 겹치는 시작/종료 구간을 비교하고, 구체 시각이 없으면 같은 날짜 계획을 참고 경고한다. 날짜 충돌만으로 저장 실패를 반환하지 않는다.
+- 계획 시간 충돌은 시작/종료가 모두 있는 반개구간을 비교한다. 구체 시각이 부족하면
+  `not_comparable`로 구분하며 날짜만으로 충돌을 만들거나 저장 실패를 반환하지 않는다.
 
-오늘은 위 필드·단위·누락 정책을 실응답에 맞춰 정리했고, Backend/Frontend 전체 구현·연결은 진행하지 않았다.
+F3017은 위 Backend 계약을 연결했다. Frontend의 실제 호출·상태 표시·브라우저 검증은
+F3018~F3019에서 수행한다.
 
 ---
 
