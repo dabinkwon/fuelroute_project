@@ -80,6 +80,7 @@ def test_execution_modal_connects_ordered_log_detail_and_delete() -> None:
     assert "REPLAN_TRIGGERED" in script and "REPLAN_LIMIT_REACHED" in script
     assert 'setExecutionState("running", "Agent 실행 중")' in script
     assert "log_delivery_failures" in script
+    assert "chat.elapsed_ms / 1000" in script
 
 
 def test_frontend_does_not_embed_secrets_or_external_api_keys() -> None:

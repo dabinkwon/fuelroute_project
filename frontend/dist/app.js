@@ -477,7 +477,8 @@ function renderEvidenceItem(fact) { return `<li>${escapeHtml(fact.text)}</li>`; 
  * 추천이 확정된 `recommended` 응답에서만 textarea를 비워 완료된 요청 문장을 제거한다.
  * 입력 보완·추천 없음·실패에서는 사용자가 내용을 참고하거나 수정할 수 있도록 유지한다.
  * 로딩 중 중복 제출을 막고 실패는 공개 toast로만 표시한다. 네트워크·Memory/로그 DB 쓰기와
- * 성공 시 입력 DOM 초기화 부작용이 있다.
+ * 성공 시 입력 DOM 초기화 부작용이 있다. 완료 상태에는 서버가 실측한 전체 Agent 경과시간을
+ * 초 단위로 표시하되 성능 보장이나 SLA로 해석하지 않는다.
  * @param {SubmitEvent} event form 제출 이벤트.
  * @returns {Promise<void>}
  */
@@ -495,7 +496,7 @@ async function handleChatSubmit(event) {
     state.activeExecutionId = chat.execution_id;
     setExecutionState(
       chat.log_delivery_failures ? "partial" : "completed",
-      chat.log_delivery_failures ? `응답 완료 · 로그 ${chat.log_delivery_failures}건 누락` : `응답 완료 · 이벤트 ${chat.event_count}개`,
+      chat.log_delivery_failures ? `응답 완료 · 로그 ${chat.log_delivery_failures}건 누락 · ${(chat.elapsed_ms / 1000).toFixed(1)}초` : `응답 완료 · 이벤트 ${chat.event_count}개 · ${(chat.elapsed_ms / 1000).toFixed(1)}초`,
     );
     await loadExecutionLogs(true);
     await loadExecutionDetail(chat.execution_id, true);

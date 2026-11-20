@@ -1,0 +1,46 @@
+{
+  "requirement": "NF3005",
+  "verified_at": "2026-11-20T14:10:00+09:00",
+  "acceptance_policy": {
+    "fixed_sla_seconds": null,
+    "reason": "원본 요구사항에 초 단위 합격 기준이 없어 관측값과 사용성 판단만 기록"
+  },
+  "live_observations": [
+    {
+      "scenario": "normal_recommendation",
+      "source": "2026-11-19-final-response.json",
+      "elapsed_ms": 15138.479,
+      "status": "recommended",
+      "calls": {"gms": 3, "kakao": 7, "opinet": 6, "rest_area": 1}
+    },
+    {
+      "scenario": "two_replans_and_evaluation_budget_stop",
+      "source": "2026-11-19-graph-replanning.json",
+      "elapsed_ms_approx": 24500,
+      "status": "no_recommendation",
+      "replan_count": 2,
+      "evaluated_candidates": 9
+    }
+  ],
+  "current_implementation": {
+    "chat_response_elapsed_ms": true,
+    "frontend_seconds_display": true,
+    "loading_state_visible": true,
+    "measurement_scope": "Agent 전체: LLM, 외부 Tool, 계산, 최종 응답 포함"
+  },
+  "usability_assessment": {
+    "normal_request": "약 15.1초로 즉시 응답은 아니지만 실행 중 상태와 완료 시간이 표시되어 사용 가능",
+    "upper_bound_case": "약 24.5초로 대기가 눈에 띄며 재계획 2회·후보 9곳 평가 상황임을 결과에서 설명",
+    "future_guarantee": false
+  },
+  "verification": {
+    "focused_pytest": "15 passed in 1.74s",
+    "full_pytest": "444 passed in 11.46s",
+    "ruff_lint": "passed",
+    "ruff_format": "102 files already formatted",
+    "node_syntax": "passed",
+    "pip_check": "No broken requirements found",
+    "git_diff_check": "passed",
+    "new_external_api_calls": 0
+  }
+}

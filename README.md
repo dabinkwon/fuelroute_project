@@ -224,7 +224,8 @@ python -m uvicorn fuelroute.api.app:app --reload
 `http://127.0.0.1:8000/health`와 `/docs`를 사용할 수 있다. 대화는 `POST /api/chat`, 계획은
 `/api/plans`의 POST/GET/PATCH/DELETE, 실행 로그는 `/api/logs`의 GET/DELETE로 분리했다.
 대화 요청은 새 `session_id`와 `execution_id`를 반환하며, 후속 대화에는 session ID를
-재사용하고 실행 과정은 log ID로 조회한다. 예시는 Bash 기준이다.
+재사용하고 실행 과정은 log ID로 조회한다. `elapsed_ms`는 LLM·외부 Tool·계산·최종 응답을
+포함한 이번 Agent 실행의 실측 시간이며 SLA가 아니다. 예시는 Bash 기준이다.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/chat \

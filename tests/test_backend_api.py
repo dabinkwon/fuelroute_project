@@ -103,6 +103,7 @@ def test_chat_runs_graph_and_persists_queryable_execution_log(tmp_path: Path) ->
     assert body["status"] == "not_required" and body["answer"]
     assert len(body["session_id"]) == len(body["execution_id"]) == 32
     assert body["event_count"] > 0 and body["log_delivery_failures"] == 0
+    assert body["elapsed_ms"] >= 0
     detail = asyncio.run(
         api_request("GET", f"/api/logs/{body['execution_id']}", database_path=path)
     )

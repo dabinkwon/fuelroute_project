@@ -90,9 +90,10 @@ def agent_failure(result: ToolResult[dict]) -> ApiFailure:
 def chat_response(result: ToolResult[dict], session_id: str, execution_id: str) -> ChatResponse:
     """Agent 성공 data를 UI용 typed HTTP 응답으로 축소·재검증한다.
 
-    분석·판정·재계획·최종 응답과 이벤트 건수만 선택한다. 내부 계획, Tool 입력/응답 원문,
-    캐시, 모델 추론은 노출하지 않는다. 이벤트 실행 ID가 요청 ID와 다르거나 필수 필드가
-    손상되면 ValidationError/ValueError이며 저장·외부 호출은 없다.
+    분석·판정·재계획·최종 응답, 이벤트 건수와 공통 결과의 전체 `elapsed_ms`만 선택한다.
+    내부 계획, Tool 입력/응답 원문, 캐시, 모델 추론은 노출하지 않는다. 이벤트 실행 ID가
+    요청 ID와 다르거나 필수 필드가 손상되면 ValidationError/ValueError이며 저장·외부 호출은
+    없다. 처리시간은 관측값일 뿐 합격 SLA나 미래 응답시간 보장이 아니다.
     """
     if not result.ok or result.data is None:
         raise ValueError("성공한 Agent 결과가 필요합니다.")
@@ -122,6 +123,7 @@ def chat_response(result: ToolResult[dict], session_id: str, execution_id: str) 
         ),
         event_count=event_stream["event_count"],
         log_delivery_failures=event_stream["delivery_failures"],
+        elapsed_ms=result.meta.elapsed_ms,
     )
 
 

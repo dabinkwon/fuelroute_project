@@ -32,7 +32,8 @@ class ChatResponse(BaseModel):
 
     `session_id`는 다음 대화에 재사용하고 `execution_id`는 이번 실행 로그 조회에만 사용한다.
     `final_response`와 `judgement`는 가격·거리·근거를 포함한 기존 typed 모델이다. 이벤트 원문은
-    포함하지 않고 `event_count`만 반환하므로 상세 과정은 `/api/logs/{execution_id}`로 읽는다.
+    포함하지 않고 건수와 전체 처리시간만 반환하므로 상세 과정은 `/api/logs/{execution_id}`로
+    읽는다. `elapsed_ms`는 서버가 Agent 진입부터 공통 결과 생성까지 실측한 값이며 SLA가 아니다.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -53,3 +54,8 @@ class ChatResponse(BaseModel):
     )
     event_count: int = Field(ge=1)
     log_delivery_failures: int = Field(ge=0)
+    elapsed_ms: float = Field(
+        ge=0,
+        allow_inf_nan=False,
+        description="Agent 전체 처리 경과시간(ms); 네트워크·LLM·Tool 실행 포함, SLA 아님",
+    )
