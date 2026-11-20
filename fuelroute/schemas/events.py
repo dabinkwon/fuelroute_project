@@ -108,3 +108,40 @@ class ExecutionSessionRecord(EventExecutionKey):
         if self.finished_at is not None and self.finished_at < self.started_at:
             raise ValueError("실행 종료 시각은 시작 시각보다 빠를 수 없습니다.")
         return self
+
+
+class ExecutionLogList(BaseModel):
+    """로그 목록 API가 반환하는 최신 실행 세션 목록과 건수."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[ExecutionSessionRecord]
+    count: int = Field(ge=0)
+
+
+class ExecutionLogDetail(BaseModel):
+    """로그 상세 API의 한 실행 세션과 sequence 오름차순 이벤트 목록.
+
+    session.event_count와 events 길이는 같아야 한다. 이벤트는 모두 같은 execution_id이며
+    sequence1부터 연속이어야 한다. 불일치는 ValueError다. 이 모델은 응답 검증만 하고
+    DB·삭제·LLM 부작용은 없다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    session: ExecutionSessionRecord
+    events: list[ExecutionEvent]
+
+    @model_validator(mode="after")
+    def consistent_events(self) -> "ExecutionLogDetail":
+        """세션 ID·event_count와 이벤트 ID/연속 sequence를 대조하고 자기 자신을 반환한다.
+
+        빈 이벤트는 event_count가 최소1인 저장 세션과 맞지 않아 ValueError다. 내용을 수정하거나
+        누락 이벤트를 만들지 않으며 외부 호출·저장 부작용은 없다.
+        """
+        if len(self.events) != self.session.event_count or any(
+            event.execution_id != self.session.execution_id or event.sequence != index
+            for index, event in enumerate(self.events, start=1)
+        ):
+            raise ValueError("실행 세션과 이벤트 목록이 일치하지 않습니다.")
+        return self

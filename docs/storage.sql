@@ -1,5 +1,5 @@
 -- 저장 설계 기준. F3010 대화 맥락과 F3013 실행 로그 Repository를 실제 연결했다.
--- 로그 HTTP 조회·삭제는 F3014, 계획 Repository/CRUD는 F3015~F3016 범위다.
+-- F3014 로그 HTTP 조회·삭제까지 연결했다. 계획 Repository/CRUD는 F3015~F3016 범위다.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS conversation_memory (

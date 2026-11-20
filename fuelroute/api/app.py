@@ -1,8 +1,15 @@
-"""FastAPI 서버 진입점. 현재 GET /health를 제공하며 추천·저장 HTTP 연결은 후속 작업이다."""
+"""FastAPI 서버 진입점. health와 F3014 실행 로그 조회·삭제 API를 제공한다."""
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+
+from fuelroute.api.errors import ApiFailure, api_failure_handler, request_validation_handler
+from fuelroute.api.logs import router as logs_router
 
 app = FastAPI(title="FuelRoute Agent", version="0.1.0")
+app.add_exception_handler(ApiFailure, api_failure_handler)
+app.add_exception_handler(RequestValidationError, request_validation_handler)
+app.include_router(logs_router)
 
 
 @app.get("/health")

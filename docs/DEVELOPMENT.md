@@ -885,3 +885,26 @@ README·TASKS의 완료/커밋 상태와 요구사항·설계·API 사용 안내
 - DB 경로가 디렉터리인 실제 SQLite 열기 실패를 매 이벤트에서 발생시켜도 메인 인사 응답은 성공하고 `delivery_failures=event_count`로 관찰됐다. 이는 실패를 성공 저장으로 기록한 것이 아니며 해당 실행 로그는 미완료다.
 
 다음은 **F3014 — 실행 로그 조회·삭제 HTTP API**다. 계획 저장·추천 HTTP API·UI·원격 push는 변경하지 않았다.
+
+<a id="f3014-log-api"></a>
+
+## 31. F3014 실행 로그 조회·삭제 — 2026-11-20
+
+**구현·검증 완료 / F3013 `40918f4` 다음의 별도 기능 커밋으로 기록한다.** 저장 Repository의 목록·일관된 상세 snapshot·삭제를 FastAPI 라우터에 연결하고 수정 API는 만들지 않았다.
+
+### 구현
+
+- `schemas/events.py`에 목록/상세 응답 계약을 추가했다. 상세는 session.event_count, 같은 execution ID, sequence1부터의 연속 이벤트를 재검증한다.
+- `storage/logs.py`에 최근 started_at/ID 역순 목록(limit1~100), 단일 읽기 트랜잭션의 세션+이벤트 상세, 세션 삭제를 추가했다. 실행 중 새 이벤트/동시 삭제가 있어도 상세 두 결과는 같은 SQLite snapshot이다.
+- 삭제는 `execution_sessions` 한 행만 파라미터 바인딩으로 지운다. foreign key로 이벤트는 CASCADE되고 `fuel_plans`가 존재하면 계획 행은 유지되며 session_id만 NULL이 된다. 다른 실행/계획은 변경하지 않는다.
+- `api/logs.py`에 GET 목록/상세와 DELETE204를 연결했다. 앱 상태에 주입한 저장소를 우선 사용하고 없으면 `DATABASE_PATH`의 SQLite를 사용한다. 수정 Endpoint는 없다.
+- `api/errors.py`에 고정 공개 code/message와 UUID request ID를 가진 오류 처리기를 추가했다. Pydantic/FastAPI 입력 오류는422 `INVALID_INPUT`, 없음은404 `LOG_NOT_FOUND`, Repository 장애는503 `LOG_STORE_ERROR`이며 입력값·경로·원 예외는 응답에 넣지 않는다.
+
+### 검증
+
+- 신규6개 API 테스트에서 최신 목록/limit, 상세 sequence, 삭제204/이후404, 잘못된 ID·limit422, 없는 로그404, 실제 DB 열기 실패503, 공통 오류 shape를 확인했다.
+- `docs/storage.sql`의 계획 테이블을 실제 같은 임시 DB에 만든 뒤 로그를 삭제했다. 이벤트는0건이 되고 계획 행은 남아 session_id만 NULL이었다.
+- PUT/PATCH가405이고 등록 메서드가 GET/DELETE뿐인지 확인했다. 고장 난 로그 DB를 주입해도 `/health`는 DB를 열지 않고200을 반환했다.
+- F3012 정상/Tool 실패/재계획 이벤트 검증과 F3013 저장 장애/세션 분리 검증을 함께 근거로 사용한다. 새 GMS·외부 데이터 API·배포 호출은 없었다.
+
+다음은 **F3015 — 계획 저장**이다. 추천 HTTP API·계획 CRUD·UI·원격 push는 변경하지 않았다.

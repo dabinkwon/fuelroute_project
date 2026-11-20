@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3013의 전체 추천 흐름, 근거 기반 응답, 이벤트 발행과 SQLite 로그 저장 연결. 로그 조회·삭제 HTTP, 계획 CRUD·화면은 후속
+> **구현 상태:** F3005~F3014의 전체 추천 흐름, 근거 기반 응답, 이벤트 발행·SQLite 저장·로그 조회/삭제 HTTP 연결. 계획 CRUD·추천 HTTP·화면은 후속
 
 ## 단계별 진행 기록
 
@@ -27,6 +27,7 @@
 | 16. F3010 대화 맥락 | 검증 조건·짧은 요약의 세션별 SQLite 저장과 현재 발언 변경값 병합 | 전체355개·실제 GMS4회/데이터 API0회. [맥락 기록](docs/DEVELOPMENT.md#f3010-memory) | `e3c8777` |
 | 17. F3011 최종 응답 | 코드 검증 사실·출처와 GMS 사실 ID 문단 구성, 텍스트 CLI | 전체392개·실제 정상 추천 GMS3/길찾기7/Opinet6/휴게소1회. [응답 기록](docs/DEVELOPMENT.md#f3011-response) | `802124a` |
 | 18. F3012 실행 이벤트 | 단계·Tool·판정·재계획·응답 이벤트와 구독 실패 격리 | 전체402개·payload 정제/연속 순서 검증. [이벤트 기록](docs/DEVELOPMENT.md#f3012-events) | `1d662c6` |
+| 19. F3013 로그 저장 | Logging Agent 구독, SQLite 순서/불변 저장과 장애 격리 | 전체408개·세션 분리/비밀값 재정제/실제 DB 장애 검증. [저장 기록](docs/DEVELOPMENT.md#f3013-logging) | `40918f4` |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -389,6 +390,20 @@ payload는 단계 상태·개수·오류 코드·입력 필드명만 담는다. 
 
 이벤트 행은 SQLite trigger로 수정할 수 없고, 중복·순서 간격·종료 뒤 추가를 `LOG_STORE_ERROR`로 거절한다. 서로 다른 실행 ID는 각자 sequence1부터 시작한다. 파일 I/O는 작업 스레드에서 처리하고 연결을 작업마다 닫는다. DB 저장 장애는 EventBus가 격리해 메인 Agent 응답을 유지한다. 저장 연결은 `LoggingAgent(store, settings.secret_values()).connect(bus)`로 명시하며 로그 HTTP 조회·삭제는 F3014에서 제공한다.
 
+<a id="f3014-log-api"></a>
+
+### F3014 실행 로그 조회·삭제 API — 구현·검증 완료
+
+FastAPI에 아래 세 Endpoint를 연결했다. 상세는 한 SQLite snapshot에서 읽어 실행 중 조회에도 세션 event count와 이벤트 목록이 일치한다. 목록은 최근 시작 순서이고 `limit`은1~100이다. 삭제는 세션과 이벤트를 지우지만 연결된 저장 계획이 있으면 계획 행은 유지하고 실행 참조만 `NULL`로 바꾼다. PUT/PATCH 수정 Endpoint는 제공하지 않는다.
+
+```bash
+curl -sS 'http://127.0.0.1:8000/api/logs?limit=50'
+curl -sS 'http://127.0.0.1:8000/api/logs/EXECUTION_ID'
+curl -i -X DELETE 'http://127.0.0.1:8000/api/logs/EXECUTION_ID'
+```
+
+없는 로그는404 `LOG_NOT_FOUND`, 잘못된 ID/쿼리는422 `INVALID_INPUT`, 저장소 장애는503 `LOG_STORE_ERROR`다. 오류 본문은 `{error: {code, message, request_id}}`이며 원 입력·DB 경로·예외를 노출하지 않는다. `/health`는 로그 DB와 무관하게 기존 정적200을 유지한다.
+
 ### 기존 명시적 조건의 추천·재계획 실행
 
 ```bash
@@ -440,7 +455,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-F3012는 `1d662c6`에 커밋했고 F3013 이벤트 구독·SQLite 로그 저장을 구현·검증했다. 다음 개발 작업은 F3014 로그 조회·삭제 HTTP API다.
+F3013은 `40918f4`에 커밋했고 F3014 로그 조회·삭제 HTTP API를 구현·검증했다. 다음 개발 작업은 F3015 계획 저장이다.
 
 완료된 내용:
 
@@ -479,6 +494,6 @@ F3012는 `1d662c6`에 커밋했고 F3013 이벤트 구독·SQLite 로그 저장�
 - 검색점 전략·후보 평가 범위의 고도화
 - 같은 주유소·진행 방향임을 입증하는 휴게소 매칭 고도화
 - 공개 데이터 재배포 범위를 확대할 때의 상세 이용허락 조건 재확인 및 공유 일일 한도 집계
-- 로그 조회·삭제와 계획 CRUD, Backend 추천 API·UI 연동 구현
+- 계획 CRUD, Backend 추천 API·UI 연동 구현
 
 다음에 수행할 일과 완료 체크는 [`docs/TASKS.md`](docs/TASKS.md)의 날짜별 목록을 따른다. 기존 개발 TASK 이력과 상세 구현·검증 근거는 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)에 보존한다.

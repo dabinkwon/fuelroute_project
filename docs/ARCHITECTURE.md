@@ -280,7 +280,7 @@ created_at
 
 # 6. API 설계안
 
-`GET /health`를 제외한 아래 Endpoint는 **설계안**이다.
+`GET /health`와 F3014의 `GET/DELETE /api/logs` 계열은 구현했다. Chat·계획 Endpoint는 **설계안**이다.
 
 ## POST `/api/chat`
 
@@ -329,7 +329,10 @@ created_at
 | GET | `/api/logs/{session_id}` | 세션 로그 상세 | FR-011 |
 | DELETE | `/api/logs/{session_id}` | 로그 삭제 | FR-011 |
 
-**로그 수정 Endpoint는 만들지 않는다.**
+**로그 수정 Endpoint는 만들지 않는다.** F3014 구현은 `api/logs.py`에서 목록 limit1~100,
+한 SQLite snapshot의 상세, 삭제를 제공한다. 없는 ID는404, 잘못된 입력은422, 저장소 장애는
+503이며 `{error:{code,message,request_id}}`로 반환한다. DELETE는 이벤트를 CASCADE하고
+계획 행이 있으면 FK `ON DELETE SET NULL`로 실행 참조만 지운다. `/health`는 DB와 독립적이다.
 
 ## 화면 구성과 연결
 
