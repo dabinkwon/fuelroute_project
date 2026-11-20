@@ -1,5 +1,5 @@
 -- 저장 설계 기준. F3010 대화 맥락과 F3013 실행 로그 Repository를 실제 연결했다.
--- F3014 로그 HTTP 조회·삭제까지 연결했다. 계획 Repository/CRUD는 F3015~F3016 범위다.
+-- F3014 로그 HTTP 조회·삭제와 F3015 계획 저장·목록·상세 Repository를 연결했다.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS conversation_memory (
@@ -42,9 +42,9 @@ END;
 CREATE TABLE IF NOT EXISTS fuel_plans (
     id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT REFERENCES execution_sessions(session_id) ON DELETE SET NULL,
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    validation_status TEXT NOT NULL CHECK (validation_status IN ('valid', 'revalidation_required')),
     trip_date TEXT NOT NULL,
-    origin_json TEXT NOT NULL CHECK (json_valid(origin_json)),
-    destination_json TEXT NOT NULL CHECK (json_valid(destination_json)),
     input_snapshot_json TEXT NOT NULL CHECK (json_valid(input_snapshot_json)),
     recommendation_json TEXT NOT NULL CHECK (json_valid(recommendation_json)),
     planned_start_at TEXT,
@@ -57,3 +57,6 @@ CREATE INDEX IF NOT EXISTS execution_events_session_sequence
 ON execution_events(session_id, sequence);
 
 CREATE INDEX IF NOT EXISTS fuel_plans_trip_date ON fuel_plans(trip_date);
+
+CREATE INDEX IF NOT EXISTS fuel_plans_time_range
+ON fuel_plans(trip_date, planned_start_at, planned_end_at);

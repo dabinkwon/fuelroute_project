@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3014의 전체 추천 흐름, 근거 기반 응답, 이벤트 발행·SQLite 저장·로그 조회/삭제 HTTP 연결. 계획 CRUD·추천 HTTP·화면은 후속
+> **구현 상태:** F3005~F3015의 전체 추천 흐름과 계획 저장·목록·상세 SQLite 연결 완료. 계획 수정·삭제·추천/계획 HTTP·화면은 후속
 
 ## 단계별 진행 기록
 
@@ -29,6 +29,7 @@
 | 18. F3012 실행 이벤트 | 단계·Tool·판정·재계획·응답 이벤트와 구독 실패 격리 | 전체402개·payload 정제/연속 순서 검증. [이벤트 기록](docs/DEVELOPMENT.md#f3012-events) | `1d662c6` |
 | 19. F3013 로그 저장 | Logging Agent 구독, SQLite 순서/불변 저장과 장애 격리 | 전체408개·세션 분리/비밀값 재정제/실제 DB 장애 검증. [저장 기록](docs/DEVELOPMENT.md#f3013-logging) | `40918f4` |
 | 20. F3014 로그 API | 최근 목록·일관된 상세·삭제, 공통 오류와 계획 행 보존 | 전체414개·OpenAPI GET/DELETE 및 404/422/503 검증. [API 기록](docs/DEVELOPMENT.md#f3014-log-api) | `ebad540` |
+| 21. F3015 계획 저장 | 입력·추천·근거 스냅샷 저장, 목록/상세, 비차단 시간 충돌 | 전체420개·재시작 영속성/알 수 없는 시각/구간 경계 검증. [저장 기록](docs/DEVELOPMENT.md#f3015-plan-storage) | 커밋 후 기록 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 

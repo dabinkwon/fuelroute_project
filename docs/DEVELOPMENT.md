@@ -908,3 +908,34 @@ README·TASKS의 완료/커밋 상태와 요구사항·설계·API 사용 안내
 - F3012 정상/Tool 실패/재계획 이벤트 검증과 F3013 저장 장애/세션 분리 검증을 함께 근거로 사용한다. 새 GMS·외부 데이터 API·배포 호출은 없었다.
 
 다음은 **F3015 — 계획 저장**이다. 추천 HTTP API·계획 CRUD·UI·원격 push는 변경하지 않았다.
+
+<a id="f3015-plan-storage"></a>
+
+## 32. F3015 계획 저장·목록·상세 — 2026-11-20
+
+F3015의 내부 저장 계층을 구현했다. FastAPI 계획 Endpoint는 F3017, 수정·삭제는 F3016에서
+별도 연결하므로 이번 단계에서 화면이나 배포 파일은 변경하지 않았다.
+
+### 구현
+
+- `schemas/plans.py`에 검증된 출발·목적지, km 또는 기존 L 방식 입력, 추천 주유소 상세,
+  가격 기준시각, 안전거리, 실제 도달거리, 우회 거리/시간, F3011 근거와 휴게소 보조정보를
+  저장하는 typed 스냅샷을 정의했다. 날짜·시간대·입력 방식과 범위를 저장 전에 검사한다.
+- `storage/plans.py`에 파일 SQLite Repository의 저장·목록·상세를 구현했다. UUID ID와 UTC
+  생성/수정 시각, revision 1, `valid` 상태를 생성하고 프로세스/객체 재생성 뒤에도 조회한다.
+- 계획 시작·종료가 모두 있을 때 `[start,end)` 반개구간으로 같은 날짜의 겹침을 찾는다.
+  겹침은 저장을 취소하지 않고 `conflicts`로 돌려준다. 시각이 하나라도 없으면 추측하지 않고
+  `conflict_check=not_comparable`, 바로 맞닿은 계획은 비충돌로 반환한다.
+- `docs/storage.sql`의 계획 테이블을 실제 Repository와 맞추고 revision·검증 상태·시간 index를
+  추가했다. 실행 로그가 삭제되면 `ON DELETE SET NULL`로 계획 본문을 유지하는 정책도 보존했다.
+
+### 검증
+
+Git Bash에서 `python -m pytest -W error -q`, `python -m ruff check .`,
+`python -m ruff format --check .`를 실행했다. 전체 **420개** 테스트와 Ruff/포맷 검사가
+통과했다. 신규 계획 테스트 6개에서 전체 스냅샷 왕복, 새 Repository 객체의 재시작 영속성,
+겹친 계획 저장/알림, 맞닿은 구간, 시각 미입력, naive/역전 시각 거절, 날짜 필터와 없는 상세를
+확인했다. 외부 API·GMS 실호출이나 실제 서버/브라우저 검증은 수행하지 않았다.
+
+다음은 **F3016 — 계획 수정·삭제**다. 조건 변경 시 기존 추천을 `revalidation_required`로
+표시하고 동시 수정 충돌을 검출한 뒤 별도 기능 커밋으로 남긴다.

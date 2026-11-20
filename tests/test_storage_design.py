@@ -36,9 +36,9 @@ def test_storage_design_log_immutability_and_plan_survival() -> None:
         plan = (
             "plan",
             "session",
+            1,
+            "valid",
             "2026-11-18",
-            "{}",
-            "{}",
             "{}",
             "{}",
             None,

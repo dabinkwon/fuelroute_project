@@ -63,9 +63,9 @@ def test_delete_cascades_events_but_preserves_plan_row(tmp_path: Path) -> None:
         connection.execute("PRAGMA foreign_keys = ON")
         connection.executescript(Path("docs/storage.sql").read_text(encoding="utf-8"))
         connection.execute(
-            "INSERT INTO fuel_plans(id, session_id, trip_date, origin_json, destination_json, "
+            "INSERT INTO fuel_plans(id, session_id, revision, validation_status, trip_date, "
             "input_snapshot_json, recommendation_json, planned_start_at, planned_end_at, "
-            "created_at, updated_at) VALUES (?, ?, ?, '{}', '{}', '{}', '{}', NULL, NULL, ?, ?)",
+            "created_at, updated_at) VALUES (?, ?, 1, 'valid', ?, '{}', '{}', NULL, NULL, ?, ?)",
             (
                 "plan-1",
                 "run-delete",
