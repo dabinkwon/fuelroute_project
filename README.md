@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3012의 전체 추천 흐름과 근거 기반 응답·실행 이벤트 발행 연결. 이벤트 SQLite 저장·로그/계획 CRUD·HTTP·화면은 후속
+> **구현 상태:** F3005~F3013의 전체 추천 흐름, 근거 기반 응답, 이벤트 발행과 SQLite 로그 저장 연결. 로그 조회·삭제 HTTP, 계획 CRUD·화면은 후속
 
 ## 단계별 진행 기록
 
@@ -26,6 +26,7 @@
 | 15. F3009 그래프 재계획 | 요청별 캐시·미평가 후보 우선·최대2회와 전체 평가 예산 | 전체319개·실제 후보9곳/추가2회 상한 종료. [재계획 기록](docs/DEVELOPMENT.md#f3009-replanning) | `1dc3228` |
 | 16. F3010 대화 맥락 | 검증 조건·짧은 요약의 세션별 SQLite 저장과 현재 발언 변경값 병합 | 전체355개·실제 GMS4회/데이터 API0회. [맥락 기록](docs/DEVELOPMENT.md#f3010-memory) | `e3c8777` |
 | 17. F3011 최종 응답 | 코드 검증 사실·출처와 GMS 사실 ID 문단 구성, 텍스트 CLI | 전체392개·실제 정상 추천 GMS3/길찾기7/Opinet6/휴게소1회. [응답 기록](docs/DEVELOPMENT.md#f3011-response) | `802124a` |
+| 18. F3012 실행 이벤트 | 단계·Tool·판정·재계획·응답 이벤트와 구독 실패 격리 | 전체402개·payload 정제/연속 순서 검증. [이벤트 기록](docs/DEVELOPMENT.md#f3012-events) | `1d662c6` |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -380,6 +381,14 @@ python -m fuelroute run --text --message '안녕' --reference-date 2026-11-19
 
 payload는 단계 상태·개수·오류 코드·입력 필드명만 담는다. 사용자 원문·좌표값·가격/경로 원본·키·URL·헤더·모델 내부 추론은 넣지 않는다. 구독자가 없으면 기존 실행이 그대로 동작하고, 한 구독자가 실패해도 다음 구독자와 메인 Agent를 계속 실행한다. `execute_request(..., event_bus=..., execution_id=...)`를 지정하면 `data.event_stream`에 실행 ID·발행 건수·전달 실패 수를 반환한다. SQLite 저장은 F3013 범위다.
 
+<a id="f3013-logging"></a>
+
+### F3013 SQLite 실행 로그 저장 — 구현·검증 완료
+
+`LoggingAgent`는 `EventBus`의 비동기 구독자로 연결해 이벤트를 설정 비밀값으로 다시 정제한 뒤 `SQLiteExecutionLogStore`에 그대로 전달한다. 저장에는 LLM을 사용하지 않고 사실을 요약·재작성하지 않는다. 저장소는 실행별 첫 이벤트부터 세션을 만들고 정확한 `event_count+1` sequence만 append한다. 마지막 `execution/STEP_COMPLETED`에서 `completed` 또는 `failed` 상태와 종료 시각을 기록한다.
+
+이벤트 행은 SQLite trigger로 수정할 수 없고, 중복·순서 간격·종료 뒤 추가를 `LOG_STORE_ERROR`로 거절한다. 서로 다른 실행 ID는 각자 sequence1부터 시작한다. 파일 I/O는 작업 스레드에서 처리하고 연결을 작업마다 닫는다. DB 저장 장애는 EventBus가 격리해 메인 Agent 응답을 유지한다. 저장 연결은 `LoggingAgent(store, settings.secret_values()).connect(bus)`로 명시하며 로그 HTTP 조회·삭제는 F3014에서 제공한다.
+
 ### 기존 명시적 조건의 추천·재계획 실행
 
 ```bash
@@ -431,7 +440,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-F3011은 `802124a`에 커밋했고 F3012 실행 이벤트 발행을 구현·검증했다. 다음 개발 작업은 F3013 이벤트 구독·SQLite 로그 저장이다.
+F3012는 `1d662c6`에 커밋했고 F3013 이벤트 구독·SQLite 로그 저장을 구현·검증했다. 다음 개발 작업은 F3014 로그 조회·삭제 HTTP API다.
 
 완료된 내용:
 
@@ -470,6 +479,6 @@ F3011은 `802124a`에 커밋했고 F3012 실행 이벤트 발행을 구현·검�
 - 검색점 전략·후보 평가 범위의 고도화
 - 같은 주유소·진행 방향임을 입증하는 휴게소 매칭 고도화
 - 공개 데이터 재배포 범위를 확대할 때의 상세 이용허락 조건 재확인 및 공유 일일 한도 집계
-- 이벤트 SQLite 저장·로그/계획 CRUD, Backend·UI 연동 구현
+- 로그 조회·삭제와 계획 CRUD, Backend 추천 API·UI 연동 구현
 
 다음에 수행할 일과 완료 체크는 [`docs/TASKS.md`](docs/TASKS.md)의 날짜별 목록을 따른다. 기존 개발 TASK 이력과 상세 구현·검증 근거는 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)에 보존한다.

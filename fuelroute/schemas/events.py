@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 EventType = Literal[
     "STEP_STARTED",
@@ -67,3 +67,44 @@ class EventExecutionKey(BaseModel):
     """
 
     execution_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
+class ExecutionSessionRecord(EventExecutionKey):
+    """SQLite 실행 로그 세션의 상태와 저장된 이벤트 개수.
+
+    started_at/finished_at은 첫/마지막 실행 경계 이벤트의 시간대 있는 시각이다. status는
+    running/completed/failed이며 finished_at은 running에서만 None이다. event_count는 현재
+    저장한 연속 sequence의 마지막 값이다. 이 모델은 조회 계약이며 DB·LLM 부작용은 없다.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    started_at: datetime
+    finished_at: datetime | None = None
+    status: Literal["running", "completed", "failed"]
+    event_count: int = Field(ge=1)
+
+    @field_validator("started_at", "finished_at")
+    @classmethod
+    def aware_session_time(cls, value: datetime | None) -> datetime | None:
+        """세션 시작/종료 시각의 UTC offset을 검사하고 값은 변환하지 않는다.
+
+        finished_at=None은 실행 중 상태에서 허용한다. naive 값은 ValueError이며 저장·시간
+        생성 부작용은 없다. 예: UTC와 +09:00 시각 모두 offset이 있으면 유효하다.
+        """
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("실행 세션 시각에는 시간대가 필요합니다.")
+        return value
+
+    @model_validator(mode="after")
+    def consistent_finish(self) -> "ExecutionSessionRecord":
+        """running/종료 상태와 finished_at 조합 및 시각 순서를 검증한다.
+
+        running에는 종료 시각이 없어야 하고 completed/failed에는 있어야 한다. 종료 시각이
+        시작보다 빠르면 ValueError다. 값을 보정·저장하지 않고 자기 자신을 반환한다.
+        """
+        if (self.status == "running") != (self.finished_at is None):
+            raise ValueError("실행 상태와 종료 시각이 일치하지 않습니다.")
+        if self.finished_at is not None and self.finished_at < self.started_at:
+            raise ValueError("실행 종료 시각은 시작 시각보다 빠를 수 없습니다.")
+        return self

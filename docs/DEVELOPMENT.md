@@ -864,3 +864,24 @@ README·TASKS의 완료/커밋 상태와 요구사항·설계·API 사용 안내
 - F3012는 SQLite를 열거나 로그 파일을 만들지 않고 LLM/API 호출을 추가하지 않는다. 실제 저장·세션 상태 전이는 F3013에서 구현한다.
 
 다음은 **F3013 — 실행 로그 저장**이다. 계획 저장·HTTP 로그 API·UI·원격 push는 변경하지 않았다.
+
+<a id="f3013-logging"></a>
+
+## 30. F3013 실행 로그 저장 — 2026-11-20
+
+**구현·검증 완료 / F3012 `1d662c6` 다음의 별도 기능 커밋으로 기록한다.** 이벤트 발행과 SQLite I/O를 구독 경계로 분리하고 저장 장애가 메인 실행에 전파되지 않게 했다.
+
+### 구현
+
+- `schemas/events.py`에 실행 세션 상태/시작·종료 시각/event count 조회 계약을 추가했다. 실행 중에는 종료 시각이 없고 completed/failed에는 시간대 있는 종료 시각이 필요하다.
+- `storage/logs.py`의 `SQLiteExecutionLogStore`는 `execution_sessions`와 `execution_events`만 준비한다. 첫 sequence1에서 세션을 만들고 정확한 기존 count+1만 저장하며 중복·간격·종료 뒤 추가를 거절한다. 이벤트 UPDATE는 trigger로 금지하고 `(session_id, sequence)`를 unique/index로 유지한다.
+- 각 record/load는 `asyncio.to_thread`로 동기 SQLite I/O를 비동기 Agent 경로 밖에서 수행하고 매 작업 연결을 닫는다. DB/파일/JSON/순서 오류는 경로·원문 없는 `LOG_STORE_ERROR`다. 자동 재시도·LLM·HTTP는 없다.
+- `agent/logging.py`의 `LoggingAgent`는 EventBus 구독 전에 저장소와 비밀값만 받는다. 이벤트 전체를 재귀 정제·재검증한 뒤 Repository에 전달하고 내용을 요약/추론하지 않는다. 저장 예외는 EventBus가 전달 실패 수로만 기록한다.
+
+### 검증
+
+- 신규6개 테스트에서 인사 전체 실행의 세션 running→completed 전이, 첫/마지막 시각, event count와 연속 sequence, 두 실행 ID 분리, 없는 실행의 명시적 None/빈 목록을 확인했다.
+- payload의 실제/URL 인코딩 합성 비밀값이 SQLite 파일에 남지 않는지 확인했다. 첫 sequence 간격·중복·종료 뒤 append는 `LOG_STORE_ERROR`로 거절됐다.
+- DB 경로가 디렉터리인 실제 SQLite 열기 실패를 매 이벤트에서 발생시켜도 메인 인사 응답은 성공하고 `delivery_failures=event_count`로 관찰됐다. 이는 실패를 성공 저장으로 기록한 것이 아니며 해당 실행 로그는 미완료다.
+
+다음은 **F3014 — 실행 로그 조회·삭제 HTTP API**다. 계획 저장·추천 HTTP API·UI·원격 push는 변경하지 않았다.

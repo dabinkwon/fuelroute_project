@@ -274,7 +274,7 @@ created_at
 
 계획은 로그 삭제와 독립적으로 남아야 한다. 세션 로그 삭제 시 이벤트는 함께 삭제하고 계획의 세션 참조는 `NULL`로 바꾸는 정책을 설계한다. 시각은 시간대가 있는 ISO 8601 기준으로 처리하고 화면에서 KST로 표시한다. 오늘은 스키마·관계·샘플 저장 형식을 검증하며 전체 CRUD 구현은 후속 단계다.
 
-실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. F3010의 conversation_memory만 실제 SQLite Repository로 연결했으며 로그/계획 Repository는 후속이다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 `planned_start_at/end_at`으로 시간 충돌 안내를 설계한다. 실제 샘플은 최종 추천이 아닌 `draft-validation-sample`로 구분했다.
+실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. F3010의 conversation_memory와 F3013의 execution_sessions/execution_events를 실제 SQLite Repository로 연결했으며 계획 Repository는 후속이다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 `planned_start_at/end_at`으로 시간 충돌 안내를 설계한다. 실제 샘플은 최종 추천이 아닌 `draft-validation-sample`로 구분했다.
 
 ---
 
@@ -799,7 +799,9 @@ LLM_DECISION
 FINAL_RESPONSE_CREATED
 ```
 
-`agent/events.py`의 `EventBus`는 발행자가 구독자를 모르는 인프로세스 발행/구독 경계다. `ExecutionEventStream`은 요청마다 별도 영숫자 실행 ID와1부터 증가하는 sequence를 만들고 LangGraph 노드를 관찰한다. 구독자가 없으면 발행만 마치며, 구독자 예외는 `delivery_failures`에 더하고 다음 구독자/메인 실행을 계속한다. 별도 큐·재시도·전역 싱글턴은 없다. Logging Agent의 실제 저장 구독은 F3013 범위다.
+`agent/events.py`의 `EventBus`는 발행자가 구독자를 모르는 인프로세스 발행/구독 경계다. `ExecutionEventStream`은 요청마다 별도 영숫자 실행 ID와1부터 증가하는 sequence를 만들고 LangGraph 노드를 관찰한다. 구독자가 없으면 발행만 마치며, 구독자 예외는 `delivery_failures`에 더하고 다음 구독자/메인 실행을 계속한다. 별도 큐·재시도·전역 싱글턴은 없다.
+
+`agent/logging.py`의 `LoggingAgent`는 EventBus 구독자다. 이벤트를 설정 비밀값으로 다시 정제·재검증한 후 `storage/logs.py`의 Repository에 전달하고 LLM으로 요약하지 않는다. Repository는 작업 스레드의 짧은 SQLite 연결과 `BEGIN IMMEDIATE`를 사용한다. 첫 sequence1에서 실행 세션을 만들고 기존 이벤트 수+1만 append하며 마지막 execution 완료 이벤트로 상태/종료시각을 갱신한다. 이벤트 행 UPDATE는 trigger가 거절한다. 저장 오류는 `LOG_STORE_ERROR`지만 EventBus 경계에서 메인 실행과 격리된다. 저장소 읽기 primitive는 F3013 검증용이며 HTTP 목록·상세·삭제는 F3014 서비스가 담당한다.
 
 **수집·저장에는 LLM을 사용하지 않는다.**
 
