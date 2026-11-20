@@ -1,0 +1,59 @@
+{
+  "requirement": "NF3007",
+  "verified_at": "2026-11-20T14:20:00+09:00",
+  "providers": [
+    {
+      "name": "Opinet",
+      "implemented_endpoint": "https://www.opinet.co.kr/api/{aroundAll.do|detailById.do}",
+      "official_source": "https://www.opinet.co.kr/user/custapi/custApiInfo.do",
+      "account_limit": "300 calls/day",
+      "public_policy_check": "general API 300 calls/day; partnership required for 1500 calls/day"
+    },
+    {
+      "name": "Kakao Mobility Driving Directions",
+      "implemented_endpoint": "https://apis-navi.kakaomobility.com/v1/directions",
+      "official_source": "https://developers.kakaomobility.com/guide/navi-api/directions.html",
+      "account_limit": "10000 calls/day (user-confirmed app value)",
+      "public_policy_check": "current app quota must be checked in app management; do not reuse for Local"
+    },
+    {
+      "name": "National Rest Area Standard Data",
+      "implemented_endpoint": "https://api.data.go.kr/openapi/tn_pubr_public_rest_area_api",
+      "official_source": "https://www.data.go.kr/data/15025446/standard.do",
+      "account_limit": "development account 10000 calls/day through 2028-11-18",
+      "public_policy_check": "development traffic 10000; max rows 1000; semiannual update"
+    }
+  ],
+  "additional_location_api": {
+    "name": "Kakao Local",
+    "quota_number_confirmed": false,
+    "maximum_calls_per_request": 4,
+    "uses_same_rest_key": true,
+    "mobility_quota_reused": false
+  },
+  "runtime_scope": {
+    "gms_max": 3,
+    "kakao_local_max": 4,
+    "opinet_max": 14,
+    "kakao_mobility_max": 19,
+    "rest_area_logical_max": 1,
+    "rest_area_http_max": 10,
+    "shared_daily_quota_aggregation": false
+  },
+  "verification": {
+    "official_documents_checked": 6,
+    "focused_pytest": "3 passed in 0.02s",
+    "full_pytest": "451 passed in 11.15s",
+    "ruff_lint": "passed",
+    "ruff_format": "103 files already formatted",
+    "node_syntax": "passed",
+    "pip_check": "No broken requirements found",
+    "git_diff_check": "passed",
+    "external_api_calls": 0,
+    "console_calls": 0
+  },
+  "limitations": [
+    "계정 한도는 2026-11-18 사용자 확인값이며 현재 잔여량이나 제공사의 미래 정책을 보장하지 않는다.",
+    "공개 문서 재확인은 개별 계약·제휴·상업적 재배포 권한에 대한 법률 판단이 아니다."
+  ]
+}

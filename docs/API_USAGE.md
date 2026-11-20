@@ -1,6 +1,26 @@
 # 외부 API 호출 한도와 공개 이용조건
 
-2026-11-18 계정 확인값과 2026-11-19 Kakao Local·GMS 작업 계획 추가 검증을 기록한다. 공개 문서 조사와 사용자 제공 계정 정보를 구분한다. 이 기록은 개별 계약이나 상용 서비스에 대한 승인 자체를 뜻하지 않는다.
+2026-11-18 계정 확인값과 2026-11-19 Kakao Local·GMS 작업 계획 추가 검증을 기록한다. 공개 문서 조사와 사용자 제공 계정 정보를 구분한다. 공식 공개 문서는 2026-11-20에 다시 확인했다. 이 기록은 개별 계약이나 상용 서비스에 대한 승인 자체를 뜻하지 않는다.
+
+## 2026-11-20 공식 문서 재확인
+
+- Opinet 공식 일반 API 안내는 일반 API 300call/일과 1,500call/일 희망 시 제휴 필요를 계속
+  안내한다. 현재 계정의 300회/일과 일치하지만 제휴·상업 이용 승인을 뜻하지 않는다.
+- Kakao Developers 쿼터 문서는 앱별 현재 쿼터를 앱 관리 화면에서 확인하도록 안내하고 공개
+  제공량은 변경될 수 있다고 명시한다. 따라서 사용자가 확인한 Mobility 10,000회/일을 계정
+  확인값으로 유지하고 Kakao Local의 미확인 수치로 복사하지 않는다.
+- Kakao Mobility 자동차 길찾기 공식 명세의 요청 주소는 현재 구현과 같은
+  `https://apis-navi.kakaomobility.com/v1/directions`이며 REST API 키 인증을 요구한다.
+- 전국휴게소정보표준데이터 공식 상세는 국토교통부 소관·한국도로공사 제공, 반기 갱신,
+  개발계정 신청 가능 트래픽 10,000, 요청당 `numOfRows` 최대1,000과 현재 구현 Endpoint를
+  안내한다. 데이터 기준일과 포털의 개별 이용허락범위를 계속 확인해야 한다.
+
+재확인 근거: [Opinet 일반 API](https://www.opinet.co.kr/user/custapi/custApiInfo.do),
+[Kakao 쿼터](https://developers.kakao.com/docs/ko/getting-started/quota),
+[Kakao 운영정책](https://developers.kakao.com/terms/ko/site-policies),
+[Kakao Mobility 자동차 길찾기](https://developers.kakaomobility.com/guide/navi-api/directions.html),
+[전국휴게소정보표준데이터](https://www.data.go.kr/data/15025446/standard.do),
+[공공데이터 이용정책](https://www.data.go.kr/ugs/selectPortalPolicyView.do).
 
 | API | 현재 계정 한도·기간 | 확인 근거 |
 |---|---|---|
