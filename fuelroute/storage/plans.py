@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS fuel_plans (
     recommendation_json TEXT NOT NULL CHECK (json_valid(recommendation_json)),
     planned_start_at TEXT,
     planned_end_at TEXT,
+    memo TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -65,7 +66,7 @@ class PlanStore(Protocol):
         ...
 
     async def update(self, plan_id: str, command: PlanUpdate) -> PlanWriteResult:
-        """예상 revision의 계획 핵심값을 바꾸고 재검증 상태·충돌을 반환한다."""
+        """예상 revision의 계획 핵심값·일정·메모를 바꾸고 검증 상태·충돌을 반환한다."""
         ...
 
     async def delete(self, plan_id: str) -> bool:
@@ -89,14 +90,24 @@ class SQLitePlanStore:
     def _connect(self) -> sqlite3.Connection:
         """부모 폴더와 계획 스키마를 준비한 timeout 5초 SQLite 연결을 반환한다.
 
-        foreign key와 계획 날짜/시간 index를 적용한다. 연결 종료는 호출자 책임이며 파일·
-        스키마 쓰기 외 부작용은 없다. 오류는 공개 비동기 경계에서 정제한다.
+        foreign key와 계획 날짜/시간 index를 적용한다. 기존 테이블에 memo 열이 없으면 빈
+        문자열 기본값으로 한 번 추가한다. 연결 종료는 호출자 책임이며 파일·스키마 쓰기 외
+        부작용은 없다. 오류는 공개 비동기 경계에서 정제한다.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=5)
         connection.row_factory = sqlite3.Row
         try:
             connection.executescript(PLAN_SCHEMA)
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(fuel_plans)").fetchall()
+            }
+            if "memo" not in columns:
+                connection.execute(
+                    "ALTER TABLE fuel_plans ADD COLUMN memo TEXT NOT NULL DEFAULT ''"
+                )
+                connection.commit()
         except sqlite3.Error:
             connection.close()
             raise
@@ -119,6 +130,7 @@ class SQLitePlanStore:
             recommendation=json.loads(row["recommendation_json"]),
             planned_start_at=row["planned_start_at"],
             planned_end_at=row["planned_end_at"],
+            memo=row["memo"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -172,8 +184,8 @@ class SQLitePlanStore:
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 "INSERT INTO fuel_plans(id, session_id, revision, validation_status, trip_date, "
-                "input_snapshot_json, recommendation_json, planned_start_at, planned_end_at, "
-                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "input_snapshot_json, recommendation_json, planned_start_at, planned_end_at, memo, "
+                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     plan.plan_id,
                     plan.execution_id,
@@ -184,6 +196,7 @@ class SQLitePlanStore:
                     plan.recommendation.model_dump_json(),
                     plan.planned_start_at.isoformat() if plan.planned_start_at else None,
                     plan.planned_end_at.isoformat() if plan.planned_end_at else None,
+                    plan.memo,
                     plan.created_at.isoformat(),
                     plan.updated_at.isoformat(),
                 ),
@@ -263,7 +276,8 @@ class SQLitePlanStore:
 
         명시하지 않은 필드는 현재 값을 유지하고, 명시적 null 계획 시각은 삭제한다. 날짜만
         바꾸면 입력 스냅샷의 조건 날짜도 같은 명시값으로 바꾼다. 새 스냅샷만 주어지면 그
-        날짜를 사용한다. 추천 스냅샷·실행 참조는 유지하며 DB·시간·외부 호출 부작용은 없다.
+        날짜를 사용한다. 메모는 명시했을 때만 교체하고 빈 문자열이면 삭제한다. 추천
+        스냅샷·실행 참조는 유지하며 DB·시간·외부 호출 부작용은 없다.
         """
         fields = command.model_fields_set
         input_snapshot = (
@@ -287,6 +301,7 @@ class SQLitePlanStore:
             command.planned_start_at if "planned_start_at" in fields else current.planned_start_at
         )
         end = command.planned_end_at if "planned_end_at" in fields else current.planned_end_at
+        memo = command.memo if "memo" in fields else current.memo
         return PlanCreate(
             execution_id=current.execution_id,
             trip_date=trip_date,
@@ -294,6 +309,7 @@ class SQLitePlanStore:
             recommendation=current.recommendation,
             planned_start_at=start,
             planned_end_at=end,
+            memo=memo,
         )
 
     def _update(self, plan_id: str, command: PlanUpdate) -> PlanWriteResult:
@@ -301,8 +317,9 @@ class SQLitePlanStore:
 
         없는 ID는 PLAN_NOT_FOUND, 다른 revision은 PLAN_CONFLICT다. 병합 결과가 현재 핵심값과
         같으면 INVALID_INPUT이며 revision을 올리지 않는다. 실제 변경은 revision+1과 UTC
-        updated_at을 기록하고 기존 추천을 `revalidation_required`로 표시한다. 시간 충돌은
-        저장 후 조회하되 변경을 취소하지 않는다.
+        updated_at을 기록한다. 날짜·추천 입력이 바뀌면 `revalidation_required`, 일정 시각·
+        메모만 바뀌면 기존 검증 상태를 유지한다. 시간 충돌은 저장 후 조회하되 변경을
+        취소하지 않는다.
         """
         with closing(self._connect()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -321,26 +338,35 @@ class SQLitePlanStore:
                 current.input_snapshot,
                 current.planned_start_at,
                 current.planned_end_at,
+                current.memo,
             )
             after = (
                 merged.trip_date,
                 merged.input_snapshot,
                 merged.planned_start_at,
                 merged.planned_end_at,
+                merged.memo,
             )
             if before == after:
                 raise ProbeFailure("INVALID_INPUT", "계획의 변경된 값이 없습니다.")
+            recommendation_changed = (
+                current.trip_date != merged.trip_date
+                or current.input_snapshot != merged.input_snapshot
+            )
             updated = StoredPlan(
                 **merged.model_dump(),
                 plan_id=current.plan_id,
                 revision=current.revision + 1,
-                validation_status="revalidation_required",
+                validation_status=(
+                    "revalidation_required" if recommendation_changed else current.validation_status
+                ),
                 created_at=current.created_at,
                 updated_at=utc_now(),
             )
             cursor = connection.execute(
                 "UPDATE fuel_plans SET revision = ?, validation_status = ?, trip_date = ?, "
-                "input_snapshot_json = ?, planned_start_at = ?, planned_end_at = ?, updated_at = ? "
+                "input_snapshot_json = ?, planned_start_at = ?, planned_end_at = ?, memo = ?, "
+                "updated_at = ? "
                 "WHERE id = ? AND revision = ?",
                 (
                     updated.revision,
@@ -349,6 +375,7 @@ class SQLitePlanStore:
                     updated.input_snapshot.model_dump_json(),
                     updated.planned_start_at.isoformat() if updated.planned_start_at else None,
                     updated.planned_end_at.isoformat() if updated.planned_end_at else None,
+                    updated.memo,
                     updated.updated_at.isoformat(),
                     updated.plan_id,
                     current.revision,
@@ -367,9 +394,10 @@ class SQLitePlanStore:
     async def update(self, plan_id: str, command: PlanUpdate) -> PlanWriteResult:
         """ID·PATCH 계약을 검증하고 작업 스레드에서 revision 기반 수정을 수행한다.
 
-        성공 시 기존 추천 본문은 보존하지만 `revalidation_required`가 된다. 없는 계획,
-        revision 충돌, 빈/무효 변경은 각 ProbeFailure 코드로 구분한다. DB/파일/손상은
-        PLAN_STORE_ERROR이며 외부 API·LLM·자동 재추천/재시도는 없다.
+        성공 시 기존 추천 본문을 보존한다. 날짜·추천 입력 변경만 재검증 필요로 바꾸고 일정
+        시각·메모 변경은 상태를 유지한다. 없는 계획, revision 충돌, 빈/무효 변경은 각
+        ProbeFailure 코드로 구분한다. DB/파일/손상은 PLAN_STORE_ERROR이며 외부 API·LLM·
+        자동 재추천/재시도는 없다.
         """
         key = PlanKey(plan_id=plan_id)
         checked = PlanUpdate.model_validate(command.model_dump(exclude_unset=True))

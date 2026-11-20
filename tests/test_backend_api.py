@@ -109,7 +109,7 @@ def test_chat_runs_graph_and_persists_queryable_execution_log(tmp_path: Path) ->
 
 
 def test_plan_http_crud_persists_and_marks_update_for_revalidation(tmp_path: Path) -> None:
-    """계획 POST/GET/PATCH/DELETE가 한 파일에 반영되고 수정은 재검증 상태를 반환한다."""
+    """계획 CRUD와 일정·메모 수정이 한 파일에 반영되고 추천 검증 상태를 유지한다."""
     path = tmp_path / "backend.sqlite3"
     command = create_command()
     created_response = asyncio.run(
@@ -141,7 +141,18 @@ def test_plan_http_crud_persists_and_marks_update_for_revalidation(tmp_path: Pat
     )
     assert updated.status_code == 200
     assert updated.json()["plan"]["revision"] == 2
-    assert updated.json()["plan"]["validation_status"] == "revalidation_required"
+    assert updated.json()["plan"]["validation_status"] == "valid"
+    memo_updated = asyncio.run(
+        api_request(
+            "PATCH",
+            f"/api/plans/{plan_id}",
+            database_path=path,
+            json={"expected_revision": 2, "memo": "도착 전에 연락"},
+        )
+    )
+    assert memo_updated.status_code == 200
+    assert memo_updated.json()["plan"]["memo"] == "도착 전에 연락"
+    assert memo_updated.json()["plan"]["validation_status"] == "valid"
     deleted = asyncio.run(api_request("DELETE", f"/api/plans/{plan_id}", database_path=path))
     assert deleted.status_code == 204 and deleted.content == b""
     missing = asyncio.run(api_request("GET", f"/api/plans/{plan_id}", database_path=path))
@@ -242,3 +253,26 @@ def test_openapi_contains_chat_plan_crud_and_read_delete_logs(tmp_path: Path) ->
     assert set(paths["/api/logs/{execution_id}"]) == {"get", "delete"}
     docs = asyncio.run(api_request("GET", "/docs", database_path=tmp_path / "docs.sqlite3"))
     assert docs.status_code == 200 and "Swagger UI" in docs.text
+
+
+def test_local_and_netlify_frontends_are_allowed_by_cors() -> None:
+    """정적 UI의 로컬 미리보기와 운영 Netlify origin만 필요한 API 메서드로 허용한다."""
+
+    async def preflight(origin: str) -> httpx.Response:
+        """지정 origin의 계획 POST preflight를 ASGI에서 수행하며 서버/DB를 변경하지 않는다."""
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return await client.options(
+                "/api/plans",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "content-type",
+                },
+            )
+
+    for origin in ("http://127.0.0.1:5173", "https://fuelroute-348.netlify.app"):
+        response = asyncio.run(preflight(origin))
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin

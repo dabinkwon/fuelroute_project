@@ -1,6 +1,7 @@
 """F3015 계획 스냅샷 저장·조회·시간 충돌·영속성을 검증한다."""
 
 import asyncio
+import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -28,11 +29,13 @@ def create_command(
     *,
     start: datetime | None = None,
     end: datetime | None = None,
+    memo: str = "",
 ) -> PlanCreate:
     """테스트용 검증 추천 저장 입력을 생성한다.
 
     start/end는 선택적인 KST 계획 시각이며 None은 사용자가 시각을 입력하지 않은 경우다.
-    실제 외부 API·LLM·DB를 호출하지 않고 고정 좌표·가격·근거를 반환한다.
+    memo는 최대 1000자 사용자 메모다. 실제 외부 API·LLM·DB를 호출하지 않고 고정
+    좌표·가격·근거를 반환한다.
     """
     origin = Coordinate(longitude=128.6014, latitude=35.8714)
     destination = Coordinate(longitude=126.978, latitude=37.5665)
@@ -102,6 +105,7 @@ def create_command(
         ),
         planned_start_at=start,
         planned_end_at=end,
+        memo=memo,
     )
 
 
@@ -221,6 +225,7 @@ def test_update_time_rechecks_conflict_and_can_clear_time(tmp_path: Path) -> Non
         )
     )
     assert [item.plan_id for item in overlapped.conflicts] == [existing.plan_id]
+    assert overlapped.plan.validation_status == "valid"
     cleared = asyncio.run(
         store.update(
             target.plan_id,
@@ -229,6 +234,48 @@ def test_update_time_rechecks_conflict_and_can_clear_time(tmp_path: Path) -> Non
     )
     assert cleared.conflict_check == "not_comparable"
     assert cleared.plan.planned_end_at is None
+
+
+def test_memo_create_and_update_preserve_recommendation_validation(tmp_path: Path) -> None:
+    """메모 생성·수정·삭제는 텍스트를 보존하되 기존 추천 검증 상태를 바꾸지 않는다."""
+    store = SQLitePlanStore(tmp_path / "plans.sqlite3")
+    created = asyncio.run(store.create(create_command(memo="  도착 전에 연락  "))).plan
+    assert created.memo == "도착 전에 연락" and created.validation_status == "valid"
+    updated = asyncio.run(
+        store.update(
+            created.plan_id,
+            PlanUpdate(expected_revision=created.revision, memo="셀프 주유 확인"),
+        )
+    ).plan
+    assert updated.memo == "셀프 주유 확인"
+    assert updated.revision == 2 and updated.validation_status == "valid"
+    cleared = asyncio.run(
+        store.update(
+            created.plan_id,
+            PlanUpdate(expected_revision=updated.revision, memo=""),
+        )
+    ).plan
+    assert cleared.memo == "" and cleared.validation_status == "valid"
+
+
+def test_existing_plan_database_adds_empty_memo_column(tmp_path: Path) -> None:
+    """memo 열이 없던 기존 SQLite 계획 테이블은 재연결 시 빈 메모 열로 안전하게 이관한다."""
+    path = tmp_path / "legacy.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE fuel_plans(id TEXT PRIMARY KEY, session_id TEXT, revision INTEGER, "
+        "validation_status TEXT, trip_date TEXT, input_snapshot_json TEXT, "
+        "recommendation_json TEXT, planned_start_at TEXT, planned_end_at TEXT, "
+        "created_at TEXT, updated_at TEXT)"
+    )
+    connection.commit()
+    connection.close()
+    store = SQLitePlanStore(path)
+    asyncio.run(store.list())
+    connection = sqlite3.connect(path)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(fuel_plans)")}
+    connection.close()
+    assert "memo" in columns
 
 
 def test_stale_revision_and_same_value_are_rejected(tmp_path: Path) -> None:

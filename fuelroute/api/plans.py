@@ -118,10 +118,11 @@ async def get_plan(plan_id: str, request: Request) -> StoredPlan:
 
 @router.patch("/{plan_id}", response_model=PlanWriteResult)
 async def update_plan(plan_id: str, command: PlanUpdate, request: Request) -> PlanWriteResult:
-    """예상 revision의 날짜·조건·계획 시각을 수정하고 충돌/재검증 상태를 반환한다.
+    """예상 revision의 날짜·조건·계획 시각·메모를 수정하고 충돌/재검증 상태를 반환한다.
 
-    핵심값 변경 시 저장 추천은 `revalidation_required`가 되며 자동 재추천하지 않는다.
-    오래된 revision은409, 없는 ID는404, 무효/동일값은422, 저장소 장애는503이다.
+    날짜·추천 조건 변경 시 저장 추천은 `revalidation_required`가 되며 자동 재추천하지 않는다.
+    일정 시각·메모만 바꾸면 기존 추천 상태를 유지한다. 오래된 revision은409, 없는 ID는404,
+    무효/동일값은422, 저장소 장애는503이다.
     """
     key = checked_plan_id(plan_id)
     try:

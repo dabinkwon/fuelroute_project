@@ -121,8 +121,9 @@ class PlanCreate(BaseModel):
 
     `trip_date`는 입력 스냅샷과 같아야 한다. `planned_start_at`/`planned_end_at`은 사용자가
     구체적으로 입력해 시간대까지 확정된 경우에만 전달하며 둘 중 하나만 저장할 수 있다.
-    둘 다 있으면 종료가 시작보다 늦어야 한다. `execution_id`는 선택 로그 참조이며 없다고
-    생성하지 않는다. 생성시각·ID·revision은 Repository가 만든다.
+    둘 다 있으면 종료가 시작보다 늦어야 한다. `memo`는 사용자가 계획에 남기는 선택 메모로
+    추천 판단에 사용하지 않는다. `execution_id`는 선택 로그 참조이며 없다고 생성하지 않는다.
+    생성시각·ID·revision은 Repository가 만든다.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -132,6 +133,18 @@ class PlanCreate(BaseModel):
     recommendation: PlanRecommendationSnapshot
     planned_start_at: datetime | None = None
     planned_end_at: datetime | None = None
+    memo: str = Field(default="", max_length=1000, description="사용자가 계획에 남긴 선택 메모")
+
+    @field_validator("memo")
+    @classmethod
+    def normalize_memo(cls, value: str) -> str:
+        """계획 메모 앞뒤 공백을 제거하고 최대 길이 검증을 거친 문자열을 반환한다.
+
+        value는 사용자가 입력한 최대 1000자의 일반 텍스트이며 빈 문자열은 메모 없음으로
+        허용한다. HTML을 실행하거나 추천 조건으로 해석하지 않고 저장용 문자열만 정규화한다.
+        DB·외부 API·LLM 부작용은 없다. 예: ``" 주유 후 연락 "``은 ``"주유 후 연락"``이다.
+        """
+        return value.strip()
 
     @field_validator("planned_start_at", "planned_end_at")
     @classmethod
@@ -219,8 +232,9 @@ class PlanUpdate(BaseModel):
     """저장 계획의 핵심 입력을 예상 revision에만 변경하는 F3016 계약.
 
     `expected_revision`은 목록/상세에서 읽은 현재 버전이다. 날짜, 입력 스냅샷, 시작/종료
-    시각 중 최소 하나를 명시해야 하며 시각 필드는 명시적 null로 지울 수 있다. 추천 가격·
-    비용·근거는 직접 덮어쓰지 않고, 핵심 입력이 실제로 바뀌면 Repository가 기존 추천을
+    시각·메모 중 최소 하나를 명시해야 하며 시각 필드는 명시적 null로 지울 수 있다. 메모는
+    빈 문자열로 지울 수 있고 추천 판단에는 영향을 주지 않는다. 추천 가격·비용·근거는 직접
+    덮어쓰지 않고, 핵심 추천 입력이 실제로 바뀌면 Repository가 기존 추천을
     `revalidation_required`로 표시한다. 이 모델은 DB를 읽거나 값을 병합하지 않는다.
     """
 
@@ -230,6 +244,18 @@ class PlanUpdate(BaseModel):
     input_snapshot: PlanInputSnapshot | None = None
     planned_start_at: datetime | None = None
     planned_end_at: datetime | None = None
+    memo: str = Field(default="", max_length=1000, description="새 계획 메모; 빈 문자열은 삭제")
+
+    @field_validator("memo")
+    @classmethod
+    def normalize_updated_memo(cls, value: str) -> str:
+        """PATCH에 명시된 메모의 앞뒤 공백을 제거해 저장 가능한 텍스트로 반환한다.
+
+        필드가 생략되면 Pydantic의 `model_fields_set`에 포함되지 않아 기존 메모를 유지한다.
+        명시한 빈 문자열은 삭제이며 최대 1000자만 허용한다. 내용을 명령으로 실행하거나
+        추천 조건으로 사용하지 않으며 DB·네트워크 부작용은 없다.
+        """
+        return value.strip()
 
     @field_validator("planned_start_at", "planned_end_at")
     @classmethod
@@ -255,6 +281,7 @@ class PlanUpdate(BaseModel):
             "input_snapshot",
             "planned_start_at",
             "planned_end_at",
+            "memo",
         }
         if not self.model_fields_set.intersection(editable):
             raise ValueError("수정할 계획 필드가 필요합니다.")

@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3017의 전체 추천 흐름, 계획 CRUD, 대화·계획·로그 FastAPI 연결 완료. 기능 UI는 F3018부터 진행
+> **구현 상태:** F3005~F3018 전체 추천·계획 CRUD·대화/계획 UI 연결 완료. F3019 실행 과정 표시는 후속
 
 ## 단계별 진행 기록
 
@@ -32,6 +32,7 @@
 | 21. F3015 계획 저장 | 입력·추천·근거 스냅샷 저장, 목록/상세, 비차단 시간 충돌 | 전체420개·재시작 영속성/알 수 없는 시각/구간 경계 검증. [저장 기록](docs/DEVELOPMENT.md#f3015-plan-storage) | `14a4303` |
 | 22. F3016 계획 수정·삭제 | revision 기반 핵심값 수정, 재검증 상태, 선택 삭제 | 전체424개·동시 수정/충돌 재판정/명시 시각 삭제 검증. [CRUD 기록](docs/DEVELOPMENT.md#f3016-plan-update-delete) | `4392797` |
 | 23. F3017 Backend API | 대화 Agent·Memory·로그 연결과 계획 CRUD FastAPI/OpenAPI | 전체429개·HTTP 정상/오류/충돌/영속성/`/docs` 검증. [API 기록](docs/DEVELOPMENT.md#f3017-backend-api) | F3017 기능 커밋 |
+| 24. F3018 기능 UI | 비대칭 대시보드, 실제 추천 표시, 추천 채택과 계획 CRUD | 전체435개·실제 Chrome 추천→저장→수정→삭제 검증. [UI 기록](docs/DEVELOPMENT.md#f3018-dashboard) | 사용자 확인 후 커밋 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -65,7 +66,7 @@ git push github master
 사용자 요청에 따라 Netlify로 프론트엔드를 배포했다. 카카오 앱 대표 도메인에는 아래 새 주소를 사용한다.
 
 - **서비스 주소:** https://fuelroute-348.netlify.app
-- **배포 내용:** FuelRoute 소개·이용 흐름·명시적인 안전거리 계산 예시를 담은 HTML/CSS 프론트엔드. 실제 주유소 검색과 Backend 연결은 후속 작업이다.
+- **현재 운영 배포:** 기존 FuelRoute 소개 화면. 새 대시보드 소스는 로컬 구현했으며 공개 Backend URL과 사용자 화면 확인 전에는 운영에 재배포하지 않았다.
 - **배포 상태:** Netlify 운영 배포 성공. 로그인 없이 접속할 수 있다.
 - **소스:** [`frontend/README.md`](frontend/README.md), `frontend/dist/`. Netlify 배포 설정은 `netlify.toml`이다.
 - **Netlify 사이트 ID:** `21ab4da2-503e-4dfe-bcc8-346b74f64a7d`, 이름: `fuelroute-348`.

@@ -3,65 +3,84 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="남은 연료와 목적지 경로를 바탕으로, 안전하게 갈 수 있는 주유 지점을 찾는 FuelRoute. 현재 개발 중인 서비스입니다.">
-  <meta name="theme-color" content="#164b3c">
+  <meta name="description" content="주행 가능 거리와 경로를 바탕으로 주유 지점을 추천하고 계획으로 저장하는 FuelRoute 대시보드">
+  <meta name="theme-color" content="#dfff34">
   <meta property="og:title" content="FuelRoute — 가는 길 위의 주유 계획">
-  <meta property="og:description" content="남은 연료, 가는 경로, 주유 가격. 함께 생각하는 더 합리적인 주유 계획.">
+  <meta property="og:description" content="안전거리, 가격과 우회 비용을 비교해 추천을 받고 주유 계획으로 저장하세요.">
   <meta property="og:url" content="https://fuelroute-348.netlify.app">
   <link rel="canonical" href="https://fuelroute-348.netlify.app">
   <link rel="stylesheet" href="/styles.css">
-  <title>FuelRoute — 가는 길 위의 주유 계획</title>
+  <script src="/config.js"></script>
+  <script src="/app.js" defer></script>
+  <title>FuelRoute — 주유 계획 대시보드</title>
 </head>
 <body>
-  <a class="skip" href="#main">본문으로 이동</a>
-  <header class="header wrap">
-    <a class="brand" href="/" aria-label="FuelRoute 홈">
-      <span class="brand-mark" aria-hidden="true">↗</span> FuelRoute<span class="brand-dot">.</span>
-    </a>
-    <nav aria-label="주요 메뉴"><a href="#about">서비스 소개</a><a href="#how">이용 흐름 <span aria-hidden="true">↗</span></a></nav>
-  </header>
-  <main id="main">
-    <section class="hero wrap" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="eyebrow"><span class="status-dot"></span> 더 나은 주유 계획을 준비하고 있어요</p>
-        <h1 id="hero-title">다음 주유는,<br>가는 길 <em>위에서.</em></h1>
-        <p class="intro">남은 연료로 어디까지 갈 수 있을까?<br>FuelRoute는 이동 경로와 주유 가격, 우회 비용을 함께 살펴<br class="desktop"> 안전하고 합리적인 주유 지점을 찾도록 돕습니다.</p>
-        <a class="button" href="#about">FuelRoute 알아보기 <span aria-hidden="true">↗</span></a>
-        <p class="development">현재 개발 중 · 실시간 검색과 추천은 추후 제공됩니다.</p>
-      </div>
-      <div class="journey" aria-label="입력 기반 안전 주행거리 계산 예시: 현재 연료 15리터, 안전 잔량 3리터, 평균 연비 리터당 12킬로미터일 때 144킬로미터">
-        <div class="journey-top"><span>YOUR NEXT STOP</span><span class="example-label">계산 예시</span></div>
-        <div class="range"><span>안전 잔량을 남긴 추정 거리</span><strong>144<span> km</span></strong></div>
-        <svg class="route" viewBox="0 0 400 180" fill="none" role="img" aria-label="출발점에서 경로를 따라 주유 지점을 찾는 개념도">
-          <path d="M30 146H116C143 146 139 92 175 92H224C253 92 250 37 283 37H365" stroke="#97b6a7" stroke-width="2" stroke-dasharray="6 7"/>
-          <path d="M30 146H116C143 146 139 92 175 92H224C253 92 250 37 283 37H310" stroke="#d5ed7e" stroke-width="5" stroke-linecap="round"/>
-          <circle cx="30" cy="146" r="7" fill="#d5ed7e"/>
-          <circle cx="310" cy="37" r="17" fill="#d5ed7e"/>
-          <path d="M304 42V30H313V42M303 35H314M306 42V38H310V42M313 32L318 36V42" stroke="#164b3c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-          <text x="19" y="174" fill="#c8d8cf" font-size="12">출발</text>
-          <text x="280" y="78" fill="#d5ed7e" font-size="12">주유 지점 탐색</text>
-        </svg>
-        <dl class="inputs"><div><dt>현재 연료</dt><dd>15 <span>L</span></dd></div><div><dt>안전 잔량</dt><dd>3 <span>L</span></dd></div><div><dt>평균 연비</dt><dd>12 <span>km/L</span></dd></div></dl>
-        <p class="formula">(15L − 3L) × 12km/L = 144km</p>
-        <p class="estimate">입력값에 따른 추정치이며, 실제 주행 환경에 따라 달라집니다.</p>
-      </div>
-    </section>
-    <section class="principles" id="about" aria-labelledby="about-title">
-      <div class="wrap">
-        <div class="section-heading"><p class="eyebrow">A BETTER WAY TO REFUEL</p><h2 id="about-title">가격을 비교하기 전에,<br>갈 수 있는 곳부터.</h2><p>잠깐의 주유를 위해 길게 돌아가지 않도록.<br>세 가지 기준으로 주유 계획을 설계합니다.</p></div>
-        <div class="principle-list">
-          <article><span class="number">01 /</span><h3>남겨둘 연료까지 생각합니다</h3><p>현재 연료와 평균 연비에 안전 잔량을 반영해<br>도달 가능한 주행 범위를 먼저 계산합니다.</p></article>
-          <article><span class="number">02 /</span><h3>목적지로 가는 길을 봅니다</h3><p>현재 위치 주변을 넘어 이동 경로를 기준으로,<br>주유소를 들르는 데 필요한 거리와 시간을 살핍니다.</p></article>
-          <article><span class="number">03 /</span><h3>선택의 근거를 보여줍니다</h3><p>가격, 도달 가능성, 우회 비용을 함께 비교하고<br>추천 이유와 조건에 맞지 않는 사유를 설명합니다.</p></article>
-        </div>
-      </div>
-    </section>
-    <section class="how wrap" id="how" aria-labelledby="how-title">
-      <div><p class="eyebrow">HOW IT WILL WORK</p><h2 id="how-title">출발 전, 조건을 알려주세요.</h2><p class="how-note">아래 흐름으로 서비스를 개발하고 있습니다.</p></div>
-      <ol class="steps"><li><span>01</span><div><h3>주행 조건 입력</h3><p>출발지·목적지, 유종, 연료량, 평균 연비와 안전 잔량</p></div></li><li><span>02</span><div><h3>경로와 주유 후보 비교</h3><p>실제 이동 거리와 주유 가격, 추가로 필요한 우회 시간</p></div></li><li><span>03</span><div><h3>주유 계획 확인</h3><p>조건을 만족하는 주유 지점과 선택의 근거</p></div></li></ol>
-    </section>
-    <section class="coming wrap"><div><span class="status-dot"></span><strong>지금은 서비스를 준비하는 중입니다.</strong><p>이 페이지는 FuelRoute의 공식 서비스 소개 페이지입니다.<br>추천 기능과 지도는 API 연동을 마친 뒤 공개할 예정입니다.</p></div><a href="#main" aria-label="페이지 처음으로">다음 여정을 준비하며 <span aria-hidden="true">↑</span></a></section>
-  </main>
-  <footer class="wrap footer"><a class="brand" href="/">FuelRoute<span class="brand-dot">.</span></a><p>가는 길 위의 주유 계획.</p><small>© 2026 FuelRoute</small></footer>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+  <div class="app-shell">
+    <aside class="side-rail" aria-label="빠른 메뉴">
+      <a class="rail-logo" href="#main" aria-label="FuelRoute 홈">F</a>
+      <nav class="rail-nav" aria-label="화면 바로가기">
+        <a class="rail-button active" href="#planner" aria-label="추천 플래너" title="추천 플래너"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M6.5 3v7M17.5 3v7M5 11h14v9H5z"/></svg></a>
+        <button class="rail-button" type="button" data-dialog-target="plansDialog" aria-label="저장한 플랜" title="저장한 플랜"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button>
+        <button class="rail-button" type="button" data-dialog-target="evidenceDialog" aria-label="추천 근거" title="추천 근거"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></button>
+      </nav>
+      <div class="rail-status" title="Backend 연결 상태"><span id="connectionDot" class="connection-dot"></span><span class="sr-only" id="connectionText">Backend 확인 중</span></div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <a class="brand" href="#main" aria-label="FuelRoute 홈"><span class="brand-symbol" aria-hidden="true"></span><span>FuelRoute</span></a>
+        <nav class="top-tabs" aria-label="주요 화면"><a class="active" href="#planner">추천 플래너</a><button type="button" data-dialog-target="plansDialog">내 플랜</button><button type="button" data-dialog-target="evidenceDialog">추천 근거</button></nav>
+        <button class="new-chat-button" id="newChatButton" type="button">새 요청 <span aria-hidden="true">+</span></button>
+      </header>
+
+      <main id="main" class="dashboard" aria-busy="false">
+        <section class="hero-card card" id="planner" aria-labelledby="plannerTitle">
+          <div class="hero-glow" aria-hidden="true"></div>
+          <div class="hero-head">
+            <div><p class="card-kicker"><span class="live-dot"></span> ROUTE PLANNER</p><h1 id="plannerTitle">가는 길 위의<br><strong>주유 플랜</strong></h1></div>
+            <span class="request-chip" id="requestChip">새 요청</span>
+          </div>
+          <form class="chat-form" id="chatForm">
+            <label for="messageInput">어떤 주유 계획이 필요한가요?</label>
+            <div class="message-field">
+              <textarea id="messageInput" name="message" rows="3" maxlength="5000" required placeholder="예: 대구에서 서울 가는 길이야. 휘발유이고 주행 가능 거리는 180km, 안전 여유 30km를 남기고 싶어."></textarea>
+              <button class="submit-button" type="submit" id="submitButton"><span>추천 받기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6z"/></svg></button>
+            </div>
+            <p class="form-hint">주행 가능 거리와 남겨둘 안전 여유를 km로 알려주세요. 값을 추측하지 않습니다.</p>
+          </form>
+          <div class="recommendation empty" id="recommendation" aria-live="polite">
+            <div class="route-visual" aria-hidden="true">
+              <svg viewBox="0 0 460 190" preserveAspectRatio="none"><path class="route-base" d="M18 152 C98 152 95 92 172 92 S255 36 334 43 S390 112 442 77"/><path class="route-active" d="M18 152 C98 152 95 92 172 92 S255 36 334 43"/><circle class="route-start" cx="18" cy="152" r="7"/><circle class="route-stop" cx="334" cy="43" r="16"/></svg>
+              <span>요청을 입력하면 안전하게 도달 가능한 추천 지점을 표시합니다.</span>
+            </div>
+          </div>
+          <div class="save-panel" id="savePanel" hidden>
+            <div class="save-panel-title"><div><span class="section-label">PLAN SCHEDULE</span><strong>추천을 채택하고 플랜으로 저장</strong></div><span id="saveState" class="save-state">저장 전</span></div>
+            <div class="schedule-fields"><label>계획 날짜<input id="planDate" type="date" required></label><label>출발 시각 <span>선택</span><input id="planStartTime" type="time"></label><label>종료 시각 <span>선택</span><input id="planEndTime" type="time"></label></div>
+            <label class="memo-field" for="planMemo">플랜 메모 <span>선택 · 최대 1000자</span><textarea id="planMemo" maxlength="1000" rows="2" placeholder="예: 도착 전에 전화하기, 셀프 주유 확인"></textarea></label>
+            <button class="accept-button" id="acceptPlanButton" type="button">이 추천 채택하기 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>
+          </div>
+        </section>
+
+        <section class="metric-card card" aria-labelledby="safeRangeLabel"><div class="card-topline"><span id="safeRangeLabel">안전 주행거리</span><span class="mini-icon">↗</span></div><p class="metric-caption"><span class="metric-dot lime"></span> 계기판 − 안전 여유</p><strong class="metric-value" id="safeRangeValue">—<small> km</small></strong><svg class="sparkline" viewBox="0 0 180 42" aria-hidden="true"><path d="M3 34 33 30 62 12 93 26 124 9 177 18"/><circle cx="62" cy="12" r="3"/><circle cx="124" cy="9" r="3"/></svg></section>
+        <section class="metric-card card" aria-labelledby="reachLabel"><div class="card-topline"><span id="reachLabel">주유소 도달거리</span><span class="mini-icon">↗</span></div><p class="metric-caption"><span class="metric-dot blue"></span> 실제 자동차 경로</p><strong class="metric-value" id="reachValue">—<small> km</small></strong><svg class="sparkline muted" viewBox="0 0 180 42" aria-hidden="true"><path d="M3 34 35 20 60 29 91 10 120 27 145 15 177 23"/></svg></section>
+        <section class="metric-card card" aria-labelledby="detourLabel"><div class="card-topline"><span id="detourLabel">추가 우회시간</span><span class="mini-icon">↗</span></div><p class="metric-caption"><span class="metric-dot orange"></span> 기본 경로 대비</p><strong class="metric-value" id="detourValue">—<small> 분</small></strong><svg class="sparkline orange" viewBox="0 0 180 42" aria-hidden="true"><path d="M3 31 34 25 63 30 96 15 124 22 151 8 177 12"/></svg></section>
+
+        <section class="condition-card card" aria-labelledby="conditionTitle"><div class="card-topline"><span id="conditionTitle">주행 조건</span><span class="mini-icon">•••</span></div><div class="condition-main"><div class="range-number"><strong id="remainingRangeValue">—</strong><span>km<br>주행 가능</span></div><div class="range-balance" aria-hidden="true"><span id="rangeBalanceBar"></span></div><div class="condition-split"><span><b id="usableRatio">—%</b>추천 탐색</span><span><b id="reserveRatio">—%</b>안전 여유</span></div></div></section>
+        <section class="detour-card card" aria-labelledby="detourCardTitle"><div class="card-topline"><span id="detourCardTitle">추천 균형</span><span class="mini-icon">↗</span></div><div class="arc-chart" aria-hidden="true"><div class="arc-value"><span>우회 거리</span><strong id="detourDistanceValue">—<small> km</small></strong></div></div><p class="arc-note" id="recommendationScope">검증된 후보 안에서 가격과 우회 비용을 비교합니다.</p></section>
+      </main>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="dashboard-dialog" id="plansDialog" aria-labelledby="savedPlansTitle">
+    <section class="plans-card" id="saved-plans"><div class="modal-head"><div><span>MY PLANS</span><h2 id="savedPlansTitle">저장한 플랜 <small id="planCount">0개</small></h2></div><div class="modal-actions"><button class="icon-button" id="refreshPlansButton" type="button" aria-label="플랜 새로고침">↻</button><button class="modal-close" id="closePlansDialog" type="button" aria-label="저장한 플랜 닫기">×</button></div></div><div class="plans-list" id="plansList" aria-live="polite"><div class="empty-plans"><strong>아직 저장한 플랜이 없습니다.</strong><span>추천을 채택하면 이곳에 일정이 쌓입니다.</span></div></div></section>
+  </dialog>
+  <dialog class="dashboard-dialog" id="evidenceDialog" aria-labelledby="evidenceTitle">
+    <section class="evidence-card" id="evidence"><div class="modal-head"><div><span>RECOMMENDATION EVIDENCE</span><h2 id="evidenceTitle">추천 근거</h2></div><button class="modal-close" id="closeEvidenceDialog" type="button" aria-label="추천 근거 닫기">×</button></div><div class="evidence-summary"><strong id="evidenceCount">0<small>개</small></strong><p id="evidenceLead">추천을 요청하면 검증한 가격·거리·제약 근거를 보여드립니다.</p></div><ul class="evidence-list" id="evidenceList"><li class="placeholder-line"></li><li class="placeholder-line short"></li></ul></section>
+  </dialog>
+  <dialog class="edit-dialog" id="editDialog">
+    <form method="dialog" id="editPlanForm"><div class="dialog-head"><div><span>EDIT PLAN</span><h2>플랜 일정·메모 수정</h2></div><button id="closeEditButton" type="button" aria-label="닫기">×</button></div><input id="editPlanId" type="hidden"><input id="editRevision" type="hidden"><label>계획 날짜<input id="editPlanDate" type="date" required></label><div class="dialog-time-fields"><label>출발 시각 <span>선택</span><input id="editStartTime" type="time"></label><label>종료 시각 <span>선택</span><input id="editEndTime" type="time"></label></div><label class="memo-field" for="editMemo">플랜 메모 <span>선택 · 최대 1000자</span><textarea id="editMemo" maxlength="1000" rows="4" placeholder="이 계획에서 기억할 내용을 입력하세요."></textarea></label><p>날짜나 주행 조건을 바꾸면 추천 재검증이 필요합니다. 시각과 메모만 수정하면 기존 추천은 유지됩니다.</p><div class="dialog-actions"><button id="cancelEditButton" type="button" class="secondary-button">취소</button><button type="submit" value="default" class="primary-button">변경 저장</button></div></form>
+  </dialog>
 </body>
 </html>

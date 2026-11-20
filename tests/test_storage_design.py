@@ -43,10 +43,11 @@ def test_storage_design_log_immutability_and_plan_survival() -> None:
             "{}",
             None,
             None,
+            "",
             "2026-11-18T15:00:01+09:00",
             "2026-11-18T15:00:01+09:00",
         )
-        db.execute("INSERT INTO fuel_plans VALUES (?,?,?,?,?,?,?,?,?,?,?)", plan)
+        db.execute("INSERT INTO fuel_plans VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", plan)
         db.execute("DELETE FROM execution_sessions WHERE session_id='session'")
         assert db.execute("SELECT count(*) FROM execution_events").fetchone()[0] == 0
         assert db.execute("SELECT id,session_id FROM fuel_plans").fetchone() == ("plan", None)

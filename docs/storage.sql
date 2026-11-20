@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS fuel_plans (
     recommendation_json TEXT NOT NULL CHECK (json_valid(recommendation_json)),
     planned_start_at TEXT,
     planned_end_at TEXT,
+    memo TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

@@ -1,0 +1,109 @@
+"""F3018 정적 대시보드의 필수 구조·API 연결·보안 경계를 검증한다."""
+
+import re
+from pathlib import Path
+
+
+def frontend_text(name: str) -> str:
+    """frontend/dist의 UTF-8 파일 하나를 읽어 테스트 문자열로 반환한다.
+
+    name은 고정 테스트 파일명이며 경로 구분자 입력을 받지 않는다. 파일 읽기 외 수정·서버·
+    네트워크 부작용은 없다. 예: frontend_text('index.html').
+    """
+    assert name in {"index.html", "styles.css", "app.js", "config.js"}
+    return (Path("frontend/dist") / name).read_text(encoding="utf-8")
+
+
+def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
+    """사이드 레일·상단 탭·큰 추천 카드·지표/근거/플랜 영역과 label을 갖춘다."""
+    html = frontend_text("index.html")
+    required = [
+        'class="side-rail"',
+        'class="topbar"',
+        'class="hero-card card"',
+        'id="chatForm"',
+        'id="recommendation"',
+        'id="acceptPlanButton"',
+        'id="saved-plans"',
+        'id="evidence"',
+        'id="planMemo"',
+        'id="editMemo"',
+        'for="messageInput"',
+        'aria-live="polite"',
+        '<script src="/app.js" defer></script>',
+        '<script src="/config.js"></script>',
+    ]
+    assert all(item in html for item in required)
+    assert "연료량" not in html and "평균 연비" not in html
+    assert "주행 가능 거리" in html and "안전 여유" in html
+
+
+def test_frontend_calls_chat_and_full_plan_crud() -> None:
+    """브라우저 코드가 대화와 계획 POST/GET/PATCH/DELETE를 실제 API 경로로 연결한다."""
+    script = frontend_text("app.js")
+    assert 'apiFetch("/api/chat"' in script
+    assert 'apiFetch("/api/plans"' in script
+    assert 'method: "POST"' in script
+    assert 'method: "PATCH"' in script
+    assert 'method: "DELETE"' in script
+    assert "buildPlanPayload" in script and "rest_area_info" in script
+    assert "fuelroute.session_id" in script
+    assert "buildPlanUpdatePayload" in script
+    assert "payload.memo" in script and "plan.memo" in script
+    assert 'if (chat.status === "recommended") elements.messageInput.value = "";' in script
+
+
+def test_plans_and_evidence_are_dialogs_outside_dashboard() -> None:
+    """저장 플랜과 추천 근거는 본문 카드가 아니라 메뉴 버튼으로 여는 독립 모달이다."""
+    html = frontend_text("index.html")
+    main_end = html.index("</main>")
+    assert main_end < html.index('id="plansDialog"') < html.index('id="saved-plans"')
+    assert main_end < html.index('id="evidenceDialog"') < html.index('id="evidence"')
+    assert html.count('data-dialog-target="plansDialog"') == 2
+    assert html.count('data-dialog-target="evidenceDialog"') == 2
+    script = frontend_text("app.js")
+    assert "openDashboardDialog" in script and "closeDashboardDialog" in script
+
+
+def test_frontend_does_not_embed_secrets_or_external_api_keys() -> None:
+    """정적 배포 파일에 환경변수명·인증 헤더·제공사 키나 실제 비밀값 경로를 넣지 않는다."""
+    combined = "\n".join(
+        frontend_text(name) for name in ("index.html", "styles.css", "app.js", "config.js")
+    )
+    forbidden = [
+        "GMS_API_KEY",
+        "OPINET_API_KEY",
+        "KAKAO_REST_API_KEY",
+        "DATA_GO_KR_SERVICE_KEY",
+        "Authorization",
+        ".env",
+        "/v1/chat/completions",
+    ]
+    assert all(value not in combined for value in forbidden)
+
+
+def test_javascript_functions_have_jsdoc_and_no_inline_event_handlers() -> None:
+    """이름 있는 브라우저 함수마다 JSDoc이 있으며 HTML에 inline JavaScript가 없다."""
+    script = frontend_text("app.js")
+    functions = re.findall(r"(?:async\s+)?function\s+([A-Za-z0-9_]+)\s*\(", script)
+    assert functions
+    for name in functions:
+        pattern = rf"/\*\*[\s\S]*?\*/\s*(?:async\s+)?function\s+{re.escape(name)}\s*\("
+        assert re.search(pattern, script), f"JSDoc missing: {name}"
+    html = frontend_text("index.html")
+    assert not re.search(r"\son(?:click|submit|change|input)=", html, re.IGNORECASE)
+
+
+def test_css_uses_vivid_lime_and_responsive_breakpoints() -> None:
+    """선명한 라임과 상단 플랜→3개 지표→조건/균형의 반응형 단일 흐름을 정의한다."""
+    css = frontend_text("styles.css")
+    assert "--lime:#dfff34" in css
+    assert ".dashboard{grid-template-columns:repeat(6,minmax(0,1fr))" in css
+    assert ".hero-card{grid-column:1/-1" in css
+    assert ".metric-card{grid-column:span 2}" in css
+    assert ".condition-card{grid-column:span 4}" in css
+    assert ".detour-card{grid-column:span 2}" in css
+    assert ".dashboard-dialog" in css
+    assert "@media(max-width:880px)" in css
+    assert "@media(max-width:580px)" in css
+    assert "prefers-reduced-motion" in css

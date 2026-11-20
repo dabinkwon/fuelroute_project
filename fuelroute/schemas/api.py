@@ -8,6 +8,7 @@ from fuelroute.schemas.analysis import RequestAnalysis
 from fuelroute.schemas.judgement import TripJudgement
 from fuelroute.schemas.replanning import ReplanState
 from fuelroute.schemas.response import FinalResponse
+from fuelroute.schemas.stations import RestAreaInfo
 
 
 class ChatRequest(BaseModel):
@@ -46,5 +47,9 @@ class ChatResponse(BaseModel):
     judgement: TripJudgement
     replanning: ReplanState
     final_response: FinalResponse
+    rest_area_info: list[RestAreaInfo] | None = Field(
+        default=None,
+        description="추천 후보 주변의 휴게소 참고정보; 조회 실패·없음이면 null",
+    )
     event_count: int = Field(ge=1)
     log_delivery_failures: int = Field(ge=0)

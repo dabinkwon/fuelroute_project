@@ -272,9 +272,9 @@ created_at
 | `execution_events` | `id` PK, `session_id` FK, `(session_id, sequence)` UNIQUE | 이벤트 종류·단계·마스킹된 payload·시각 |
 | `fuel_plans` | `id` PK, `session_id` nullable FK | 입력 조건·추천 근거·가격 시각·보조정보 스냅샷·계획 날짜 |
 
-계획은 로그 삭제와 독립적으로 남는다. 세션 로그 삭제 시 이벤트는 함께 삭제하고 계획의 세션 참조는 `NULL`로 바꾼다. 시각은 시간대가 있는 ISO 8601 기준으로 처리하고 화면에서 KST로 표시한다. F3015에서 입력·추천·근거 스냅샷의 저장과 목록/상세 조회를, F3016에서 revision 기반 수정·삭제를 SQLite Repository로 연결했다. 핵심 입력 변경은 저장 추천을 자동 재실행하지 않고 `revalidation_required`로 표시한다. HTTP 연결은 F3017 범위다.
+계획은 로그 삭제와 독립적으로 남는다. 세션 로그 삭제 시 이벤트는 함께 삭제하고 계획의 세션 참조는 `NULL`로 바꾼다. 시각은 시간대가 있는 ISO 8601 기준으로 처리하고 화면에서 KST로 표시한다. F3015에서 입력·추천·근거 스냅샷의 저장과 목록/상세 조회를, F3016에서 revision 기반 수정·삭제를 SQLite Repository로 연결했다. 핵심 추천 입력 변경은 저장 추천을 자동 재실행하지 않고 `revalidation_required`로 표시한다. 선택 일정 시각은 정렬·충돌 안내용이며 메모와 함께 추천 판단을 바꾸지 않는다. HTTP 연결은 F3017 범위다.
 
-실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. F3010의 conversation_memory, F3013의 실행 로그, F3015의 fuel_plans Repository를 연결했다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 `planned_start_at/end_at`이 모두 있는 경우에만 반개구간으로 충돌을 판단한다. 시각이 부족하면 값을 만들지 않고 `not_comparable`로 구분한다. 충돌은 저장을 막지 않는다.
+실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. F3010의 conversation_memory, F3013의 실행 로그, F3015의 fuel_plans Repository를 연결했다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 사용자 `memo`를 최대 1000자의 일반 텍스트로 별도 저장한다. 기존 DB에 열이 없으면 연결 시 빈 메모 열을 추가한다. `planned_start_at/end_at`이 모두 있는 경우에만 반개구간으로 충돌을 판단하고, 시각이 부족하면 값을 만들지 않고 `not_comparable`로 구분한다. 충돌은 저장을 막지 않는다.
 
 ---
 
@@ -327,8 +327,9 @@ created_at
 | PATCH | `/api/plans/{plan_id}` | 계획 수정 | FR-010 |
 | DELETE | `/api/plans/{plan_id}` | 계획 삭제 | FR-010 |
 
-계획 시간 충돌은 저장을 막지 않고 응답의 `conflicts`에 포함한다. 시각이 부족하면
-`conflict_check=not_comparable`이다. PATCH는 예상 revision을 요구한다.
+계획 시간 충돌은 저장을 막지 않고 응답의 `conflicts`에 포함한다. 선택 출발·종료 시각은
+계획 정렬과 일정 겹침 안내에만 쓰며 시각이 부족하면 `conflict_check=not_comparable`이다.
+`memo`는 선택 일반 텍스트이고 추천 계산에 사용하지 않는다. PATCH는 예상 revision을 요구한다.
 
 ## Logs
 
@@ -363,10 +364,10 @@ Endpoint는 추가하지 않는다.
 | Endpoint | 입력 | 성공 응답·상태 |
 |---|---|---|
 | `POST /api/chat` | `message: string`, `session_id: string 또는 null` | 200, 대화/실행 ID, 분석·판정·재계획·최종 응답, 이벤트 건수·로그 저장 실패 수 |
-| `POST /api/plans` | 주행 입력 스냅샷·검증된 추천 스냅샷·`trip_date`·선택 계획 시작/종료시각 | 201, `plan: FuelPlan`, `conflicts: [{plan_id, reason}]`; 충돌을 이유로 저장을 거절하지 않음 |
+| `POST /api/plans` | 주행 입력 스냅샷·검증된 추천 스냅샷·`trip_date`·선택 계획 시작/종료시각·메모 | 201, `plan: FuelPlan`, `conflicts: [{plan_id, reason}]`; 충돌을 이유로 저장을 거절하지 않음 |
 | `GET /api/plans` | 선택 `trip_date: YYYY-MM-DD` | 200, `{items: FuelPlan[]}` |
 | `GET /api/plans/{plan_id}` | 저장한 계획 ID | 200, `FuelPlan` |
-| `PATCH /api/plans/{plan_id}` | 변경할 필드만; 조건이 바뀌면 기존 추천은 재검증 필요 상태로 전환 | 200, `{plan: FuelPlan, conflicts: []}` |
+| `PATCH /api/plans/{plan_id}` | 변경할 필드만; 날짜·조건이 바뀌면 기존 추천은 재검증 필요 상태로 전환, 시각·메모만 바뀌면 기존 상태 유지 | 200, `{plan: FuelPlan, conflicts: []}` |
 | `DELETE /api/plans/{plan_id}` | 저장한 계획 ID | 204, 본문 없음 |
 | `GET /api/logs` | 선택 세션 상태 | 200, `{items: ExecutionSession[]}` |
 | `GET /api/logs/{session_id}` | 세션 ID | 200, `{session: ExecutionSession, events: ExecutionEvent[]}`; sequence 오름차순 |
@@ -382,6 +383,23 @@ Endpoint는 추가하지 않는다.
 
 F3017은 위 Backend 계약을 연결했다. Frontend의 실제 호출·상태 표시·브라우저 검증은
 F3018~F3019에서 수행한다.
+
+### F3018 대화·계획 대시보드 — 화면 확인 중
+
+`frontend/dist`는 별도 빌드 없는 HTML/CSS/JavaScript다. 왼쪽 큰 카드에서 자연어 요청과
+추천 후보를 보여주고, 사용자가 날짜·선택 시각·메모를 확인한 뒤 추천을 채택하면 Chat 응답의
+검증된 좌표·조건·주유소·m/s 비용·근거를 `PlanCreate`의 km/min 스냅샷으로 바꿔
+`POST /api/plans`에 저장한다. 추천이 없거나 필수 비용이 누락되면 저장 payload를 만들지 않는다.
+
+저장 목록은 GET, 일정·메모 변경은 현재 revision의 PATCH, 삭제는 DELETE를 사용한다. 실제
+변경 필드만 PATCH해 변경 없는 저장의 422를 프론트에서 예방한다. 날짜·조건 변경 후
+`revalidation_required`를 별도 배지로 표시하고 시각·메모만 바꾸면 기존 추천 상태를 유지한다.
+본문은 전체 너비 주유 플랜→안전거리/도달거리/우회시간 3열→주행 조건/추천 균형 순서다.
+저장 플랜과 추천 근거는 상단 탭·사이드 메뉴에서 여는 네이티브 `dialog` 모달로 분리해 본문
+카드 분할을 줄인다. session ID만 브라우저 localStorage에 보관하며
+키·원본 Tool 응답·계획 데이터는 저장하지 않는다. 로컬 5173은 Backend 8000을 사용하고 운영
+origin은 공개 `config.js`의 빈 `FUELROUTE_API_BASE` 한 곳에서 설정한다. 기능 UI 운영 배포는
+공개 Backend 주소 설정과 사용자 화면 확인 뒤 진행한다.
 
 ---
 

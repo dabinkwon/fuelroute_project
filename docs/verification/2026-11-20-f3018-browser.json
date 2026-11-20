@@ -1,0 +1,50 @@
+{
+  "verified_at": "2026-11-20T10:10:37.981831+09:00",
+  "scope": "F3018 로컬 Chrome 실제 대화→추천→계획 저장·수정·삭제",
+  "environment": {
+    "frontend": "http://127.0.0.1:5173",
+    "backend": "http://127.0.0.1:8000",
+    "browser": "Chrome headless",
+    "viewport": "1440x1100",
+    "model": "gpt-5.4-mini"
+  },
+  "request": {
+    "summary": "2026-11-20 대구→서울, 휘발유, 주행 가능 180km, 안전 여유 30km, 우회 15분 이내, 가격 우선",
+    "contains_secret": false
+  },
+  "chat": {
+    "status": "recommended",
+    "execution_id": "cf66b55da1a046b1ad6f7f7de82ce231",
+    "recommended_station": "신창에너지㈜괴산(양평)주유소",
+    "browser_error": null
+  },
+  "execution_log": {
+    "status": "completed",
+    "event_count": 49,
+    "tool_events": 26,
+    "replan_events": 0,
+    "logical_calls": {
+      "kakao:get_driving_route": 6,
+      "opinet:search_gas_stations": 3,
+      "opinet:get_station_details": 3,
+      "rest_area:search_rest_area_info": 1
+    },
+    "llm_decision_steps": ["analyze", "build_plan", "respond"]
+  },
+  "plan_crud": {
+    "created_plan_id": "fd53cf34a7744d87bdd7f5e65d96d8f7",
+    "create_status": "valid",
+    "create_count": 1,
+    "updated_revision": 2,
+    "updated_status": "revalidation_required",
+    "updated_start": "2026-11-20T10:00:00+09:00",
+    "updated_end": "2026-11-20T13:00:00+09:00",
+    "deleted": true,
+    "remaining_count": 0
+  },
+  "notes": [
+    "첫 실행의 UPSTREAM_ERROR는 샌드박스 네트워크 제한이 원인이었고, 외부 네트워크를 허용한 동일 서버에서 재검증했다.",
+    "검증 계획은 삭제했으며 실행 로그와 대화 Memory는 로컬 Git 제외 SQLite에 남는다.",
+    "키·인증 헤더·원본 외부 응답·경로 기하는 이 파일에 기록하지 않았다."
+  ]
+}

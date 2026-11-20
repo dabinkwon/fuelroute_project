@@ -14,6 +14,7 @@ from fuelroute.core.config import Settings
 from fuelroute.core.contracts import ToolResult
 from fuelroute.schemas.analysis import RequestAnalysis
 from fuelroute.schemas.api import ChatRequest, ChatResponse
+from fuelroute.schemas.execution import WorkResults
 from fuelroute.schemas.judgement import TripJudgement
 from fuelroute.schemas.memory import SessionKey
 from fuelroute.schemas.replanning import ReplanState
@@ -100,6 +101,7 @@ def chat_response(result: ToolResult[dict], session_id: str, execution_id: str) 
     analysis = RequestAnalysis.model_validate(data["analysis"])
     judgement = TripJudgement.model_validate(data["judgement"])
     replanning = ReplanState.model_validate(data.get("replanning") or {})
+    results = WorkResults.model_validate(data["results"])
     event_stream = data["event_stream"]
     if event_stream["execution_id"] != execution_id:
         raise ValueError("실행 로그 ID가 응답과 다릅니다.")
@@ -115,6 +117,9 @@ def chat_response(result: ToolResult[dict], session_id: str, execution_id: str) 
         judgement=judgement,
         replanning=replanning,
         final_response=final,
+        rest_area_info=(
+            results.rest_area_info.items if results.rest_area_info is not None else None
+        ),
         event_count=event_stream["event_count"],
         log_delivery_failures=event_stream["delivery_failures"],
     )
