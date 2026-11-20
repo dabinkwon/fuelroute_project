@@ -483,6 +483,46 @@ def test_optional_rest_failure_is_visible_and_keeps_recommendation() -> None:
     asyncio.run(scenario())
 
 
+def test_nf3003_candidate_tool_failure_continues_with_available_station() -> None:
+    """한 후보의 상세 Tool TIMEOUT을 격리하고 다른 후보 추천·제외 근거 응답을 유지한다.
+
+    실제 F3007 실행기와 최종 응답기를 MockTransport로 끝까지 실행한다. A 후보 상세 조회만
+    타임아웃으로 만들고 B 후보의 상세·실제 자동차 경로·제약 판정·휴게소 보조 조회가 계속되는지
+    확인한다. 합성 키만 사용하며 GMS·실제 데이터 API·DB 호출은 없다. 결과는 성공 ToolResult,
+    B 추천, A의 TIMEOUT 제외 근거여야 한다.
+    """
+    provider = Provider("detail_timeout")
+
+    async def analyze(_user: str) -> ExtractedRequest:
+        """원문과 일치하는 고정 추천 조건을 반환하며 모델을 호출하지 않는다."""
+        return extracted()
+
+    async def plan(_analysis: RequestAnalysis) -> PlanProposal:
+        """정상 아홉 단계 실행 계획을 반환하며 모델·외부 I/O를 사용하지 않는다."""
+        return proposal()
+
+    async def scenario() -> None:
+        """부분 실패 그래프를 실행하고 추천·호출·최종 설명의 일관성을 검사한다."""
+        async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+            result = await execute_request(
+                USER,
+                settings(),
+                analyzer=analyze,
+                planner=plan,
+                client=client,
+                reference_date=TODAY,
+            )
+        assert result.ok and result.data["final_response"]["status"] == "recommended"
+        assert result.data["final_response"]["recommended_station_id"] == "B"
+        assert "조회 응답시간 초과" in result.data["answer"]
+        assert "detail:A" in provider.calls and "detail:B" in provider.calls
+        failed = [call for call in result.data["execution"]["calls"] if not call["result"]["ok"]]
+        assert any(call["result"]["error"]["code"] == "TIMEOUT" for call in failed)
+        assert provider.calls[-1] == "rest"
+
+    asyncio.run(scenario())
+
+
 def test_final_prompt_redacts_configured_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     """데이터문자열에키가섞여도최종모델로넘기기전에환경설정의비밀값을정제한다."""
     context = response_context()

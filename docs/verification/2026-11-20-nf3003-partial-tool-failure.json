@@ -1,0 +1,37 @@
+{
+  "requirement": "NF3003",
+  "verified_at": "2026-11-20T14:00:00+09:00",
+  "scenarios": [
+    {
+      "name": "candidate_detail_timeout",
+      "failed_tool": "get_station_details",
+      "failed_station_id": "A",
+      "error_code": "TIMEOUT",
+      "continued_station_id": "B",
+      "final_status": "recommended",
+      "failure_visible_in_answer": true,
+      "rest_area_lookup_after_failure": true
+    },
+    {
+      "name": "optional_rest_area_upstream_error",
+      "failed_tool": "search_rest_area_info",
+      "error_code": "UPSTREAM_ERROR",
+      "recommended_station_preserved": true,
+      "final_status": "recommended",
+      "answer_marks_auxiliary_data_unverified": true
+    }
+  ],
+  "verification": {
+    "focused_pytest": "2 passed in 0.99s",
+    "full_pytest": "444 passed in 11.38s",
+    "ruff_lint": "passed",
+    "ruff_format": "102 files already formatted",
+    "pip_check": "No broken requirements found",
+    "git_diff_check": "passed",
+    "external_api_calls": 0
+  },
+  "limitations": [
+    "실패는 실제 실행기와 HTTP 어댑터를 사용하되 MockTransport의 합성 제공사 응답으로 재현했다.",
+    "핵심 인증·설정·한도 실패는 부분 실패로 숨기지 않고 기존 정책대로 전체 실행을 중단한다."
+  ]
+}

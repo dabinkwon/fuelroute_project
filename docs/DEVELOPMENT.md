@@ -1160,3 +1160,26 @@ Agent 설정 실패503의 공통 오류와 원문 비노출을 확인했다. 기
 - 집중 테스트 **15개**, 전체 **443개 테스트**, Ruff lint/format, Node 문법 검사, `pip check`,
   `git diff --check`를 통과했다. [실패 검증 JSON](verification/2026-11-20-nf3002-public-errors.json)에
   합성 입력 범주와 공개 응답만 기록했다.
+
+<a id="nf3003-partial-tool-failure"></a>
+
+## 39. NF3003 Tool 부분 실패 처리 — 2026-11-20
+
+### 시나리오와 결과
+
+- 실제 계획 실행기·HTTP 어댑터·제약 판정·최종 응답기를 연결한 상태에서 A 후보의
+  `get_station_details`만 `TIMEOUT`으로 만들었다. 실패 호출은 공통 `ToolResult`와 제외 근거로
+  남았고 B 후보의 상세·접근/경유 자동차 경로·판정·휴게소 조회가 계속되어 B를 추천했다.
+  최종 응답에도 `조회 응답시간 초과` 제외 사유가 포함됐다.
+- 별도 시나리오에서 추천 뒤 `search_rest_area_info`를 `UPSTREAM_ERROR`로 실패시켰다. 주유소
+  추천은 유지되고 최종 응답은 `휴게소 보조정보는 미확인`이라고 표시했으며 실패 호출의
+  provider/request ID 출처를 보존했다.
+- 인증·설정·호출 한도 같은 핵심 실패는 부분 성공으로 숨기지 않고 중단하는 기존 정책을
+  유지한다. 이번 검증은 개별 후보 실패와 선택 보조정보 실패에 한정하며 MockTransport 합성
+  응답을 사용해 실제 외부 API는 호출하지 않았다.
+
+### 검증
+
+- NF3003 집중 시나리오 **2개**, 전체 **444개 테스트**, Ruff lint/format, `pip check`,
+  `git diff --check`를 통과했다. [부분 실패 검증 JSON](verification/2026-11-20-nf3003-partial-tool-failure.json)에
+  실패 Tool·오류 코드·계속 처리한 후보·최종 상태를 기록했다.
