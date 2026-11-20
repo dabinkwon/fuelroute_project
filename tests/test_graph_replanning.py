@@ -203,14 +203,24 @@ def test_replan_reuses_then_expands_and_judges_each_round(
 def test_round_and_evaluation_caps_are_global(
     monkeypatch: pytest.MonkeyPatch, limits: dict, count: int, evaluated: int, reason: str
 ) -> None:
-    """최초/추가회차에같은전역상한을적용하고실패후보도예산을사용하며0/1/2회에서멈춘다."""
+    """NF3004의 회차·평가 상한을 전체 그래프와 실제 누적 호출에서 검증한다.
+
+    limits는 요청별 `max_replans/max_candidates/max_evaluations`, count/evaluated/reason은 예상
+    추가 회차·평가 수·종료 코드다. 합성 제공사의 모든 후보를 탈락시켜 최초 회차와 최대2회
+    추가 회차가 같은 전역 예산을 쓰는지 확인한다. 반환값은 없고 MockTransport 외 네트워크·
+    DB 부작용은 없다. 실패 후보도 예산을 소비하며 종료 뒤 상세/검색/보조 호출이 없어야 한다.
+    """
     state, provider, models = drive(monkeypatch, "limit", limits=limits)
-    assert state["replanning"]["replan_count"] == count
-    assert state["replanning"]["stop_reason"] == reason
+    progress = state["replanning"]
+    assert progress["replan_count"] == count
+    assert progress["stop_reason"] == reason
+    assert len(progress["rounds"]) == count + 1
+    assert progress["decision"]["action"] == "stop" and progress["next_input"]
     assert len(state["results"]["evaluate_constraints"]) == evaluated
     assert len([name for name in provider.calls if name.startswith("detail:")]) == evaluated
     assert provider.calls.count("base") == 1 and provider.calls.count("search") == 3
-    assert "rest" not in provider.calls and state["replanning"]["next_input"]
+    assert max(call["round_index"] for call in state["execution"]["calls"]) == count
+    assert "rest" not in provider.calls
     assert models == {"analyze": 1, "plan": 1}
 
 

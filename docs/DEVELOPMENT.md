@@ -1183,3 +1183,24 @@ Agent 설정 실패503의 공통 오류와 원문 비노출을 확인했다. 기
 - NF3003 집중 시나리오 **2개**, 전체 **444개 테스트**, Ruff lint/format, `pip check`,
   `git diff --check`를 통과했다. [부분 실패 검증 JSON](verification/2026-11-20-nf3003-partial-tool-failure.json)에
   실패 Tool·오류 코드·계속 처리한 후보·최종 상태를 기록했다.
+
+<a id="nf3004-replan-limits"></a>
+
+## 40. NF3004 재계획 상한 — 2026-11-20
+
+### 검증한 정책
+
+- 최초 실행은 추가 재계획 횟수에 포함하지 않고 요청별 `max_replans` 0~2회만 허용한다. 기본
+  전체 평가 예산은 9곳이며 회차 상한과 평가 예산 중 먼저 도달한 조건에서 종료한다.
+- 전체 그래프에서 0/1/2회 상한, 평가4/9곳 예산, 평가 예산이 더 커도 2회에서 끝나는 경우까지
+  여섯 조합을 실행했다. `replan_count`, 최초 포함 회차 기록 수, 모든 Tool 호출의 최대
+  `round_index`, 실제 상세 평가 수가 같은 상한을 가리키는지 대조했다.
+- 종료 결정은 `action=stop`, `replan_limit_reached` 또는 `evaluation_budget_exhausted`, 다음 입력
+  안내를 반환했다. 종료 뒤 휴게소 조회나 추가 LLM 호출은 없었고 안전·유종·우회 조건을
+  완화하지 않았다. 합성 제공사로 검증해 실제 외부 API는 호출하지 않았다.
+
+### 검증 결과
+
+- 집중 테스트 **6개**, 전체 **444개 테스트**, Ruff lint/format, `pip check`, `git diff --check`를
+  통과했다. [상한 검증 JSON](verification/2026-11-20-nf3004-replan-limits.json)에 조합별 회차·평가
+  수·종료 사유와 종료 후 호출 여부를 기록했다.

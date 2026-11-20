@@ -1,0 +1,35 @@
+{
+  "requirement": "NF3004",
+  "verified_at": "2026-11-20T14:05:00+09:00",
+  "policy": {
+    "max_additional_replans": 2,
+    "default_max_evaluations": 9,
+    "initial_round_counts_as_replan": false,
+    "constraints_relaxed": false
+  },
+  "cases": [
+    {"max_replans": 0, "replan_count": 0, "evaluated": 1, "stop_reason": "replan_limit_reached"},
+    {"max_replans": 1, "replan_count": 1, "evaluated": 2, "stop_reason": "replan_limit_reached"},
+    {"max_replans": 2, "replan_count": 2, "evaluated": 3, "stop_reason": "replan_limit_reached"},
+    {"max_replans": 2, "max_evaluations": 4, "replan_count": 1, "evaluated": 4, "stop_reason": "evaluation_budget_exhausted"},
+    {"max_replans": 2, "max_evaluations": 9, "replan_count": 2, "evaluated": 9, "stop_reason": "evaluation_budget_exhausted"},
+    {"max_replans": 2, "max_evaluations": 12, "replan_count": 2, "evaluated": 9, "stop_reason": "replan_limit_reached"}
+  ],
+  "assertions": {
+    "round_records_equal_initial_plus_replans": true,
+    "maximum_call_round_index_equals_replan_count": true,
+    "stop_decision_returned": true,
+    "next_input_returned": true,
+    "rest_area_call_after_limit": false,
+    "extra_llm_calls": 0
+  },
+  "verification": {
+    "focused_pytest": "6 passed in 1.12s",
+    "full_pytest": "444 passed in 11.39s",
+    "ruff_lint": "passed",
+    "ruff_format": "102 files already formatted",
+    "pip_check": "No broken requirements found",
+    "git_diff_check": "passed",
+    "external_api_calls": 0
+  }
+}
