@@ -59,3 +59,23 @@ async def request_validation_handler(
             }
         },
     )
+
+
+async def unexpected_error_handler(_request: Request, _failure: Exception) -> JSONResponse:
+    """처리하지 못한 서버 예외를 내부 상세가 없는 공통500 응답으로 차단한다.
+
+    FastAPI 라우터·Repository·Agent 경계 밖에서 예상하지 못한 예외가 발생했을 때 마지막으로
+    호출한다. 예외 메시지·타입·stack trace·요청 헤더/본문은 읽거나 응답에 복사하지 않는다.
+    반환은 `INTERNAL_ERROR`와 새 request ID가 있는 JSONResponse이며 로그·DB·외부 호출을
+    추가하지 않는다. 예: `RuntimeError('Authorization: secret')`도 고정 안내만 반환한다.
+    """
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "서버에서 요청을 처리하지 못했습니다.",
+                "request_id": uuid4().hex,
+            }
+        },
+    )

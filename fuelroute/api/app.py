@@ -5,7 +5,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from fuelroute.api.chat import router as chat_router
-from fuelroute.api.errors import ApiFailure, api_failure_handler, request_validation_handler
+from fuelroute.api.errors import (
+    ApiFailure,
+    api_failure_handler,
+    request_validation_handler,
+    unexpected_error_handler,
+)
 from fuelroute.api.logs import router as logs_router
 from fuelroute.api.plans import router as plans_router
 
@@ -23,6 +28,7 @@ app.add_middleware(
 )
 app.add_exception_handler(ApiFailure, api_failure_handler)
 app.add_exception_handler(RequestValidationError, request_validation_handler)
+app.add_exception_handler(Exception, unexpected_error_handler)
 app.include_router(chat_router)
 app.include_router(plans_router)
 app.include_router(logs_router)

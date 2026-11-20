@@ -99,6 +99,15 @@ def test_frontend_does_not_embed_secrets_or_external_api_keys() -> None:
     assert all(value not in combined for value in forbidden)
 
 
+def test_frontend_failure_path_uses_only_public_error_fields() -> None:
+    """NF3002 화면 실패 경로가 응답 원문·stack 대신 공개 message/code와 textContent만 쓴다."""
+    script = frontend_text("app.js")
+    assert "body?.error?.message" in script and "body?.error?.code" in script
+    assert "response.text()" not in script and "error.stack" not in script
+    assert "elements.toast.textContent = message" in script
+    assert "JSON.stringify(error)" not in script
+
+
 def test_javascript_functions_have_jsdoc_and_no_inline_event_handlers() -> None:
     """이름 있는 브라우저 함수마다 JSDoc이 있으며 HTML에 inline JavaScript가 없다."""
     script = frontend_text("app.js")

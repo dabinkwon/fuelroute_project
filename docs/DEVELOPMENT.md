@@ -1134,3 +1134,29 @@ Agent 설정 실패503의 공통 오류와 원문 비노출을 확인했다. 기
   구분한 [정제 검증 JSON](verification/2026-11-20-nf3001-secret-management.json)을 남겼다.
 - Git 저장소 밖으로 이미 복사된 파일이나 원격 서비스가 별도로 보관하는 데이터는 로컬 검사
   범위가 아니다. 실제 키 원문·인증 헤더·키가 포함된 URL은 결과 파일에 기록하지 않았다.
+
+<a id="nf3002-public-errors"></a>
+
+## 38. NF3002 화면·API 오류 노출 제한 — 2026-11-20
+
+### 구현
+
+- `fuelroute/api/errors.py`에 예상하지 못한 `Exception`의 마지막 처리기를 추가하고 FastAPI에
+  등록했다. 원 예외 메시지·타입·stack trace·요청 본문/헤더를 읽거나 복사하지 않고 고정
+  `INTERNAL_ERROR`, 공개 한국어 문장, 새 request ID만 500 JSON으로 반환한다.
+- 기존 예상 오류는 `ApiFailure`의 정제된 code/message 계약을 유지한다. Frontend는 HTTP 실패
+  본문의 공개 `error.message/error.code`만 Error에 옮기며 응답 원문이나 stack을 읽지 않고,
+  toast는 `textContent`로 표시한다.
+
+### 실패 시나리오와 검증
+
+- 독립 ASGI 앱에서 `Authorization`, 합성 API 키, 키가 든 제공사 URL, 내부 Windows 소스 경로를
+  포함한 `RuntimeError`를 실제로 발생시켰다. HTTP 500 응답은 `INTERNAL_ERROR`와 길이32의
+  request ID만 반환했고 다섯 비공개 문자열·stack trace 일치는 0건이었다. 실제 키·외부 API·
+  운영 서버는 사용하지 않았다.
+- Frontend 회귀 검사는 공개 message/code 사용, `response.text()`·`error.stack`·오류 객체 전체
+  직렬화 미사용, toast의 `textContent` 사용을 확인했다. 실제 운영 배포 장애를 만들지는 않았으며
+  정적 배포 코드의 실패 경로와 Node 문법을 검증했다.
+- 집중 테스트 **15개**, 전체 **443개 테스트**, Ruff lint/format, Node 문법 검사, `pip check`,
+  `git diff --check`를 통과했다. [실패 검증 JSON](verification/2026-11-20-nf3002-public-errors.json)에
+  합성 입력 범주와 공개 응답만 기록했다.

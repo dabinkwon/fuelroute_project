@@ -376,7 +376,7 @@ Endpoint는 추가하지 않는다.
 - `TripContext`의 좌표는 `{longitude: number, latitude: number, label?: string}`인 WGS84, 기본 범위 입력은 주행 가능/안전 여유(km)다. km 방식에 L/연비는 필수가 아니며 기존 L 방식만 별도로 허용한다. 필수값 누락은 임의 보충하지 않고 Chat의 `needs_user_input=true`/`missing_fields`로 안내한다.
 - `FuelPlan`은 5장의 저장 구조를 따르며 추천 주유소는 `StationDetails`, 실제 도달·우회 거리(km)/시간(min), 추천 근거, 보조정보 `RestAreaInfo[]|null`을 담는다. HTTP 직전 도메인 계산에서 m/s→km/min 변환을 명시한다.
 - `ExecutionEvent`는 11장의 세션/순서/Tool/요청ID/시각과 마스킹된 payload를 사용한다. 원본 인증 URL·헤더·내부 예외 trace는 응답에 포함하지 않는다.
-- HTTP 오류는 `{error: {code, message, request_id}}`로 통일한다. 잘못된 입력은 422, 없는 계획/로그는 404, 일시 외부 장애로 핵심 판단 불가 시 503이다. 후보 없음·추가 입력·보조정보 실패는 대화 상태로 표현하고 UI가 `warnings`와 근거를 표시한다.
+- HTTP 오류는 `{error: {code, message, request_id}}`로 통일한다. 잘못된 입력은 422, 없는 계획/로그는 404, 일시 외부 장애로 핵심 판단 불가 시 503이다. 처리하지 못한 예외는 원문·타입·stack trace·요청 인증정보를 복사하지 않고 고정 `INTERNAL_ERROR` 500으로 변환한다. 후보 없음·추가 입력·보조정보 실패는 대화 상태로 표현하고 UI가 `warnings`와 근거를 표시한다.
 - 화면 상태: 요청 중은 처리 중 표시, 필수값 누락은 입력 보완, 추천 없음은 근거 안내, 휴게소만 실패하면 보조정보 미확인 표시다. 로그 화면은 수정 버튼을 제공하지 않는다.
 - 계획 시간 충돌은 시작/종료가 모두 있는 반개구간을 비교한다. 구체 시각이 부족하면
   `not_comparable`로 구분하며 날짜만으로 충돌을 만들거나 저장 실패를 반환하지 않는다.

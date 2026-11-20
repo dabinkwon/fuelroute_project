@@ -1,0 +1,43 @@
+{
+  "requirement": "NF3002",
+  "verified_at": "2026-11-20T13:55:28+09:00",
+  "base_commit": "a46ab4680c509d4b78a9517f3ca6a28d62496bbb",
+  "scenario": {
+    "type": "unexpected_backend_exception",
+    "synthetic_private_fields": [
+      "Authorization header",
+      "API key",
+      "provider URL query",
+      "internal Windows source path"
+    ],
+    "real_secret_used": false,
+    "external_api_calls": 0
+  },
+  "api_result": {
+    "status_code": 500,
+    "public_code": "INTERNAL_ERROR",
+    "request_id_length": 32,
+    "private_field_matches": 0,
+    "stack_trace_exposed": false
+  },
+  "frontend_result": {
+    "uses_public_error_message": true,
+    "uses_public_error_code": true,
+    "reads_raw_response_text": false,
+    "renders_error_stack": false,
+    "toast_uses_text_content": true
+  },
+  "verification": {
+    "focused_pytest": "15 passed in 1.64s",
+    "full_pytest": "443 passed in 11.11s",
+    "ruff_lint": "passed",
+    "ruff_format": "102 files already formatted",
+    "node_syntax": "passed",
+    "pip_check": "No broken requirements found",
+    "git_diff_check": "passed"
+  },
+  "limitations": [
+    "Frontend 검증은 정적 배포 코드의 실패 경로 계약과 Node 문법 검사이며 실제 운영 배포 장애를 만들지 않았다.",
+    "오류 원문은 합성값을 사용했고 실제 인증정보를 테스트 입력이나 결과에 기록하지 않았다."
+  ]
+}

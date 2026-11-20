@@ -6,10 +6,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+from fastapi import FastAPI
 from test_plan_storage import create_command
 
 from fuelroute.agent.graph import execute_request
 from fuelroute.api.app import app
+from fuelroute.api.errors import unexpected_error_handler
 from fuelroute.core.config import Settings
 from fuelroute.core.contracts import ToolError, ToolMeta, ToolResult, utc_now
 from fuelroute.schemas.analysis import ExtractedRequest, RequestAnalysis
@@ -241,6 +243,40 @@ def test_invalid_requests_and_agent_failure_use_common_error_shape(tmp_path: Pat
         error = response.json()["error"]
         assert error["message"] and len(error["request_id"]) == 32
         assert "비공개 상세" not in response.text
+
+
+def test_unexpected_server_error_hides_exception_and_authentication_details() -> None:
+    """미처리500 응답이 예외·stack·인증 헤더 원문 없이 고정 공개 오류만 반환하는지 검사한다.
+
+    독립 FastAPI 앱에 실제 전역 예외 처리기를 연결하고 합성 RuntimeError를 발생시킨다. 오류
+    원문에는 URL·Authorization·API 키·Windows 경로를 넣지만 응답은 INTERNAL_ERROR와 UUID만
+    포함해야 한다. 실제 Backend 상태·DB·환경변수·네트워크는 변경하지 않는다.
+    """
+    failure_app = FastAPI()
+    failure_app.add_exception_handler(Exception, unexpected_error_handler)
+
+    @failure_app.get("/fail")
+    async def fail_with_private_details() -> None:
+        """NF3002 테스트용 민감한 합성 예외를 발생시키며 외부 I/O는 수행하지 않는다."""
+        raise RuntimeError(
+            "Authorization: Bearer private-key https://provider.test?serviceKey=private "
+            "C:/internal/server.py"
+        )
+
+    async def request_failure() -> httpx.Response:
+        """예외 재발생을 끈 ASGI transport로 합성500 응답을 한 번 조회한다."""
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=failure_app, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as client:
+            return await client.get("/fail", headers={"Authorization": "Bearer request-key"})
+
+    response = asyncio.run(request_failure())
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_ERROR"
+    assert len(response.json()["error"]["request_id"]) == 32
+    forbidden = ("private-key", "request-key", "Authorization", "provider.test", "server.py")
+    assert all(value not in response.text for value in forbidden)
 
 
 def test_openapi_contains_chat_plan_crud_and_read_delete_logs(tmp_path: Path) -> None:
