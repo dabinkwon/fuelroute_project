@@ -37,6 +37,7 @@
 | 26. F3019 실행 과정 UI | 처리 상태, 최근 실행 목록, 순서형 단계·Tool·판정·재계획 타임라인, 로그 삭제 | 전체439개·실제 로그 51개 Chrome 렌더링. [상태 화면 기록](docs/DEVELOPMENT.md#f3019-execution-ui) | F3019 기능 커밋 |
 | 27. 실행·추천 근거 구체화 | Tool 요청/결과 통합, 호출 목적 표시, 실제 평가 후보 최대 5곳 비용 비교 | 자동 테스트·정적 검사. [상세 기록](docs/DEVELOPMENT.md#execution-evidence-detail) | 사용자 확인 전 |
 | 28. 안전 여유 미적용 비교 | 사용자가 직접 선택한 0km 안전 여유와 실제 도달 후보 가격 우선 비교 | 자동 테스트·정적 검사. [상세 기록](docs/DEVELOPMENT.md#optional-reserve) | 사용자 확인 전 |
+| 29. 입력 화면 단순화·법정동 선택 | 시·도→시·군·구→읍·면·동, 상세 장소·추가 조건 접기, 추천 전 빈 지표 숨김 | 공식 현존 법정동 16개 시·도·256개 시·군·구·5,067개 읍·면·동 생성, 자동 테스트. [상세 기록](docs/DEVELOPMENT.md#compact-request-ui) | 사용자 확인 전 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 

@@ -1,5 +1,6 @@
 """F3018 정적 대시보드의 필수 구조·API 연결·보안 경계를 검증한다."""
 
+import json
 import re
 from pathlib import Path
 
@@ -10,7 +11,7 @@ def frontend_text(name: str) -> str:
     name은 고정 테스트 파일명이며 경로 구분자 입력을 받지 않는다. 파일 읽기 외 수정·서버·
     네트워크 부작용은 없다. 예: frontend_text('index.html').
     """
-    assert name in {"index.html", "styles.css", "app.js", "config.js"}
+    assert name in {"index.html", "styles.css", "app.js", "config.js", "regions.js"}
     return (Path("frontend/dist") / name).read_text(encoding="utf-8")
 
 
@@ -32,13 +33,15 @@ def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
         'id="executionTimeline"',
         'id="originProvince"',
         'id="originDistrict"',
+        'id="originNeighborhood"',
         'id="originCandidate"',
         'id="destinationProvince"',
         'id="destinationDistrict"',
+        'id="destinationNeighborhood"',
         'id="destinationCandidate"',
         'id="fuelType"',
         'id="remainingRange"',
-        'id="reserveMode"',
+        'id="priceOnlyMode"',
         'id="reserveRange"',
         'for="messageInput"',
         'aria-live="polite"',
@@ -52,6 +55,7 @@ def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
 
 def test_frontend_calls_chat_and_full_plan_crud() -> None:
     """브라우저 코드가 대화와 계획 POST/GET/PATCH/DELETE를 실제 API 경로로 연결한다."""
+    html = frontend_text("index.html")
     script = frontend_text("app.js")
     assert 'apiFetch("/api/chat"' in script
     assert "apiFetch(`/api/locations/resolve?query=" in script
@@ -64,11 +68,26 @@ def test_frontend_calls_chat_and_full_plan_crud() -> None:
     assert "buildPlanUpdatePayload" in script
     assert "payload.memo" in script and "plan.memo" in script
     assert 'if (chat.status === "recommended") elements.messageInput.value = "";' in script
-    assert "REGION_HIERARCHY" in script and "buildStructuredRequest" in script
+    assert "REGION_HIERARCHY" in script and "updateNeighborhoodOptions" in script
+    assert "buildStructuredRequest" in script and "fields.neighborhood.value" in script
     assert "candidate.longitude" in script and "candidate.latitude" in script
     assert "updateReserveMode" in script
-    assert 'elements.reserveMode.value === "none"' in script
+    assert "elements.priceOnlyMode.checked" in script
     assert "안전 여유를 적용하지 않기로 선택" in script
+    assert 'id="originDetails"' in html and 'id="destinationDetails"' in html
+    assert 'class="advanced-request"' in html
+    assert ".dashboard:not(.has-results)>.metric-card" in frontend_text("styles.css")
+
+
+def test_region_data_contains_official_three_level_choices() -> None:
+    """법정동 생성 자료가 대구 북구와 구미시의 대표 읍·면·동을 선택지로 제공한다."""
+    regions = frontend_text("regions.js")
+    prefix = "window.FUELROUTE_REGIONS="
+    payload = regions[regions.index(prefix) + len(prefix) :].strip().removesuffix(";")
+    hierarchy = json.loads(payload)
+    assert {"동천동", "학정동"} <= set(hierarchy["대구광역시"]["북구"])
+    assert "진평동" in hierarchy["경상북도"]["구미시"]
+    assert sum(len(districts) for districts in hierarchy.values()) == 256
 
 
 def test_plans_and_evidence_are_dialogs_outside_dashboard() -> None:
@@ -114,7 +133,8 @@ def test_recommendation_evidence_compares_up_to_five_ranked_candidates() -> None
 def test_frontend_does_not_embed_secrets_or_external_api_keys() -> None:
     """정적 배포 파일에 환경변수명·인증 헤더·제공사 키나 실제 비밀값 경로를 넣지 않는다."""
     combined = "\n".join(
-        frontend_text(name) for name in ("index.html", "styles.css", "app.js", "config.js")
+        frontend_text(name)
+        for name in ("index.html", "styles.css", "app.js", "config.js", "regions.js")
     )
     forbidden = [
         "GMS_API_KEY",

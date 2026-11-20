@@ -33,25 +33,7 @@ const ACTION_LABELS = {
   candidate_routes: "후보별 실제 도달 거리와 경유 우회 비용 확인",
   rest_area_info: "최종 추천 주변의 휴게소 보조정보 확인",
 };
-const REGION_HIERARCHY = {
-  "서울특별시": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
-  "부산광역시": ["강서구", "금정구", "기장군", "남구", "동구", "동래구", "부산진구", "북구", "사상구", "사하구", "서구", "수영구", "연제구", "영도구", "중구", "해운대구"],
-  "대구광역시": ["군위군", "남구", "달서구", "달성군", "동구", "북구", "서구", "수성구", "중구"],
-  "인천광역시": ["강화군", "계양구", "남동구", "동구", "미추홀구", "부평구", "서구", "연수구", "옹진군", "중구"],
-  "광주광역시": ["광산구", "남구", "동구", "북구", "서구"],
-  "대전광역시": ["대덕구", "동구", "서구", "유성구", "중구"],
-  "울산광역시": ["남구", "동구", "북구", "울주군", "중구"],
-  "세종특별자치시": ["세종특별자치시"],
-  "경기도": ["가평군", "고양시", "과천시", "광명시", "광주시", "구리시", "군포시", "김포시", "남양주시", "동두천시", "부천시", "성남시", "수원시", "시흥시", "안산시", "안성시", "안양시", "양주시", "양평군", "여주시", "연천군", "오산시", "용인시", "의왕시", "의정부시", "이천시", "파주시", "평택시", "포천시", "하남시", "화성시"],
-  "강원특별자치도": ["강릉시", "고성군", "동해시", "삼척시", "속초시", "양구군", "양양군", "영월군", "원주시", "인제군", "정선군", "철원군", "춘천시", "태백시", "평창군", "홍천군", "화천군", "횡성군"],
-  "충청북도": ["괴산군", "단양군", "보은군", "영동군", "옥천군", "음성군", "제천시", "증평군", "진천군", "청주시", "충주시"],
-  "충청남도": ["계룡시", "공주시", "금산군", "논산시", "당진시", "보령시", "부여군", "서산시", "서천군", "아산시", "예산군", "천안시", "청양군", "태안군", "홍성군"],
-  "전북특별자치도": ["고창군", "군산시", "김제시", "남원시", "무주군", "부안군", "순창군", "완주군", "익산시", "임실군", "장수군", "전주시", "정읍시", "진안군"],
-  "전라남도": ["강진군", "고흥군", "곡성군", "광양시", "구례군", "나주시", "담양군", "목포시", "무안군", "보성군", "순천시", "신안군", "여수시", "영광군", "영암군", "완도군", "장성군", "장흥군", "진도군", "함평군", "해남군", "화순군"],
-  "경상북도": ["경산시", "경주시", "고령군", "구미시", "김천시", "문경시", "봉화군", "상주시", "성주군", "안동시", "영덕군", "영양군", "영주시", "영천시", "예천군", "울릉군", "울진군", "의성군", "청도군", "청송군", "칠곡군", "포항시"],
-  "경상남도": ["거제시", "거창군", "고성군", "김해시", "남해군", "밀양시", "사천시", "산청군", "양산시", "의령군", "진주시", "창녕군", "창원시", "통영시", "하동군", "함안군", "함양군", "합천군"],
-  "제주특별자치도": ["서귀포시", "제주시"],
-};
+const REGION_HIERARCHY = window.FUELROUTE_REGIONS || {};
 const selectedLocations = { origin: null, destination: null };
 const locationCandidateLists = { origin: [], destination: [] };
 const elements = Object.fromEntries([
@@ -66,9 +48,9 @@ const elements = Object.fromEntries([
   "executionDialog", "closeExecutionDialog", "refreshLogsButton", "deleteLogButton",
   "executionTabDot", "executionTabLabel", "executionState", "executionCount", "executionList",
   "executionDetailTitle", "executionDetailMeta", "executionTimeline",
-  "originProvince", "originDistrict", "originDetail", "originSearchButton", "originCandidate",
-  "destinationProvince", "destinationDistrict", "destinationDetail", "destinationSearchButton",
-  "destinationCandidate", "fuelType", "remainingRange", "reserveMode", "reserveRange",
+  "originProvince", "originDistrict", "originNeighborhood", "originDetail", "originSearchButton", "originCandidate", "originDetails",
+  "destinationProvince", "destinationDistrict", "destinationNeighborhood", "destinationDetail", "destinationSearchButton",
+  "destinationCandidate", "destinationDetails", "fuelType", "remainingRange", "priceOnlyMode", "reserveRange",
 ].map(mapElementById));
 
 /**
@@ -452,6 +434,7 @@ function selectedCandidate() { return state.latestChat?.judgement?.recommendatio
  * @returns {void}
  */
 function renderChat(chat) {
+  elements.main.classList.toggle("has-results", chat.status === "recommended");
   const candidate = selectedCandidate();
   const conditions = chat.analysis?.conditions || {};
   const safeRange = chat.judgement?.safe_range_km;
@@ -586,14 +569,14 @@ function buildRecommendationEvidence(chat) {
  * `side`는 내부에서 정한 `origin` 또는 `destination`만 허용하며, initialize 이후
  * 존재하는 요소를 참조한다. 네트워크·저장 부작용은 없고 잘못된 값은 Error다.
  * @param {"origin"|"destination"} side 조회할 위치 구분.
- * @returns {{province: HTMLSelectElement, district: HTMLSelectElement, detail: HTMLInputElement, candidate: HTMLSelectElement, searchButton: HTMLButtonElement}} selector 요소 묶음.
+ * @returns {{province: HTMLSelectElement, district: HTMLSelectElement, neighborhood: HTMLSelectElement, detail: HTMLInputElement, candidate: HTMLSelectElement, searchButton: HTMLButtonElement}} selector 요소 묶음.
  * @throws {Error} 지원하지 않는 위치 구분인 경우.
  */
 function locationElements(side) {
   if (!Object.hasOwn(selectedLocations, side)) throw new Error("지원하지 않는 위치 구분입니다.");
   const prefix = side === "origin" ? "origin" : "destination";
   return {
-    province: elements[`${prefix}Province`], district: elements[`${prefix}District`],
+    province: elements[`${prefix}Province`], district: elements[`${prefix}District`], neighborhood: elements[`${prefix}Neighborhood`],
     detail: elements[`${prefix}Detail`], candidate: elements[`${prefix}Candidate`],
     searchButton: elements[`${prefix}SearchButton`],
   };
@@ -617,17 +600,37 @@ function populateProvinceSelectors() {
 
 /**
  * 선택한 시·도에 속한 시·군·구 option을 갱신하고 상세 장소 후보를 폐기한다.
- * 시·도 change와 form reset 뒤 호출한다. 정적 REGION_HIERARCHY만 읽으며 선택값이
- * 없으면 하위 select를 비활성화한다. DOM과 메모리 후보를 변경하지만 API는 호출하지 않는다.
+ * 시·도 change와 form reset 뒤 호출한다. 공식 법정동에서 생성한 REGION_HIERARCHY의
+ * 시·군·구 key만 읽으며 선택값이 없으면 하위 select를 비활성화한다. 읍·면·동과 상세
+ * 후보도 함께 초기화한다. DOM과 메모리 후보를 변경하지만 API는 호출하지 않는다.
  * @param {"origin"|"destination"} side 갱신할 위치 구분.
  * @returns {void}
  */
 function updateDistrictOptions(side) {
   const fields = locationElements(side);
-  const districts = REGION_HIERARCHY[fields.province.value] || [];
+  const districts = Object.keys(REGION_HIERARCHY[fields.province.value] || {});
   fields.district.innerHTML = `<option value="">${districts.length ? "선택" : "먼저 시·도를 선택하세요"}</option>`;
   for (const district of districts) fields.district.add(new Option(district, district));
   fields.district.disabled = districts.length === 0;
+  updateNeighborhoodOptions(side);
+  fields.detail.value = "";
+  resetLocationCandidate(side);
+}
+
+/**
+ * 선택한 시·도/시·군·구에 속한 현존 법정 읍·면·동 option을 갱신한다.
+ * 시·군·구 change와 상위 지역 초기화 뒤 호출한다. `regions.js`의 2026-11-20 공식
+ * 법정동 자료만 읽고 사용자가 고르지 않은 동을 추측하지 않는다. 선택지가 없으면
+ * 비활성화하며 상세 장소 후보와 확정 좌표를 폐기한다. 네트워크·DB·LLM 부작용은 없다.
+ * @param {"origin"|"destination"} side 갱신할 위치 구분.
+ * @returns {void}
+ */
+function updateNeighborhoodOptions(side) {
+  const fields = locationElements(side);
+  const neighborhoods = REGION_HIERARCHY[fields.province.value]?.[fields.district.value] || [];
+  fields.neighborhood.innerHTML = `<option value="">${neighborhoods.length ? "선택" : "먼저 시·군·구를 선택하세요"}</option>`;
+  for (const neighborhood of neighborhoods) fields.neighborhood.add(new Option(neighborhood, neighborhood));
+  fields.neighborhood.disabled = neighborhoods.length === 0;
   fields.detail.value = "";
   resetLocationCandidate(side);
 }
@@ -649,7 +652,7 @@ function resetLocationCandidate(side) {
 
 /**
  * 선택한 상위 지역 안에서 동·주소·장소명을 조회해 최대 5개 후보를 표시한다.
- * 시·도, 시·군·구, 상세 검색어가 모두 있을 때 후보 찾기 버튼으로 호출한다.
+ * 시·도, 시·군·구, 읍·면·동, 상세 검색어가 모두 있을 때 후보 찾기 버튼으로 호출한다.
  * `/api/locations/resolve`를 한 번 호출하며 결과가 하나면 자동 확정하고, 여러 개면
  * 사용자가 직접 골라야 한다. 실패 시 기존 후보를 비우고 toast를 표시한다.
  * @param {"origin"|"destination"} side 검색할 위치 구분.
@@ -658,13 +661,13 @@ function resetLocationCandidate(side) {
 async function searchLocationCandidates(side) {
   const fields = locationElements(side);
   const detail = fields.detail.value.trim();
-  if (!fields.province.value || !fields.district.value || !detail) {
-    showToast("시·도, 시·군·구와 상세 장소를 입력하세요.", true); return;
+  if (!fields.province.value || !fields.district.value || !fields.neighborhood.value || !detail) {
+    showToast("시·도, 시·군·구, 읍·면·동과 상세 장소를 입력하세요.", true); return;
   }
   resetLocationCandidate(side);
   fields.searchButton.disabled = true;
   try {
-    const query = [fields.province.value, fields.district.value, detail].filter((value, index, values) => values.indexOf(value) === index).join(" ");
+    const query = [fields.province.value, fields.district.value, fields.neighborhood.value, detail].filter((value, index, values) => values.indexOf(value) === index).join(" ");
     const result = await apiFetch(`/api/locations/resolve?query=${encodeURIComponent(query)}`);
     locationCandidateLists[side] = result.candidates;
     fields.candidate.innerHTML = '<option value="">후보를 선택하세요</option>';
@@ -693,11 +696,12 @@ async function searchLocationCandidates(side) {
 function selectLocationCandidate(side) {
   const value = locationElements(side).candidate.value;
   selectedLocations[side] = value === "" ? null : locationCandidateLists[side][Number(value)] || null;
+  if (selectedLocations[side]) elements[`${side}Details`].open = false;
 }
 
 /**
  * 선택한 행정구역과 선택적 상세 후보를 Agent가 해석할 한국어 위치 조건으로 만든다.
- * 시·도와 시·군·구가 필수이며 상세 후보가 있으면 제공사 WGS84 경도·위도를 함께
+ * 시·도와 시·군·구, 읍·면·동이 필수이며 상세 후보가 있으면 제공사 WGS84 경도·위도를 함께
  * 넣어 동명 장소의 재질의를 줄인다. 메모리를 읽기만 하고 필수값 누락은 Error다.
  * @param {"origin"|"destination"} side 출발지 또는 목적지.
  * @returns {string} 요청 본문에 삽입할 위치 문장.
@@ -706,9 +710,9 @@ function selectLocationCandidate(side) {
 function buildLocationFragment(side) {
   const fields = locationElements(side);
   const role = side === "origin" ? "출발지" : "목적지";
-  if (!fields.province.value || !fields.district.value) throw new Error(`${role}의 시·도와 시·군·구를 선택하세요.`);
+  if (!fields.province.value || !fields.district.value || !fields.neighborhood.value) throw new Error(`${role}의 시·도, 시·군·구와 읍·면·동을 선택하세요.`);
   const candidate = selectedLocations[side];
-  if (!candidate) return `${role}는 "${fields.province.value} ${fields.district.value}"`;
+  if (!candidate) return `${role}는 "${fields.province.value} ${fields.district.value} ${fields.neighborhood.value}"`;
   const label = candidate.road_address || candidate.address || candidate.name;
   return `${role}는 "${label}"이고 좌표는 경도 ${candidate.longitude}, 위도 ${candidate.latitude}`;
 }
@@ -724,7 +728,7 @@ function buildLocationFragment(side) {
  */
 function buildStructuredRequest() {
   const remaining = Number(elements.remainingRange.value);
-  const reserveDisabled = elements.reserveMode.value === "none";
+  const reserveDisabled = elements.priceOnlyMode.checked;
   const reserve = reserveDisabled ? 0 : Number(elements.reserveRange.value);
   if (!Number.isFinite(remaining) || remaining <= 0) throw new Error("주행 가능 거리는 0보다 크게 입력하세요.");
   if (!Number.isFinite(reserve) || reserve < 0 || reserve >= remaining) throw new Error("안전 여유는 0 이상이며 주행 가능 거리보다 작아야 합니다.");
@@ -735,15 +739,15 @@ function buildStructuredRequest() {
 }
 
 /**
- * 안전 여유 방식에 따라 거리 입력의 필수·활성 상태와 표시값을 동기화한다.
- * reserveMode change, 초기화, 페이지 시작 때 호출한다. `none`이면 사용자가 명시적으로
- * 미적용한 것이므로 reserveRange를 비우고 disabled 처리하며 요청 조합에서 0km를 사용한다.
- * `apply`로 돌아오면 입력을 활성화하고 값을 임의 복원하지 않는다. DOM만 변경하고 API·DB
+ * 가격만 비교 checkbox에 따라 거리 입력의 필수·활성 상태와 표시값을 동기화한다.
+ * checkbox change, 초기화, 페이지 시작 때 호출한다. 체크하면 사용자가 명시적으로 미적용한
+ * 것이므로 reserveRange를 비우고 disabled 처리하며 요청 조합에서 0km를 사용한다. 해제하면
+ * 입력을 활성화하고 값을 임의 복원하지 않는다. DOM만 변경하고 API·DB
  * 부작용은 없으며 반환값도 없다.
  * @returns {void}
  */
 function updateReserveMode() {
-  const disabled = elements.reserveMode.value === "none";
+  const disabled = elements.priceOnlyMode.checked;
   elements.reserveRange.disabled = disabled;
   elements.reserveRange.required = !disabled;
   if (disabled) elements.reserveRange.value = "";
@@ -1006,7 +1010,7 @@ async function deletePlan(plan) {
  */
 function resetChat() {
   state.sessionId = null; state.latestChat = null; window.localStorage.removeItem("fuelroute.session_id");
-  state.activeExecutionId = null; setExecutionState("idle", "대기 중");
+  state.activeExecutionId = null; setExecutionState("idle", "대기 중"); elements.main.classList.remove("has-results");
   elements.chatForm.reset(); populateProvinceSelectors(); updateReserveMode(); elements.requestChip.textContent = "새 요청"; elements.savePanel.hidden = true;
   elements.planMemo.value = ""; elements.planStartTime.value = ""; elements.planEndTime.value = "";
   elements.recommendation.className = "recommendation empty";
@@ -1082,11 +1086,15 @@ function closeEditDialog() { elements.editDialog.close(); }
 function initialize() {
   populateProvinceSelectors();
   updateReserveMode();
-  elements.reserveMode.addEventListener("change", updateReserveMode);
+  elements.priceOnlyMode.addEventListener("change", updateReserveMode);
   for (const side of ["origin", "destination"]) {
     const fields = locationElements(side);
     fields.province.addEventListener("change", () => updateDistrictOptions(side));
-    fields.district.addEventListener("change", () => resetLocationCandidate(side));
+    fields.district.addEventListener("change", () => updateNeighborhoodOptions(side));
+    fields.neighborhood.addEventListener("change", () => {
+      fields.detail.value = "";
+      resetLocationCandidate(side);
+    });
     fields.detail.addEventListener("input", () => resetLocationCandidate(side));
     fields.searchButton.addEventListener("click", () => searchLocationCandidates(side));
     fields.candidate.addEventListener("change", () => selectLocationCandidate(side));

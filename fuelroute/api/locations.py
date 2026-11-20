@@ -19,8 +19,8 @@ async def resolve_location_candidates(
 ) -> LocationMatchSet:
     """선택기의 상세 검색어를 Kakao Local 후보 목록으로 반환한다.
 
-    Frontend가 시·도와 시·군·구를 먼저 선택하고 동·주소·장소명을 입력한 뒤
-    호출한다. ``query``는 그 세 값을 공백으로 합친 필수 1~200자 문자열이며,
+    Frontend가 시·도, 시·군·구, 읍·면·동을 먼저 선택하고 건물·학교·사업장명을 입력한 뒤
+    호출한다. ``query``는 네 행정/장소 값을 공백으로 합친 필수 1~200자 문자열이며,
     서버 설정에는 Kakao REST 키가 필요하다. 주소 검색 후 필요한 경우 장소 검색을
     수행하고 최대 5개 WGS84 후보를 반환한다. 단일 결과도 사용자가 확인할 수 있게
     목록으로 반환한다. 빈 결과는 404, 입력 오류는 422, 인증·통신·제공사 실패는
@@ -28,7 +28,7 @@ async def resolve_location_candidates(
     LLM, 세션 캐시를 변경하지 않으며 테스트에서는 ``app.state.location_resolver``로
     외부 호출을 대체할 수 있다.
 
-    예: ``GET /api/locations/resolve?query=대구광역시%20북구%20동천동``은
+    예: ``GET /api/locations/resolve?query=경상북도%20구미시%20진평동%20삼성전자``는
     ``LocationMatchSet``을 반환한다. 행정구역 전체 목록이나 장소 영업 상태는 이
     endpoint의 책임이 아니다.
     """

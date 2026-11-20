@@ -11,6 +11,7 @@
   <link rel="canonical" href="https://fuelroute-348.netlify.app">
   <link rel="stylesheet" href="/styles.css">
   <script src="/config.js"></script>
+  <script src="/regions.js"></script>
   <script src="/app.js" defer></script>
   <title>FuelRoute — 주유 계획 대시보드</title>
 </head>
@@ -47,25 +48,21 @@
               <legend>필수 주행 조건</legend>
               <div class="location-builders">
                 <section class="location-builder" data-location-side="origin">
-                  <div class="builder-title"><strong>출발지</strong><span>시·도 → 시·군·구 → 상세 장소</span></div>
-                  <div class="selector-row"><label>시·도<select id="originProvince" required><option value="">선택</option></select></label><label>시·군·구<select id="originDistrict" required disabled><option value="">먼저 시·도를 선택하세요</option></select></label></div>
-                  <div class="detail-search"><label for="originDetail">동·주소·장소 <span>선택</span></label><div><input id="originDetail" type="search" maxlength="100" placeholder="예: 동천동, 삼성전자 구미사업장"><button id="originSearchButton" type="button">후보 찾기</button></div></div>
-                  <label class="candidate-field" for="originCandidate">검색 후보<select id="originCandidate" disabled><option value="">상세 장소를 검색하면 표시됩니다</option></select></label>
+                  <div class="builder-title"><strong>출발지</strong><span>시·도 → 시·군·구 → 읍·면·동 → 상세 장소</span></div>
+                  <div class="selector-row three-level"><label>시·도<select id="originProvince" required><option value="">선택</option></select></label><label>시·군·구<select id="originDistrict" required disabled><option value="">먼저 시·도를 선택하세요</option></select></label><label>읍·면·동<select id="originNeighborhood" required disabled><option value="">먼저 시·군·구를 선택하세요</option></select></label></div>
+                  <details class="location-details" id="originDetails"><summary>+ 건물·학교·사업장 지정 <span>선택</span></summary><div class="detail-search"><label for="originDetail">상세 장소명</label><div><input id="originDetail" type="search" maxlength="100" placeholder="예: 삼성전자 구미2사업장"><button id="originSearchButton" type="button">후보 찾기</button></div></div><label class="candidate-field" for="originCandidate">카카오 장소 후보<select id="originCandidate" disabled><option value="">상세 장소를 검색하면 표시됩니다</option></select></label></details>
                 </section>
                 <section class="location-builder" data-location-side="destination">
-                  <div class="builder-title"><strong>목적지</strong><span>시·도 → 시·군·구 → 상세 장소</span></div>
-                  <div class="selector-row"><label>시·도<select id="destinationProvince" required><option value="">선택</option></select></label><label>시·군·구<select id="destinationDistrict" required disabled><option value="">먼저 시·도를 선택하세요</option></select></label></div>
-                  <div class="detail-search"><label for="destinationDetail">동·주소·장소 <span>선택</span></label><div><input id="destinationDetail" type="search" maxlength="100" placeholder="예: 학정동, 서울역"><button id="destinationSearchButton" type="button">후보 찾기</button></div></div>
-                  <label class="candidate-field" for="destinationCandidate">검색 후보<select id="destinationCandidate" disabled><option value="">상세 장소를 검색하면 표시됩니다</option></select></label>
+                  <div class="builder-title"><strong>목적지</strong><span>시·도 → 시·군·구 → 읍·면·동 → 상세 장소</span></div>
+                  <div class="selector-row three-level"><label>시·도<select id="destinationProvince" required><option value="">선택</option></select></label><label>시·군·구<select id="destinationDistrict" required disabled><option value="">먼저 시·도를 선택하세요</option></select></label><label>읍·면·동<select id="destinationNeighborhood" required disabled><option value="">먼저 시·군·구를 선택하세요</option></select></label></div>
+                  <details class="location-details" id="destinationDetails"><summary>+ 건물·학교·사업장 지정 <span>선택</span></summary><div class="detail-search"><label for="destinationDetail">상세 장소명</label><div><input id="destinationDetail" type="search" maxlength="100" placeholder="예: 구미여자상업고등학교"><button id="destinationSearchButton" type="button">후보 찾기</button></div></div><label class="candidate-field" for="destinationCandidate">카카오 장소 후보<select id="destinationCandidate" disabled><option value="">상세 장소를 검색하면 표시됩니다</option></select></label></details>
                 </section>
               </div>
-              <div class="drive-selectors"><label>유종<select id="fuelType" required><option value="gasoline">휘발유</option><option value="diesel">경유</option></select></label><label>주행 가능 거리 <span>km</span><input id="remainingRange" type="number" min="0.1" max="3000" step="0.1" required placeholder="180"></label><label>안전 여유 방식<select id="reserveMode" required><option value="apply">안전 여유 적용</option><option value="none">적용하지 않고 가격 비교</option></select></label><label>안전 여유 <span>km</span><input id="reserveRange" type="number" min="0" max="2999.9" step="0.1" required placeholder="30"></label></div>
+              <div class="drive-selectors"><label>유종<select id="fuelType" required><option value="gasoline">휘발유</option><option value="diesel">경유</option></select></label><label>주행 가능 거리 <span>km</span><input id="remainingRange" type="number" min="0.1" max="3000" step="0.1" required placeholder="180"></label><label>안전 여유 <span>km</span><input id="reserveRange" type="number" min="0" max="2999.9" step="0.1" required placeholder="30"></label></div>
+              <label class="price-only-toggle"><input id="priceOnlyMode" type="checkbox"><span>안전 여유 없이 가격만 비교</span></label>
             </fieldset>
-            <label for="messageInput">추가 요청 <span class="optional-label">선택</span></label>
-            <div class="message-field">
-              <textarea id="messageInput" name="message" rows="2" maxlength="3000" placeholder="예: 우회 15분 이내, 가격 우선으로 추천해줘."></textarea>
-              <button class="submit-button" type="submit" id="submitButton"><span>추천 받기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6z"/></svg></button>
-            </div>
+            <details class="advanced-request"><summary>+ 우회시간·가격 등 추가 조건</summary><label for="messageInput" class="sr-only">추가 요청</label><textarea id="messageInput" name="message" rows="2" maxlength="3000" placeholder="예: 우회 15분 이내, 가격 우선으로 추천해줘."></textarea></details>
+            <button class="submit-button compact-submit" type="submit" id="submitButton"><span>주유소 추천받기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6z"/></svg></button>
             <p class="form-hint">상세 장소 검색은 선택입니다. 안전 여유 미적용은 0km를 명시해 실제 평가 후보 중 가격을 우선 비교하며 별도 안전 잔량을 보장하지 않습니다.</p>
           </form>
           <div class="recommendation empty" id="recommendation" aria-live="polite">
