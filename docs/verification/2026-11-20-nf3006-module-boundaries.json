@@ -1,0 +1,36 @@
+{
+  "requirement": "NF3006",
+  "verified_at": "2026-11-20T14:15:00+09:00",
+  "python_package_rules": {
+    "core": ["core"],
+    "schemas": ["core", "schemas"],
+    "calculations": ["core", "schemas", "calculations"],
+    "clients": ["core", "schemas", "clients"],
+    "storage": ["core", "schemas", "storage"],
+    "tools": ["core", "schemas", "calculations", "clients", "tools"],
+    "agent": ["core", "schemas", "calculations", "clients", "tools", "storage", "agent"],
+    "api": ["core", "schemas", "storage", "agent", "api"]
+  },
+  "assertions": {
+    "relative_imports_in_checked_packages": 0,
+    "lower_layer_network_sdk_imports": 0,
+    "tool_imports_agent_api_storage": 0,
+    "api_imports_clients_tools_calculations": 0,
+    "frontend_provider_endpoint_references": 0,
+    "frontend_backend_api_client": true,
+    "frontend_python_package_references": 0
+  },
+  "verification": {
+    "focused_pytest": "9 passed in 0.10s",
+    "full_pytest": "448 passed in 11.27s",
+    "ruff_lint": "passed",
+    "ruff_format": "102 files already formatted",
+    "pip_check": "No broken requirements found",
+    "git_diff_check": "passed",
+    "external_api_calls": 0
+  },
+  "limitations": [
+    "AST 정적 검사는 일반 import 문을 대상으로 하며 런타임 문자열 기반 동적 import는 검사하지 않는다.",
+    "실행 책임의 정상 동작은 전체 기능 테스트가 별도로 검증한다."
+  ]
+}

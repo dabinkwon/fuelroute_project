@@ -14,17 +14,24 @@ import pytest
         ("calculations", {"core", "schemas", "calculations"}),
         ("clients", {"core", "schemas", "clients"}),
         ("storage", {"core", "schemas", "storage"}),
+        ("tools", {"core", "schemas", "calculations", "clients", "tools"}),
+        (
+            "agent",
+            {"core", "schemas", "calculations", "clients", "tools", "storage", "agent"},
+        ),
+        ("api", {"core", "schemas", "storage", "agent", "api"}),
     ],
 )
 def test_lower_layers_keep_dependency_direction(package: str, allowed: set[str]) -> None:
     """하위 패키지의 중첩 import까지 읽어 상위 실행·조회 계층과의 결합을 막는다.
 
-    package는 core/schemas/calculations/clients/storage이고 allowed는 허용한 내부 패키지다.
-    저장소 소스를 AST로 읽으며 함수를 실행하거나 API·DB를 호출하지 않는다. 상대
-    import는 의존성 검사를 우회할 수 있어 거절한다. core/스키마/순수 계산에서 HTTP·
-    LLM SDK 직접 import도 금지한다. 위반 시 파일·모듈명이 포함된 assertion이 발생한다.
-    예: calculations가 agent.execution을 import하면 실패한다. 동적 import는 검사하지
-    않으며 일반 실행 동작은 기존 기능 테스트가 담당한다. 반환·쓰기 부작용은 없다.
+    package는 core/schemas/calculations/clients/storage/tools/agent/api이고 allowed는 책임별로
+    허용한 내부 패키지다. 저장소 소스를 AST로 읽으며 함수를 실행하거나 API·DB를 호출하지
+    않는다. 상대 import는 의존성 검사를 우회할 수 있어 거절한다. core/스키마/순수 계산/
+    저장소에서 HTTP·LLM SDK 직접 import도 금지한다. Tool은 Agent/API/저장소를, API는
+    clients/Tool/계산을 직접 가져오지 못한다. 위반 시 파일·모듈명이 포함된 assertion이
+    발생한다. 예: calculations가 agent.execution을 import하면 실패한다. 동적 import는
+    검사하지 않으며 일반 실행 동작은 기존 기능 테스트가 담당한다. 반환·쓰기 부작용은 없다.
     """
     root = Path(__file__).resolve().parents[1] / "fuelroute" / package
     network_modules = {"httpx", "httpx2", "requests", "openai", "langchain_openai", "urllib"}
@@ -47,3 +54,27 @@ def test_lower_layers_keep_dependency_direction(package: str, allowed: set[str])
                     if module == "urllib.parse":
                         continue
                     assert parts[0] not in network_modules, (path, module)
+
+
+def test_frontend_remains_a_backend_api_client_only() -> None:
+    """NF3006의 Frontend/Backend 배포·호출 경계를 정적 산출물 전체에서 검증한다.
+
+    `frontend/dist`의 HTML/CSS/JavaScript를 읽어 Python 패키지 경로, 제공사 Endpoint, GMS SDK
+    경로를 직접 포함하지 않는지 확인한다. Frontend는 같은 origin 또는 공개 설정의 Backend
+    `/api`와 `/health`만 호출해야 한다. 파일 읽기 외 빌드·네트워크·배포 부작용은 없고 위반
+    문자열이 있으면 assertion으로 실패한다. 동적으로 난독화한 URL은 검사 범위가 아니다.
+    """
+    root = Path(__file__).resolve().parents[1]
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in (root / "frontend" / "dist").iterdir()
+    )
+    forbidden = (
+        "fuelroute/",
+        "gms.ssafy.io",
+        "apis.openapi.sk.com",
+        "www.opinet.co.kr/api",
+        "api.data.go.kr",
+        "/chat/completions",
+    )
+    assert all(value not in combined for value in forbidden)
+    assert 'apiFetch("/api/' in combined and 'apiFetch("/health")' in combined

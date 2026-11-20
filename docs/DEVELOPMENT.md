@@ -1227,3 +1227,28 @@ Agent 설정 실패503의 공통 오류와 원문 비노출을 확인했다. 기
 - HTTP 응답의 비음수 유한 경과시간과 Frontend 초 단위 표시를 집중 테스트 **15개**에서 확인했다.
   전체 **444개 테스트**, Ruff lint/format, Node 문법 검사, `pip check`, `git diff --check`를
   통과했다. 새 실호출은 하지 않고 기존 정제 실호출 근거를 [응답시간 검증 JSON](verification/2026-11-20-nf3005-response-time.json)에 연결했다.
+
+<a id="nf3006-module-boundaries"></a>
+
+## 42. NF3006 모듈·책임 분리 — 2026-11-20
+
+### 자동 경계 검사
+
+- 기존 core/schemas/calculations/clients/storage AST import 검사에 tools/agent/api를 추가했다.
+  Tool은 Agent·API·저장소를 가져오지 않고, API는 clients·tools·calculations를 직접 가져오지
+  않으며 Agent와 Repository의 공개 경계를 통해 연결한다. Agent는 하위 계산·클라이언트·Tool·
+  저장소를 조정하지만 API/CLI를 역으로 참조하지 않는다.
+- core·schemas·calculations·storage의 직접 HTTP/LLM SDK import 금지와 모든 검사 패키지의
+  상대 import 금지를 유지했다. 이벤트 발행/구독은 `agent/events.py`, 로그 구독은
+  `agent/logging.py`, 실제 SQLite I/O는 `storage/`로 분리돼 있다.
+- `frontend/dist` 전체를 읽어 Python 패키지 경로와 GMS·Kakao Mobility·Opinet·공공데이터
+  제공사 Endpoint를 직접 포함하지 않는지 확인했다. Frontend는 `/api/...`와 `/health`만
+  호출하며 Backend 소스·키를 배포 산출물에 포함하지 않는다.
+
+### 검증 결과와 한계
+
+- 경계 집중 테스트 **9개**, 전체 **448개 테스트**, Ruff lint/format, `pip check`,
+  `git diff --check`를 통과했다. [모듈 경계 검증 JSON](verification/2026-11-20-nf3006-module-boundaries.json)에
+  패키지별 허용 방향과 위반0건을 기록했다.
+- AST 검사는 일반 import 문 대상이며 문자열 기반 동적 import는 범위 밖이다. 실제 책임의
+  정상 동작은 전체 기능 테스트가 별도로 검증한다.
