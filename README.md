@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3011의 분석·계획·조회·판정·재계획·세션 맥락·근거 기반 한국어 최종 응답 연결. 이벤트·로그·계획 CRUD·HTTP·화면은 후속
+> **구현 상태:** F3005~F3012의 전체 추천 흐름과 근거 기반 응답·실행 이벤트 발행 연결. 이벤트 SQLite 저장·로그/계획 CRUD·HTTP·화면은 후속
 
 ## 단계별 진행 기록
 
@@ -25,6 +25,7 @@
 | 14. 기능별 폴더 재구성 | Agent·계산·API 클라이언트·Tool·스키마·공통 기반·HTTP·CLI 분리 | 전체292개·Ruff 통과, 공개 Tool 계약 보존. [이동 기록](docs/DEVELOPMENT.md#package-layout) | `ac21f80` |
 | 15. F3009 그래프 재계획 | 요청별 캐시·미평가 후보 우선·최대2회와 전체 평가 예산 | 전체319개·실제 후보9곳/추가2회 상한 종료. [재계획 기록](docs/DEVELOPMENT.md#f3009-replanning) | `1dc3228` |
 | 16. F3010 대화 맥락 | 검증 조건·짧은 요약의 세션별 SQLite 저장과 현재 발언 변경값 병합 | 전체355개·실제 GMS4회/데이터 API0회. [맥락 기록](docs/DEVELOPMENT.md#f3010-memory) | `e3c8777` |
+| 17. F3011 최종 응답 | 코드 검증 사실·출처와 GMS 사실 ID 문단 구성, 텍스트 CLI | 전체392개·실제 정상 추천 GMS3/길찾기7/Opinet6/휴게소1회. [응답 기록](docs/DEVELOPMENT.md#f3011-response) | `802124a` |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 
@@ -371,6 +372,14 @@ python -m fuelroute run --text --message '안녕' --reference-date 2026-11-19
 
 신규37개·전체392개 테스트와 Ruff·포맷·의존성 검사를 통과했다. 실제 정상 추천은 GMS3·Kakao Mobility7·Opinet6·휴게소1회였고, 입력 보완·인사와 커밋된 실제 F3009 비용의 추천 미발견 설명도 구분해 검증했다. [상세 기록](docs/DEVELOPMENT.md#f3011-response), [정제된 검증 근거](docs/verification/2026-11-19-final-response.json)를 참고한다.
 
+<a id="f3012-events"></a>
+
+### F3012 실행 이벤트 발행 — 구현·검증 완료
+
+`EventBus`와 요청별 `ExecutionEventStream`이 단계 시작/종료, Tool 요청/성공/실패와 소요시간, 분석·계획·최종 설명의 공개 결정, 제약 판정, 재계획/상한 종료, 최종 응답 생성을 순서대로 발행한다. 실행 ID는 요청마다 분리하고 sequence는1부터 증가한다. Tool 이벤트는 기존 `request_id`로 요청과 결과를 연결한다.
+
+payload는 단계 상태·개수·오류 코드·입력 필드명만 담는다. 사용자 원문·좌표값·가격/경로 원본·키·URL·헤더·모델 내부 추론은 넣지 않는다. 구독자가 없으면 기존 실행이 그대로 동작하고, 한 구독자가 실패해도 다음 구독자와 메인 Agent를 계속 실행한다. `execute_request(..., event_bus=..., execution_id=...)`를 지정하면 `data.event_stream`에 실행 ID·발행 건수·전달 실패 수를 반환한다. SQLite 저장은 F3013 범위다.
+
 ### 기존 명시적 조건의 추천·재계획 실행
 
 ```bash
@@ -422,7 +431,7 @@ python -m pip check
 
 ## 현재 개발 상태
 
-F3010은 `e3c8777`에 커밋했고 F3011의 구현·검증을 완료했다. 전체392개 테스트와 실제 GMS 최종 문단 구성을 확인했다. 다음 개발 작업은 F3012 실행 이벤트 발행이다.
+F3011은 `802124a`에 커밋했고 F3012 실행 이벤트 발행을 구현·검증했다. 다음 개발 작업은 F3013 이벤트 구독·SQLite 로그 저장이다.
 
 완료된 내용:
 
@@ -461,6 +470,6 @@ F3010은 `e3c8777`에 커밋했고 F3011의 구현·검증을 완료했다. 전�
 - 검색점 전략·후보 평가 범위의 고도화
 - 같은 주유소·진행 방향임을 입증하는 휴게소 매칭 고도화
 - 공개 데이터 재배포 범위를 확대할 때의 상세 이용허락 조건 재확인 및 공유 일일 한도 집계
-- 이벤트·로그/계획 SQLite Repository·CRUD, Backend·UI 연동 구현
+- 이벤트 SQLite 저장·로그/계획 CRUD, Backend·UI 연동 구현
 
 다음에 수행할 일과 완료 체크는 [`docs/TASKS.md`](docs/TASKS.md)의 날짜별 목록을 따른다. 기존 개발 TASK 이력과 상세 구현·검증 근거는 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)에 보존한다.

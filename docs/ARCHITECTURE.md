@@ -784,7 +784,7 @@ END
 
 # 11. 이벤트 및 로깅
 
-오늘 정의하고 실제 Tool 샘플에 대입할 이벤트:
+F3012에서 실제 LangGraph와 Tool 호출 이력에 연결한 이벤트:
 
 ```text
 STEP_STARTED
@@ -799,11 +799,11 @@ LLM_DECISION
 FINAL_RESPONSE_CREATED
 ```
 
-Logging Agent는 이벤트를 세션 단위로 그대로 저장한다.
+`agent/events.py`의 `EventBus`는 발행자가 구독자를 모르는 인프로세스 발행/구독 경계다. `ExecutionEventStream`은 요청마다 별도 영숫자 실행 ID와1부터 증가하는 sequence를 만들고 LangGraph 노드를 관찰한다. 구독자가 없으면 발행만 마치며, 구독자 예외는 `delivery_failures`에 더하고 다음 구독자/메인 실행을 계속한다. 별도 큐·재시도·전역 싱글턴은 없다. Logging Agent의 실제 저장 구독은 F3013 범위다.
 
 **수집·저장에는 LLM을 사용하지 않는다.**
 
-이벤트에는 `session_id`, `sequence`, `event_type`, `step`, `tool_name?`, `request_id?`, `elapsed_ms?`, `payload`, `created_at`을 포함한다. `payload`에는 입력 요약·결과 개수·오류 코드·판정 근거를 남긴다. LLM 내부 추론을 수집하지 않고 선택한 Tool과 결과 등 확인 가능한 실행 정보를 기록한다. 오늘의 독립 호출도 같은 형식으로 `TOOL_REQUESTED` → `TOOL_SUCCEEDED` 또는 `TOOL_FAILED`를 남길 수 있도록 계약을 정한다.
+이벤트에는 `event_id`, `execution_id`, `sequence`, `event_type`, `step`, `tool_name?`, `request_id?`, `elapsed_ms?`, `payload`, `created_at`을 포함한다. `payload`에는 상태·결과 개수·오류 코드·판정/재계획의 공개 결과와 입력 필드명만 남긴다. 사용자 원문·좌표/가격값·경로 기하·키/URL/헤더·LLM 내부 추론은 수집하지 않는다. 누적 실행 결과의 같은 request ID는 재발행하지 않으며 `TOOL_REQUESTED` 뒤 `TOOL_SUCCEEDED` 또는 `TOOL_FAILED`로 연결한다. `data.event_stream`은 실행 ID·발행 건수·구독 실패 수를 반환하고 실제 이벤트 본문은 응답에 복제하지 않는다.
 
 ---
 

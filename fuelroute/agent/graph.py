@@ -10,6 +10,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import ValidationError
 
 from fuelroute.agent.analysis import analyze_conditions, refresh_analysis
+from fuelroute.agent.events import EventBus, ExecutionEventStream
 from fuelroute.agent.execution import PlanExecutionSession, enrich_rest_area
 from fuelroute.agent.llm import llm_analyze, llm_plan, llm_response_outline
 from fuelroute.agent.memory import merge_conditions, remember_turn
@@ -89,6 +90,7 @@ def make_graph(
     replanner: Replanner | None = None,
     memory: ConversationMemory | None = None,
     responder: Responder | None = None,
+    event_stream: ExecutionEventStream | None = None,
 ) -> CompiledStateGraph:
     """분석·선택 위치 검색·선택 계획 함수를 주입받아 실행 전 그래프를 만든다.
 
@@ -114,6 +116,8 @@ def make_graph(
     ValueError다. 생략하면 기존 단계별 그래프를 유지한다. 최종 모델 호출/복구는 주입
     설명기의 책임이고 그래프가 데이터를 다시 조회하지 않는다. 예: 입력 보완도 respond를
     거치지만 기본 설명기는 추가 모델을 호출하지 않는다.
+    event_stream이 있으면 각 노드를 감싸 단계·새 Tool 호출·판정·재계획·최종 응답 이벤트를
+    순서대로 발행한다. payload에는 상태/개수/오류 코드만 담고 State와 결과는 바꾸지 않는다.
     """
 
     async def analyze(state: State) -> dict:
@@ -155,7 +159,8 @@ def make_graph(
         raise ValueError("최종 응답에는 제약 판정 함수가 필요합니다.")
     response_end = "respond" if responder is not None else END
     graph = StateGraph(State)
-    graph.add_node("analyze", analyze)
+    observe = event_stream.observe if event_stream is not None else lambda _name, node: node
+    graph.add_node("analyze", observe("analyze", analyze))
     graph.add_edge(START, "analyze")
     finish = "build_plan" if llm_plan_fn is not None else END
     if llm_plan_fn is not None:
@@ -182,7 +187,7 @@ def make_graph(
                 result = finalize_plan(analysis, proposal)
             return {"plan": result.model_dump(mode="json")}
 
-        graph.add_node("build_plan", build_plan)
+        graph.add_node("build_plan", observe("build_plan", build_plan))
         graph.add_edge("build_plan", "execute_plan" if executor is not None else END)
     if executor is not None:
 
@@ -212,7 +217,7 @@ def make_graph(
                 "replanning": ReplanState().model_dump(mode="json"),
             }
 
-        graph.add_node("execute_plan", execute_plan)
+        graph.add_node("execute_plan", observe("execute_plan", execute_plan))
         graph.add_edge("execute_plan", "judge" if judge is not None else END)
     if judge is not None:
 
@@ -273,7 +278,7 @@ def make_graph(
                 values["replanning"] = progress.model_dump(mode="json")
             return values
 
-        graph.add_node("judge", judge_plan)
+        graph.add_node("judge", observe("judge", judge_plan))
         graph.add_edge(
             "judge", "replan" if replanner is not None else ("enrich" if enricher else response_end)
         )
@@ -343,7 +348,7 @@ def make_graph(
                 return "judge"
             return "enrich" if enricher is not None else response_end
 
-        graph.add_node("replan", replan)
+        graph.add_node("replan", observe("replan", replan))
         finish_replan = "enrich" if enricher is not None else response_end
         graph.add_conditional_edges(
             "replan", after_replan, {"judge": "judge", finish_replan: finish_replan}
@@ -380,7 +385,7 @@ def make_graph(
                 values["replanning"] = progress.model_dump(mode="json")
             return values
 
-        graph.add_node("enrich", enrich_plan)
+        graph.add_node("enrich", observe("enrich", enrich_plan))
         graph.add_edge("enrich", response_end)
     if responder is not None:
 
@@ -407,7 +412,7 @@ def make_graph(
                 raise ProbeFailure("INVALID_RESPONSE", "최종 응답 출력 계약을 확인하세요.") from exc
             return {"answer": response.answer, "final_response": response.model_dump(mode="json")}
 
-        graph.add_node("respond", respond)
+        graph.add_node("respond", observe("respond", respond))
         graph.add_edge("respond", END)
     if location_resolver is None:
         graph.add_edge("analyze", finish)
@@ -471,7 +476,7 @@ def make_graph(
             """
             return "resolve_locations" if state["analysis"]["intent"] == "recommend" else finish
 
-        graph.add_node("resolve_locations", resolve_locations)
+        graph.add_node("resolve_locations", observe("resolve_locations", resolve_locations))
         graph.add_conditional_edges(
             "analyze", after_analysis, {"resolve_locations": "resolve_locations", finish: finish}
         )
@@ -567,6 +572,8 @@ async def _run_request(
     session_id: str | None = None,
     memory_store: ConversationStore | None = None,
     narrator: Narrator | None = None,
+    event_bus: EventBus | None = None,
+    execution_id: str | None = None,
 ) -> ToolResult[dict]:
     """분석/계획/실행 진입점의 요청별 그래프·메모리·클라이언트 수명을 관리한다.
 
@@ -581,9 +588,16 @@ async def _run_request(
     오류이고 프로그래밍 오류는 숨기지 않는다. narrator가 있으면 검증 사실의 문단 구성을
     주입한다. 없으면 생산 분석 경로는 GMS를 최대1회 더 사용하고, 분석기 주입 경로는
     암묵적 GMS 호출 없이 템플릿을 사용한다. 최종 모델의 예상 오류는 같은 사실로 복구하며
-    추천·비용·원래 핵심 실패 계약을 바꾸지 않는다. 로그·계획 CRUD·자동 재시도는 없다.
+    추천·비용·원래 핵심 실패 계약을 바꾸지 않는다. event_bus/execution_id가 있으면 실행별
+    이벤트 스트림을 만들고 구독 장애를 결과와 격리한다. 로그 저장·계획 CRUD·자동 재시도는 없다.
     예: 같은 세션이어도 현재 가격은 재조회하고 답변 문장 전체는 맥락 DB에 저장하지 않는다.
     """
+
+    event_stream = (
+        ExecutionEventStream(event_bus, execution_id)
+        if event_bus is not None or execution_id is not None
+        else None
+    )
 
     async def operation() -> dict:
         """검증한 원문·기준일로 요청별 그래프를 실행하고 분석/계획 JSON을 만든다.
@@ -681,6 +695,7 @@ async def _run_request(
                 else None,
                 memory=previous,
                 responder=make_response if include_execution else None,
+                event_stream=event_stream,
             )
             output = await graph.ainvoke({"user": query.user})
             return output, [name for name in graph.get_graph().nodes if not name.startswith("__")]
@@ -756,7 +771,13 @@ async def _run_request(
             )
         return data
 
-    return await run_probe(
+    if event_stream is not None:
+        await event_stream.emit(
+            "STEP_STARTED",
+            "execution",
+            payload={"plan_enabled": include_plan, "execution_enabled": include_execution},
+        )
+    result = await run_probe(
         settings,
         "local" if analyzer else "gms",
         "execute_request"
@@ -764,6 +785,22 @@ async def _run_request(
         else ("plan_request" if include_plan else "analyze_request"),
         operation,
     )
+    if event_stream is not None:
+        await event_stream.emit(
+            "STEP_COMPLETED",
+            "execution",
+            payload={
+                "status": "completed" if result.ok else "failed",
+                "error_code": result.error.code if result.error else None,
+            },
+        )
+        if result.data is not None:
+            result.data["event_stream"] = {
+                "execution_id": event_stream.execution_id,
+                "event_count": event_stream.sequence,
+                "delivery_failures": event_stream.delivery_failures,
+            }
+    return result
 
 
 async def execute_request(
@@ -780,6 +817,8 @@ async def execute_request(
     session_id: str | None = None,
     memory_store: ConversationStore | None = None,
     narrator: Narrator | None = None,
+    event_bus: EventBus | None = None,
+    execution_id: str | None = None,
 ) -> ToolResult[dict]:
     """조건 맥락을 이어 분석·추천·보조 조회 후 근거가 있는 한국어 최종 응답을 반환한다.
 
@@ -797,8 +836,11 @@ async def execute_request(
     ResponseFacts를 받아 사실 ID만 묶은 ExplanationOutline을 비동기로 반환한다. 분석기를
     주입하고 narrator를 생략하면 템플릿이며 암묵적 GMS 호출은 없다. 주입 executor의 재계획은
     replanner를 함께 명시해야 한다. 주입 client는 닫지 않는다. 핵심 오류는공통data=None,
-    보조 실패는 확정 추천을 유지한다. DB 맥락 실패/충돌도 공통 코드로 알리며 이벤트·계획
-    CRUD·동일 실패 재시도는 후속이다. 인사/입력 보완/핵심 실패는 최종 모델을 생략하고,
+    event_bus는 선택 발행/구독 버스이고 execution_id는 선택 실행 로그 ID다. 둘 중 하나를
+    지정하면 data.event_stream에 ID·발행 건수·구독 실패 수를 준다. 구독자가 없거나 실패해도
+    추천을 막지 않는다. 보조 실패는 확정 추천을 유지한다. DB 맥락 실패/충돌도 공통 코드로
+    알리며 이벤트 저장·계획 CRUD·동일 실패 재시도는 후속이다. 인사/입력 보완/핵심 실패는
+    최종 모델을 생략하고,
     최종 모델의 형식/통신 오류는 검증 사실의 fallback으로 복구한다. 숫자·판단·추천은
     모델이 변경하지 못한다. 예: 같은 ID의 '우회10분'은 위치·km 조건을 유지해 새로 조회하고
     현재 근거를 설명하며, 최종 모델 TIMEOUT도 이미 확인한 추천을 지우지 않는다.
@@ -818,4 +860,6 @@ async def execute_request(
         session_id=session_id,
         memory_store=memory_store,
         narrator=narrator,
+        event_bus=event_bus,
+        execution_id=execution_id,
     )
