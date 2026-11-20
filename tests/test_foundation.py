@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,6 +14,54 @@ from fuelroute.cli.commands import main
 from fuelroute.cli.gms_probe import safe_range_tool
 from fuelroute.core.config import Settings
 from fuelroute.core.contracts import ToolError, ToolMeta, ToolResult, utc_now
+
+SECRET_ENV_NAMES = {
+    "GMS_API_KEY",
+    "OPINET_API_KEY",
+    "KAKAO_REST_API_KEY",
+    "DATA_GO_KR_SERVICE_KEY",
+}
+
+
+def test_secret_files_and_public_env_template_stay_safe() -> None:
+    """NF3001의 로컬 비밀 파일 제외와 공개 설정 예시의 빈 키 값을 회귀 검증한다.
+
+    저장소 루트의 `.gitignore`와 `.env.example`을 읽으며 실제 `.env`나 환경변수의 키 값은
+    열지 않는다. 네 API 키 항목은 예시 파일에 존재하되 값이 비어 있어야 하고, `.env` 변형과
+    SQLite·브라우저/배포 로컬 산출물은 Git 제외 규칙에 포함되어야 한다. 조건 위반은 assertion
+    실패로 반환하며 파일·Git·네트워크를 변경하지 않는다. 예: `OPINET_API_KEY=`는 허용하지만
+    `OPINET_API_KEY=sample`은 거절한다.
+    """
+    root = Path(__file__).resolve().parents[1]
+    ignored = {
+        line.strip()
+        for line in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert {".env", ".env.*", "*.sqlite*", "artifacts/", ".netlify/"} <= ignored
+    assert "!.env.example" in ignored
+
+    assignments = {}
+    for line in (root / ".env.example").read_text(encoding="utf-8").splitlines():
+        if line and not line.startswith("#") and "=" in line:
+            name, value = line.split("=", 1)
+            assignments[name] = value
+    assert SECRET_ENV_NAMES <= assignments.keys()
+    assert all(assignments[name] == "" for name in SECRET_ENV_NAMES)
+
+
+def test_settings_serialization_masks_every_configured_api_key() -> None:
+    """NF3001의 네 제공사 키가 설정 객체 repr·JSON 직렬화에 평문으로 나오지 않게 한다.
+
+    테스트 전용 고유 문자열을 GMS·Opinet·Kakao·공공데이터 키로 전달한 뒤 Settings의 repr과
+    `model_dump_json()`을 검사한다. 외부 호출·환경변수 변경·파일 저장은 없으며 SecretStr의
+    마스킹 표현 자체에는 의존하지 않는다. 어느 한 키라도 평문으로 포함되면 assertion으로
+    실패한다.
+    """
+    secrets = {name: f"nf3001-{name.lower()}-secret" for name in SECRET_ENV_NAMES}
+    settings = Settings(_env_file=None, **{name.lower(): value for name, value in secrets.items()})
+    serialized = f"{settings!r}\n{settings.model_dump_json()}"
+    assert all(value not in serialized for value in secrets.values())
 
 
 def test_env_precedence_and_no_secret_output(tmp_path, monkeypatch, capsys) -> None:
