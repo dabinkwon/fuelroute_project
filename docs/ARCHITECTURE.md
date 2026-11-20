@@ -280,7 +280,19 @@ created_at
 
 # 6. API 설계와 구현
 
-`GET /health`, F3014의 `GET/DELETE /api/logs`, F3017의 Chat·계획 Endpoint를 구현했다.
+`GET /health`, F3014의 `GET/DELETE /api/logs`, F3017의 Chat·계획 Endpoint와 위치 선택기의
+`GET /api/locations/resolve`를 구현했다.
+
+## GET `/api/locations/resolve`
+
+- **기능:** 선택한 시·도/시·군·구 안의 동·주소·장소명을 Kakao Local 후보로 조회
+- **입력:** `query` 1~200자. Frontend가 상위 지역과 상세 검색어를 공백으로 조합한다.
+- **출력:** `LocationMatchSet`의 최대 5개 WGS84 후보. 복수 후보는 자동 확정하지 않는다.
+- **오류:** 잘못된 입력 422, 0건 404, 인증·통신·제공사 실패 503
+
+전국 시·도→시·군·구 목록은 Frontend 정적 selector가 제공한다. Kakao Local은 행정구역 트리
+열거 API로 가정하지 않고 상세 동·주소·장소 검색에만 사용한다. 확정 후보의 경도·위도는 기존
+Chat 문장에 포함하며 API 키·제공사 오류 원문은 브라우저로 전달하지 않는다.
 
 ## POST `/api/chat`
 
@@ -349,7 +361,7 @@ created_at
 
 | 화면/영역 | 주요 내용 | 연결 API |
 |---|---|---|
-| 주행 조건·대화 | 출발·목적지, 연료 조건, 추가 입력 요청 | `/api/chat` |
+| 주행 조건·대화 | 시·도/시·군·구/상세 후보 출발·목적지, 유종, 거리 조건, 추가 요청 | `/api/locations/resolve`, `/api/chat` |
 | 추천 결과 | 가격·안전거리·우회시간·제외 사유·휴게소 보조정보 | `/api/chat` 응답 |
 | 실행상태·이력 | 단계·Tool 성공/실패·재계획·로그 조회/삭제 | `/api/logs` 계열 |
 | 계획 관리 | 저장·목록·상세·수정·삭제, 시간 충돌 안내 | `/api/plans` 계열 |
@@ -364,6 +376,7 @@ Endpoint는 추가하지 않는다.
 
 | Endpoint | 입력 | 성공 응답·상태 |
 |---|---|---|
+| `GET /api/locations/resolve` | 상위 행정구역을 포함한 `query` | 200, 상세 위치 후보 최대 5개와 유일 결과 여부 |
 | `POST /api/chat` | `message: string`, `session_id: string 또는 null` | 200, 대화/실행 ID, 분석·판정·재계획·최종 응답, 이벤트 건수·로그 저장 실패 수·전체 경과시간(ms) |
 | `POST /api/plans` | 주행 입력 스냅샷·검증된 추천 스냅샷·`trip_date`·선택 계획 시작/종료시각·메모 | 201, `plan: FuelPlan`, `conflicts: [{plan_id, reason}]`; 충돌을 이유로 저장을 거절하지 않음 |
 | `GET /api/plans` | 선택 `trip_date: YYYY-MM-DD` | 200, `{items: FuelPlan[]}` |
@@ -387,8 +400,10 @@ F3018~F3019에서 수행한다.
 
 ### F3018 대화·계획 대시보드 — 화면 확인 중
 
-`frontend/dist`는 별도 빌드 없는 HTML/CSS/JavaScript다. 왼쪽 큰 카드에서 자연어 요청과
-추천 후보를 보여주고, 사용자가 날짜·선택 시각·메모를 확인한 뒤 추천을 채택하면 Chat 응답의
+`frontend/dist`는 별도 빌드 없는 HTML/CSS/JavaScript다. 왼쪽 큰 카드에서 시·도→시·군·구와
+선택 상세 후보, 유종, 주행 가능 거리, 안전 여유를 먼저 받고 추가 자연어 요청은 선택으로 둔다.
+상세 후보는 상위 지역을 포함해 조회하며 선택 좌표를 Chat 요청 문장에 넣는다. 추천 후보를
+보여주고, 사용자가 날짜·선택 시각·메모를 확인한 뒤 추천을 채택하면 Chat 응답의
 검증된 좌표·조건·주유소·m/s 비용·근거를 `PlanCreate`의 km/min 스냅샷으로 바꿔
 `POST /api/plans`에 저장한다. 추천이 없거나 필수 비용이 누락되면 저장 payload를 만들지 않는다.
 

@@ -26,6 +26,27 @@ const TOOL_LABELS = {
   get_driving_route: "자동차 경로 조회", search_gas_stations: "주유소 후보 조회",
   get_station_details: "주유소 상세 조회", search_rest_area_info: "휴게소 정보 조회",
 };
+const REGION_HIERARCHY = {
+  "서울특별시": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
+  "부산광역시": ["강서구", "금정구", "기장군", "남구", "동구", "동래구", "부산진구", "북구", "사상구", "사하구", "서구", "수영구", "연제구", "영도구", "중구", "해운대구"],
+  "대구광역시": ["군위군", "남구", "달서구", "달성군", "동구", "북구", "서구", "수성구", "중구"],
+  "인천광역시": ["강화군", "계양구", "남동구", "동구", "미추홀구", "부평구", "서구", "연수구", "옹진군", "중구"],
+  "광주광역시": ["광산구", "남구", "동구", "북구", "서구"],
+  "대전광역시": ["대덕구", "동구", "서구", "유성구", "중구"],
+  "울산광역시": ["남구", "동구", "북구", "울주군", "중구"],
+  "세종특별자치시": ["세종특별자치시"],
+  "경기도": ["가평군", "고양시", "과천시", "광명시", "광주시", "구리시", "군포시", "김포시", "남양주시", "동두천시", "부천시", "성남시", "수원시", "시흥시", "안산시", "안성시", "안양시", "양주시", "양평군", "여주시", "연천군", "오산시", "용인시", "의왕시", "의정부시", "이천시", "파주시", "평택시", "포천시", "하남시", "화성시"],
+  "강원특별자치도": ["강릉시", "고성군", "동해시", "삼척시", "속초시", "양구군", "양양군", "영월군", "원주시", "인제군", "정선군", "철원군", "춘천시", "태백시", "평창군", "홍천군", "화천군", "횡성군"],
+  "충청북도": ["괴산군", "단양군", "보은군", "영동군", "옥천군", "음성군", "제천시", "증평군", "진천군", "청주시", "충주시"],
+  "충청남도": ["계룡시", "공주시", "금산군", "논산시", "당진시", "보령시", "부여군", "서산시", "서천군", "아산시", "예산군", "천안시", "청양군", "태안군", "홍성군"],
+  "전북특별자치도": ["고창군", "군산시", "김제시", "남원시", "무주군", "부안군", "순창군", "완주군", "익산시", "임실군", "장수군", "전주시", "정읍시", "진안군"],
+  "전라남도": ["강진군", "고흥군", "곡성군", "광양시", "구례군", "나주시", "담양군", "목포시", "무안군", "보성군", "순천시", "신안군", "여수시", "영광군", "영암군", "완도군", "장성군", "장흥군", "진도군", "함평군", "해남군", "화순군"],
+  "경상북도": ["경산시", "경주시", "고령군", "구미시", "김천시", "문경시", "봉화군", "상주시", "성주군", "안동시", "영덕군", "영양군", "영주시", "영천시", "예천군", "울릉군", "울진군", "의성군", "청도군", "청송군", "칠곡군", "포항시"],
+  "경상남도": ["거제시", "거창군", "고성군", "김해시", "남해군", "밀양시", "사천시", "산청군", "양산시", "의령군", "진주시", "창녕군", "창원시", "통영시", "하동군", "함안군", "함양군", "합천군"],
+  "제주특별자치도": ["서귀포시", "제주시"],
+};
+const selectedLocations = { origin: null, destination: null };
+const locationCandidateLists = { origin: [], destination: [] };
 const elements = Object.fromEntries([
   "main", "chatForm", "messageInput", "submitButton", "newChatButton", "requestChip",
   "recommendation", "savePanel", "saveState", "planDate", "planStartTime", "planEndTime", "planMemo",
@@ -38,6 +59,9 @@ const elements = Object.fromEntries([
   "executionDialog", "closeExecutionDialog", "refreshLogsButton", "deleteLogButton",
   "executionTabDot", "executionTabLabel", "executionState", "executionCount", "executionList",
   "executionDetailTitle", "executionDetailMeta", "executionTimeline",
+  "originProvince", "originDistrict", "originDetail", "originSearchButton", "originCandidate",
+  "destinationProvince", "destinationDistrict", "destinationDetail", "destinationSearchButton",
+  "destinationCandidate", "fuelType", "remainingRange", "reserveRange",
 ].map(mapElementById));
 
 /**
@@ -482,10 +506,168 @@ function renderEvidenceItem(fact) { return `<li>${escapeHtml(fact.text)}</li>`; 
  * @param {SubmitEvent} event form 제출 이벤트.
  * @returns {Promise<void>}
  */
+/**
+ * 출발지 또는 목적지에 대응하는 selector DOM 묶음을 반환한다.
+ * `side`는 내부에서 정한 `origin` 또는 `destination`만 허용하며, initialize 이후
+ * 존재하는 요소를 참조한다. 네트워크·저장 부작용은 없고 잘못된 값은 Error다.
+ * @param {"origin"|"destination"} side 조회할 위치 구분.
+ * @returns {{province: HTMLSelectElement, district: HTMLSelectElement, detail: HTMLInputElement, candidate: HTMLSelectElement, searchButton: HTMLButtonElement}} selector 요소 묶음.
+ * @throws {Error} 지원하지 않는 위치 구분인 경우.
+ */
+function locationElements(side) {
+  if (!Object.hasOwn(selectedLocations, side)) throw new Error("지원하지 않는 위치 구분입니다.");
+  const prefix = side === "origin" ? "origin" : "destination";
+  return {
+    province: elements[`${prefix}Province`], district: elements[`${prefix}District`],
+    detail: elements[`${prefix}Detail`], candidate: elements[`${prefix}Candidate`],
+    searchButton: elements[`${prefix}SearchButton`],
+  };
+}
+
+/**
+ * 전국 시·도 목록을 출발지와 목적지 select에 동일하게 채운다.
+ * 페이지 초기화와 전체 입력 초기화 직후 호출하며 REGION_HIERARCHY의 key 순서를
+ * 그대로 사용한다. 기존 option은 제거되고 하위 지역·후보도 초기화된다. 반환값과
+ * 외부 호출은 없으며 정적 목록에 없는 신규 행정구역은 코드 갱신 전 표시되지 않는다.
+ * @returns {void}
+ */
+function populateProvinceSelectors() {
+  for (const side of ["origin", "destination"]) {
+    const fields = locationElements(side);
+    fields.province.innerHTML = '<option value="">선택</option>';
+    for (const province of Object.keys(REGION_HIERARCHY)) fields.province.add(new Option(province, province));
+    updateDistrictOptions(side);
+  }
+}
+
+/**
+ * 선택한 시·도에 속한 시·군·구 option을 갱신하고 상세 장소 후보를 폐기한다.
+ * 시·도 change와 form reset 뒤 호출한다. 정적 REGION_HIERARCHY만 읽으며 선택값이
+ * 없으면 하위 select를 비활성화한다. DOM과 메모리 후보를 변경하지만 API는 호출하지 않는다.
+ * @param {"origin"|"destination"} side 갱신할 위치 구분.
+ * @returns {void}
+ */
+function updateDistrictOptions(side) {
+  const fields = locationElements(side);
+  const districts = REGION_HIERARCHY[fields.province.value] || [];
+  fields.district.innerHTML = `<option value="">${districts.length ? "선택" : "먼저 시·도를 선택하세요"}</option>`;
+  for (const district of districts) fields.district.add(new Option(district, district));
+  fields.district.disabled = districts.length === 0;
+  fields.detail.value = "";
+  resetLocationCandidate(side);
+}
+
+/**
+ * 한 위치의 API 후보와 확정 좌표를 비우고 후보 select를 비활성화한다.
+ * 상위 지역·상세 검색어가 바뀌거나 전체 form을 초기화할 때 호출한다. DOM과 페이지
+ * 메모리만 바꾸며 이미 서버로 보낸 요청이나 세션에는 영향을 주지 않는다.
+ * @param {"origin"|"destination"} side 초기화할 위치 구분.
+ * @returns {void}
+ */
+function resetLocationCandidate(side) {
+  const fields = locationElements(side);
+  locationCandidateLists[side] = [];
+  selectedLocations[side] = null;
+  fields.candidate.innerHTML = '<option value="">상세 장소를 검색하면 표시됩니다</option>';
+  fields.candidate.disabled = true;
+}
+
+/**
+ * 선택한 상위 지역 안에서 동·주소·장소명을 조회해 최대 5개 후보를 표시한다.
+ * 시·도, 시·군·구, 상세 검색어가 모두 있을 때 후보 찾기 버튼으로 호출한다.
+ * `/api/locations/resolve`를 한 번 호출하며 결과가 하나면 자동 확정하고, 여러 개면
+ * 사용자가 직접 골라야 한다. 실패 시 기존 후보를 비우고 toast를 표시한다.
+ * @param {"origin"|"destination"} side 검색할 위치 구분.
+ * @returns {Promise<void>}
+ */
+async function searchLocationCandidates(side) {
+  const fields = locationElements(side);
+  const detail = fields.detail.value.trim();
+  if (!fields.province.value || !fields.district.value || !detail) {
+    showToast("시·도, 시·군·구와 상세 장소를 입력하세요.", true); return;
+  }
+  resetLocationCandidate(side);
+  fields.searchButton.disabled = true;
+  try {
+    const query = [fields.province.value, fields.district.value, detail].filter((value, index, values) => values.indexOf(value) === index).join(" ");
+    const result = await apiFetch(`/api/locations/resolve?query=${encodeURIComponent(query)}`);
+    locationCandidateLists[side] = result.candidates;
+    fields.candidate.innerHTML = '<option value="">후보를 선택하세요</option>';
+    result.candidates.forEach((candidate, index) => {
+      const address = candidate.road_address || candidate.address || candidate.name;
+      fields.candidate.add(new Option(`${candidate.name} · ${address}`, String(index)));
+    });
+    fields.candidate.disabled = false;
+    if (result.candidates.length === 1) {
+      fields.candidate.value = "0"; selectLocationCandidate(side);
+      showToast("위치 후보 1개를 확인했습니다.");
+    } else showToast(`${result.candidates.length}개 후보 중 정확한 위치를 선택하세요.`);
+  } catch (error) {
+    resetLocationCandidate(side);
+    showToast(error.message || "위치 후보를 찾지 못했습니다.", true);
+  } finally { fields.searchButton.disabled = false; }
+}
+
+/**
+ * 후보 select의 현재 index를 WGS84 확정 위치로 메모리에 저장한다.
+ * 후보 조회 후 사용자가 option을 바꿀 때 호출하며 빈 option은 확정을 취소한다.
+ * 잘못된 index는 null로 처리하고 네트워크·DB 부작용은 없다.
+ * @param {"origin"|"destination"} side 확정할 위치 구분.
+ * @returns {void}
+ */
+function selectLocationCandidate(side) {
+  const value = locationElements(side).candidate.value;
+  selectedLocations[side] = value === "" ? null : locationCandidateLists[side][Number(value)] || null;
+}
+
+/**
+ * 선택한 행정구역과 선택적 상세 후보를 Agent가 해석할 한국어 위치 조건으로 만든다.
+ * 시·도와 시·군·구가 필수이며 상세 후보가 있으면 제공사 WGS84 경도·위도를 함께
+ * 넣어 동명 장소의 재질의를 줄인다. 메모리를 읽기만 하고 필수값 누락은 Error다.
+ * @param {"origin"|"destination"} side 출발지 또는 목적지.
+ * @returns {string} 요청 본문에 삽입할 위치 문장.
+ * @throws {Error} 상위 지역이 선택되지 않은 경우.
+ */
+function buildLocationFragment(side) {
+  const fields = locationElements(side);
+  const role = side === "origin" ? "출발지" : "목적지";
+  if (!fields.province.value || !fields.district.value) throw new Error(`${role}의 시·도와 시·군·구를 선택하세요.`);
+  const candidate = selectedLocations[side];
+  if (!candidate) return `${role}는 "${fields.province.value} ${fields.district.value}"`;
+  const label = candidate.road_address || candidate.address || candidate.name;
+  return `${role}는 "${label}"이고 좌표는 경도 ${candidate.longitude}, 위도 ${candidate.latitude}`;
+}
+
+/**
+ * selector 값을 기존 `/api/chat`이 처리할 완전한 추천 요청 문장으로 조합한다.
+ * 출발지·목적지, 유종, 계기판 주행 가능 거리(km), 안전 여유(km)가 필수이고 추가
+ * 요청은 선택이다. 거리들은 유한수이며 `remaining > 0`, `0 <= reserve < remaining`
+ * 규칙을 적용한다. DOM을 읽기만 하며 검증 실패는 Error, 성공은 문자열이다.
+ * @returns {string} ChatRequest.message에 넣을 구조화된 한국어 문장.
+ * @throws {Error} 필수 선택 또는 거리 범위가 잘못된 경우.
+ */
+function buildStructuredRequest() {
+  const remaining = Number(elements.remainingRange.value), reserve = Number(elements.reserveRange.value);
+  if (!Number.isFinite(remaining) || remaining <= 0) throw new Error("주행 가능 거리는 0보다 크게 입력하세요.");
+  if (!Number.isFinite(reserve) || reserve < 0 || reserve >= remaining) throw new Error("안전 여유는 0 이상이며 주행 가능 거리보다 작아야 합니다.");
+  const fuel = elements.fuelType.value === "diesel" ? "경유" : "휘발유";
+  const extra = elements.messageInput.value.trim();
+  return `${buildLocationFragment("origin")}. ${buildLocationFragment("destination")}. 유종은 ${fuel}, 계기판 주행 가능 거리는 ${remaining}km, 안전 여유는 ${reserve}km다.${extra ? ` 추가 요청: ${extra}` : ""}`;
+}
+
+/**
+ * 선택형 주행 조건을 검증·조합해 `/api/chat` Agent 실행을 요청한다.
+ * form submit 때 호출하며 중복 제출을 막고, 성공 시 세션·추천·실행 로그 UI를
+ * 갱신한다. 입력 오류는 외부 호출 없이 toast로 안내하고 네트워크 실패는 연결 상태를
+ * 실패로 표시한다. 서버 세션과 로그 생성, localStorage 갱신이 발생할 수 있다.
+ * @param {SubmitEvent} event 추천 요청 form 제출 이벤트.
+ * @returns {Promise<void>}
+ */
 async function handleChatSubmit(event) {
   event.preventDefault();
-  const message = elements.messageInput.value.trim();
-  if (!message) return;
+  let message;
+  try { message = buildStructuredRequest(); }
+  catch (error) { showToast(error.message, true); return; }
   setLoading(true);
   try {
     const chat = await apiFetch("/api/chat", { method: "POST", body: JSON.stringify({ message, session_id: state.sessionId || null }) });
@@ -731,11 +913,11 @@ async function deletePlan(plan) {
 function resetChat() {
   state.sessionId = null; state.latestChat = null; window.localStorage.removeItem("fuelroute.session_id");
   state.activeExecutionId = null; setExecutionState("idle", "대기 중");
-  elements.chatForm.reset(); elements.requestChip.textContent = "새 요청"; elements.savePanel.hidden = true;
+  elements.chatForm.reset(); populateProvinceSelectors(); elements.requestChip.textContent = "새 요청"; elements.savePanel.hidden = true;
   elements.planMemo.value = ""; elements.planStartTime.value = ""; elements.planEndTime.value = "";
   elements.recommendation.className = "recommendation empty";
   elements.recommendation.innerHTML = '<div class="route-visual" aria-hidden="true"><svg viewBox="0 0 460 190" preserveAspectRatio="none"><path class="route-base" d="M18 152 C98 152 95 92 172 92 S255 36 334 43 S390 112 442 77"/><path class="route-active" d="M18 152 C98 152 95 92 172 92 S255 36 334 43"/><circle class="route-start" cx="18" cy="152" r="7"/><circle class="route-stop" cx="334" cy="43" r="16"/></svg><span>요청을 입력하면 안전하게 도달 가능한 추천 지점을 표시합니다.</span></div>';
-  renderEvidence([]); elements.messageInput.focus();
+  renderEvidence([]); elements.originProvince.focus();
 }
 
 /** 새 요청 click을 resetChat에 전달한다. @returns {void} */
@@ -804,6 +986,15 @@ function closeEditDialog() { elements.editDialog.close(); }
  * @returns {void}
  */
 function initialize() {
+  populateProvinceSelectors();
+  for (const side of ["origin", "destination"]) {
+    const fields = locationElements(side);
+    fields.province.addEventListener("change", () => updateDistrictOptions(side));
+    fields.district.addEventListener("change", () => resetLocationCandidate(side));
+    fields.detail.addEventListener("input", () => resetLocationCandidate(side));
+    fields.searchButton.addEventListener("click", () => searchLocationCandidates(side));
+    fields.candidate.addEventListener("change", () => selectLocationCandidate(side));
+  }
   elements.chatForm.addEventListener("submit", handleChatSubmit);
   elements.acceptPlanButton.addEventListener("click", acceptRecommendation);
   elements.newChatButton.addEventListener("click", handleNewChat);

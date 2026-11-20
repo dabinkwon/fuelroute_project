@@ -1278,3 +1278,30 @@ Agent 설정 실패503의 공통 오류와 원문 비노출을 확인했다. 기
   `git diff --check`를 통과했다. 공식 문서만 조회했으며 외부 데이터 API·콘솔·키는 호출하지
   않았다. [출처 검증 JSON](verification/2026-11-20-nf3007-api-sources.json)에 확인일·Endpoint·
   계정값과 공개 정책·적용 범위·한계를 분리해 기록했다.
+
+<a id="location-selector"></a>
+
+## 44. 계층형 주행 조건 selector — 2026-11-20
+
+### 구현과 이유
+
+- 자유 문장만 받던 추천 form을 출발지·목적지의 시·도→시·군·구 selector, 선택 상세 장소
+  검색/후보, 유종, 주행 가능 거리(km), 안전 여유(km), 선택 추가 요청으로 분리했다. `구미
+  삼성전자`처럼 지역과 장소가 섞인 입력도 먼저 상위 범위를 고정해 복수 지역 재질문을 줄인다.
+- 전국 17개 시·도와 시·군·구는 브라우저 정적 목록으로 제공한다. Kakao Local을 행정구역
+  전체 열거 API로 추정하지 않고 선택 범위를 포함한 동·주소·장소 검색에 사용한다. 최대 5개
+  후보 중 사용자가 고른 WGS84 좌표를 기존 `/api/chat` 문장에 포함한다.
+- `GET /api/locations/resolve`를 추가하고 실제 Kakao 호출은 `agent/location_search.py`에서
+  담당해 API→client 직접 import 금지 경계를 유지했다. 0건은404, 입력 오류422, 인증·통신·
+  제공사 실패는 정제된503으로 변환하며 키와 제공사 원문은 Frontend에 보내지 않는다.
+- 변경 파일: `frontend/dist/index.html`, `styles.css`, `app.js`, `fuelroute/api/locations.py`,
+  `fuelroute/agent/location_search.py`, `fuelroute/api/app.py`와 관련 테스트·문서.
+
+### 검증 결과와 남은 범위
+
+- 위치 후보 성공/0건 HTTP 계약, 필수 selector DOM, 상세 endpoint 호출, 좌표 포함 요청 조합,
+  JavaScript 함수 설명과 패키지 import 경계를 집중 26개 테스트로 확인했다.
+- 전체 **453개 테스트**, Ruff lint/format, Node 문법 검사, `pip check`, `git diff --check`를
+  통과했다. 테스트 위치 조회는 주입 resolver를 사용한 mock이며 실제 Kakao 호출은 새로 하지
+  않았다. 운영 Netlify 재배포와 실제 브라우저 후보 선택 확인도 이번 변경 범위에서 수행하지
+  않았다.

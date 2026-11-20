@@ -23,6 +23,7 @@ from fuelroute.storage.plans import SQLitePlanStore
 
 KST = timezone(timedelta(hours=9))
 ChatExecutor = Callable[..., Awaitable[ToolResult[dict]]]
+LocationResolver = Callable[[str, Settings], Awaitable[ToolResult[dict]]]
 
 
 async def offline_greeting_executor(
@@ -64,14 +65,18 @@ async def api_request(
     database_path: Path,
     json: dict | None = None,
     chat_executor: ChatExecutor = offline_greeting_executor,
+    location_resolver: LocationResolver | None = None,
 ) -> httpx.Response:
     """임시 SQLite 저장소와 선택 Chat executor를 주입해 ASGI 요청을 수행한다.
 
     method/path/json은 HTTP 입력이고 database_path는 테스트 전용 파일이다. app.state의 기존
-    설정/저장소/runner를 모두 보존했다가 복원한다. 실제 소켓·GMS·외부 데이터 API를 사용하지
-    않으며 반환은 httpx.Response, DB 변경은 호출 Endpoint 계약에 한정된다.
+    설정/저장소/runner와 선택 위치 resolver를 모두 보존했다가 복원한다. 실제 소켓·GMS·
+    외부 데이터 API를 사용하지 않으며 반환은 httpx.Response, DB 변경은 호출 Endpoint
+    계약에 한정된다. location_resolver가 None이면 app 기본 구현을 유지한다.
     """
-    names = ("settings", "plan_store", "log_store", "memory_store", "chat_executor")
+    names = ["settings", "plan_store", "log_store", "memory_store", "chat_executor"]
+    if location_resolver is not None:
+        names.append("location_resolver")
     marker = object()
     previous = {name: getattr(app.state, name, marker) for name in names}
     app.state.settings = Settings(_env_file=None, database_path=database_path)
@@ -79,6 +84,8 @@ async def api_request(
     app.state.log_store = SQLiteExecutionLogStore(database_path)
     app.state.memory_store = SQLiteConversationStore(database_path)
     app.state.chat_executor = chat_executor
+    if location_resolver is not None:
+        app.state.location_resolver = location_resolver
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -109,6 +116,86 @@ def test_chat_runs_graph_and_persists_queryable_execution_log(tmp_path: Path) ->
     )
     assert detail.status_code == 200
     assert detail.json()["session"]["event_count"] == body["event_count"]
+
+
+def test_location_selector_returns_injected_kakao_candidates(tmp_path: Path) -> None:
+    """상위 지역을 포함한 검색어가 좌표 후보 API를 거쳐 정규화 응답으로 반환된다."""
+    observed: list[str] = []
+
+    async def resolve(query: str, _settings: Settings) -> ToolResult[dict]:
+        """검색어를 기록하고 네트워크 없이 동천동 단일 후보를 반환한다."""
+        observed.append(query)
+        candidate = {
+            "longitude": 128.559,
+            "latitude": 35.944,
+            "name": "대구 북구 동천동",
+            "address": "대구 북구 동천동",
+            "road_address": None,
+            "place_id": None,
+            "place_url": None,
+            "source": "kakao_address",
+            "match_level": "area",
+        }
+        return ToolResult(
+            ok=True,
+            tool_name="resolve_location",
+            data={
+                "query": query,
+                "status": "resolved",
+                "search_type": "address",
+                "total_count": 1,
+                "candidates": [candidate],
+                "selected": candidate,
+                "api_call_count": 1,
+            },
+            error=None,
+            meta=ToolMeta(
+                provider="kakao_local",
+                request_id="location-test",
+                elapsed_ms=1,
+                fetched_at=utc_now(),
+            ),
+        )
+
+    response = asyncio.run(
+        api_request(
+            "GET",
+            "/api/locations/resolve?query=대구광역시%20북구%20동천동",
+            database_path=tmp_path / "locations.sqlite3",
+            location_resolver=resolve,
+        )
+    )
+    assert response.status_code == 200
+    assert observed == ["대구광역시 북구 동천동"]
+    assert response.json()["selected"]["longitude"] == 128.559
+
+
+def test_location_selector_maps_empty_result_to_public_404(tmp_path: Path) -> None:
+    """위치 0건은 제공사 원문 없이 공개 EMPTY_RESULT 404로 변환된다."""
+
+    async def empty(_query: str, _settings: Settings) -> ToolResult[dict]:
+        """외부 호출 없이 0건 공통 실패를 반환한다."""
+        return ToolResult(
+            ok=False,
+            tool_name="resolve_location",
+            data=None,
+            error=ToolError(code="EMPTY_RESULT", message="private provider body"),
+            meta=ToolMeta(
+                provider="kakao_local", request_id="empty-test", elapsed_ms=1, fetched_at=utc_now()
+            ),
+        )
+
+    response = asyncio.run(
+        api_request(
+            "GET",
+            "/api/locations/resolve?query=대구광역시%20북구%20없는곳",
+            database_path=tmp_path / "empty.sqlite3",
+            location_resolver=empty,
+        )
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "EMPTY_RESULT"
+    assert "private provider body" not in response.text
 
 
 def test_plan_http_crud_persists_and_marks_update_for_revalidation(tmp_path: Path) -> None:

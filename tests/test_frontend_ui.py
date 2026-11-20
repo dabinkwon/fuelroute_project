@@ -30,6 +30,15 @@ def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
         'id="editMemo"',
         'id="executionDialog"',
         'id="executionTimeline"',
+        'id="originProvince"',
+        'id="originDistrict"',
+        'id="originCandidate"',
+        'id="destinationProvince"',
+        'id="destinationDistrict"',
+        'id="destinationCandidate"',
+        'id="fuelType"',
+        'id="remainingRange"',
+        'id="reserveRange"',
         'for="messageInput"',
         'aria-live="polite"',
         '<script src="/app.js" defer></script>',
@@ -44,6 +53,7 @@ def test_frontend_calls_chat_and_full_plan_crud() -> None:
     """브라우저 코드가 대화와 계획 POST/GET/PATCH/DELETE를 실제 API 경로로 연결한다."""
     script = frontend_text("app.js")
     assert 'apiFetch("/api/chat"' in script
+    assert "apiFetch(`/api/locations/resolve?query=" in script
     assert 'apiFetch("/api/plans"' in script
     assert 'method: "POST"' in script
     assert 'method: "PATCH"' in script
@@ -53,6 +63,8 @@ def test_frontend_calls_chat_and_full_plan_crud() -> None:
     assert "buildPlanUpdatePayload" in script
     assert "payload.memo" in script and "plan.memo" in script
     assert 'if (chat.status === "recommended") elements.messageInput.value = "";' in script
+    assert "REGION_HIERARCHY" in script and "buildStructuredRequest" in script
+    assert "candidate.longitude" in script and "candidate.latitude" in script
 
 
 def test_plans_and_evidence_are_dialogs_outside_dashboard() -> None:

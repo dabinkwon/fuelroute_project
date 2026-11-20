@@ -11,6 +11,7 @@ from fuelroute.api.errors import (
     request_validation_handler,
     unexpected_error_handler,
 )
+from fuelroute.api.locations import router as locations_router
 from fuelroute.api.logs import router as logs_router
 from fuelroute.api.plans import router as plans_router
 
@@ -30,6 +31,7 @@ app.add_exception_handler(ApiFailure, api_failure_handler)
 app.add_exception_handler(RequestValidationError, request_validation_handler)
 app.add_exception_handler(Exception, unexpected_error_handler)
 app.include_router(chat_router)
+app.include_router(locations_router)
 app.include_router(plans_router)
 app.include_router(logs_router)
 
