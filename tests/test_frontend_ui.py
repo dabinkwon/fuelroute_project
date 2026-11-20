@@ -79,6 +79,7 @@ def test_frontend_calls_chat_and_full_plan_crud() -> None:
     assert "안전 여유를 적용하지 않기로 선택" in script
     assert 'id="originDetails"' in html and 'id="destinationDetails"' in html
     assert 'class="advanced-request"' in html
+    assert 'elements[`${side}Details`].open = false' not in script
     assert ".dashboard:not(.has-results)>.metric-card" in frontend_text("styles.css")
 
 

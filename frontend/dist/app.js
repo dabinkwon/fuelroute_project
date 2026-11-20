@@ -689,6 +689,7 @@ async function searchLocationCandidates(side) {
 /**
  * 후보 select의 현재 index를 WGS84 확정 위치로 메모리에 저장한다.
  * 후보 조회 후 사용자가 option을 바꿀 때 호출하며 빈 option은 확정을 취소한다.
+ * 선택 뒤에도 상세 영역과 선택 option을 펼쳐 둬 사용자가 확정 위치를 계속 확인할 수 있다.
  * 잘못된 index는 null로 처리하고 네트워크·DB 부작용은 없다.
  * @param {"origin"|"destination"} side 확정할 위치 구분.
  * @returns {void}
@@ -696,7 +697,6 @@ async function searchLocationCandidates(side) {
 function selectLocationCandidate(side) {
   const value = locationElements(side).candidate.value;
   selectedLocations[side] = value === "" ? null : locationCandidateLists[side][Number(value)] || null;
-  if (selectedLocations[side]) elements[`${side}Details`].open = false;
 }
 
 /**
