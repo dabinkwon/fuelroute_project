@@ -14,6 +14,26 @@ NodeResult = TypeVar("NodeResult", bound=dict)
 NodeCallable = Callable[[dict], NodeResult | Awaitable[NodeResult]]
 
 
+def public_result_size(data: object) -> int:
+    """정규화 Tool 결과에서 화면에 표시할 논리 결과 건수를 계산한다.
+
+    Tool 성공 이벤트를 만들 때 호출하며 ``data``는 이미 검증된 내부 반환값이다. 최상위
+    list는 원소 수, ``items`` list를 가진 dict는 후보·휴게소 항목 수를 반환한다. 단일 상세·
+    경로 dict와 스칼라는 필드 수가 아니라 결과 1건으로 처리하고 ``None``은 0건이다. 원본
+    값·좌표·가격은 기록하지 않으며 입력 수정, 외부 호출, DB 부작용은 없다.
+
+    예: ``{"items": [a, b]}``는 2, 주유소 상세 dict는 key가 여러 개여도 1이다. 제공사
+    total count를 추정하지 않는 화면용 요약이라는 한계가 있다.
+    """
+    if data is None:
+        return 0
+    if isinstance(data, list):
+        return len(data)
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return len(data["items"])
+    return 1
+
+
 class EventBus:
     """실행 이벤트를 등록 순서대로 비동기 구독자에게 전달하는 요청 외부 버스.
 
@@ -157,9 +177,7 @@ class ExecutionEventStream:
                 payload=common,
             )
             if call.result.ok:
-                data = call.result.data
-                count = len(data) if isinstance(data, (list, dict)) else 1
-                payload = {**common, "result_size": count}
+                payload = {**common, "result_size": public_result_size(call.result.data)}
                 event_type: EventType = "TOOL_SUCCEEDED"
             else:
                 payload = {

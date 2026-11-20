@@ -26,6 +26,13 @@ const TOOL_LABELS = {
   get_driving_route: "자동차 경로 조회", search_gas_stations: "주유소 후보 조회",
   get_station_details: "주유소 상세 조회", search_rest_area_info: "휴게소 정보 조회",
 };
+const ACTION_LABELS = {
+  base_route: "출발지에서 목적지까지의 기준 거리·시간 확인",
+  search_candidates: "경로 주변의 유종·가격 후보 수집",
+  station_details: "후보별 최신 가격·주소·브랜드 확인",
+  candidate_routes: "후보별 실제 도달 거리와 경유 우회 비용 확인",
+  rest_area_info: "최종 추천 주변의 휴게소 보조정보 확인",
+};
 const REGION_HIERARCHY = {
   "서울특별시": ["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"],
   "부산광역시": ["강서구", "금정구", "기장군", "남구", "동구", "동래구", "부산진구", "북구", "사상구", "사하구", "서구", "수영구", "연제구", "영도구", "중구", "해운대구"],
@@ -61,7 +68,7 @@ const elements = Object.fromEntries([
   "executionDetailTitle", "executionDetailMeta", "executionTimeline",
   "originProvince", "originDistrict", "originDetail", "originSearchButton", "originCandidate",
   "destinationProvince", "destinationDistrict", "destinationDetail", "destinationSearchButton",
-  "destinationCandidate", "fuelType", "remainingRange", "reserveRange",
+  "destinationCandidate", "fuelType", "remainingRange", "reserveMode", "reserveRange",
 ].map(mapElementById));
 
 /**
@@ -255,7 +262,7 @@ function renderExecutionDetail() {
   elements.executionState.textContent = `선택 실행 ${status}`;
   elements.executionDetailTitle.textContent = `${status} · 이벤트 ${session.event_count}개`;
   elements.executionDetailMeta.textContent = `${formatDateTime(session.started_at)} 시작 · ${session.finished_at ? `${formatDateTime(session.finished_at)} 종료` : "진행 중"}`;
-  elements.executionTimeline.innerHTML = detail.events.map(renderExecutionEvent).join("");
+  elements.executionTimeline.innerHTML = groupExecutionEvents(detail.events).map(renderExecutionEvent).join("");
   elements.deleteLogButton.disabled = false;
 }
 
@@ -267,17 +274,41 @@ function renderExecutionDetail() {
  * @returns {string} 타임라인 `<li>` HTML.
  */
 function renderExecutionEvent(event) {
-  const label = EVENT_LABELS[event.event_type] || event.event_type;
+  const paired = event.outcome || null;
+  const displayEvent = paired || event;
+  const label = paired
+    ? (paired.event_type === "TOOL_SUCCEEDED" ? "Tool 호출 완료" : "Tool 호출 실패")
+    : (EVENT_LABELS[event.event_type] || event.event_type);
   const step = STEP_LABELS[event.step] || event.step;
   const tool = event.tool_name ? (TOOL_LABELS[event.tool_name] || event.tool_name) : null;
   const classes = ["timeline-event"];
   if (event.event_type.startsWith("TOOL_")) classes.push("tool");
-  if (["TOOL_SUCCEEDED", "STEP_COMPLETED", "FINAL_RESPONSE_CREATED"].includes(event.event_type)) classes.push("success");
-  if (event.event_type === "TOOL_FAILED") classes.push("failure");
+  if (["TOOL_SUCCEEDED", "STEP_COMPLETED", "FINAL_RESPONSE_CREATED"].includes(displayEvent.event_type)) classes.push("success");
+  if (displayEvent.event_type === "TOOL_FAILED") classes.push("failure");
   if (event.event_type.startsWith("REPLAN_")) classes.push("replan");
-  const tags = buildExecutionTags(event);
+  const tags = buildExecutionTags(displayEvent);
   const description = describeExecutionEvent(event, step, tool);
-  return `<li class="${classes.join(" ")}"><div class="timeline-event-head"><strong>${escapeHtml(`${event.sequence}. ${label}`)}</strong><time>${escapeHtml(formatDateTime(event.created_at))}</time></div><p>${escapeHtml(description)}</p>${tags.length ? `<div class="timeline-tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}</li>`;
+  const sequence = paired ? `${event.sequence}–${paired.sequence}` : event.sequence;
+  return `<li class="${classes.join(" ")}"><div class="timeline-event-head"><strong>${escapeHtml(`${sequence}. ${label}`)}</strong><time>${escapeHtml(formatDateTime(displayEvent.created_at))}</time></div><p>${escapeHtml(description)}</p>${tags.length ? `<div class="timeline-tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}</li>`;
+}
+
+/**
+ * 같은 request_id의 Tool 요청과 성공/실패를 한 화면 항목으로 묶는다.
+ * sequence 순서의 이벤트에서 결과를 찾아 요청 복사본의 `outcome`에 연결하며, 연결된 결과
+ * 원본은 목록에서 제외한다. 결과가 아직 없는 요청은 진행 중인 단독 이벤트로 유지한다.
+ * 입력 배열과 서버 로그는 수정하지 않고 새 배열을 반환하며 네트워크·DB 부작용은 없다.
+ * @param {Array<object>} events sequence 오름차순 실행 이벤트.
+ * @returns {Array<object>} Tool 왕복이 통합된 화면 전용 이벤트 목록.
+ */
+function groupExecutionEvents(events) {
+  const outcomes = new Map(events
+    .filter((event) => ["TOOL_SUCCEEDED", "TOOL_FAILED"].includes(event.event_type) && event.request_id)
+    .map((event) => [event.request_id, event]));
+  return events
+    .filter((event) => !["TOOL_SUCCEEDED", "TOOL_FAILED"].includes(event.event_type))
+    .map((event) => event.event_type === "TOOL_REQUESTED"
+      ? { ...event, outcome: outcomes.get(event.request_id) || null }
+      : event);
 }
 
 /**
@@ -293,7 +324,14 @@ function describeExecutionEvent(event, step, tool) {
   const payload = event.payload || {};
   if (event.event_type === "STEP_STARTED") return `${step} 단계를 시작했습니다.`;
   if (event.event_type === "STEP_COMPLETED") return payload.status === "failed" ? `${step} 단계가 실패했습니다.` : `${step} 단계를 완료했습니다.`;
-  if (event.event_type === "TOOL_REQUESTED") return `${tool || "Tool"} 요청을 보냈습니다.`;
+  if (event.event_type === "TOOL_REQUESTED") {
+    const purpose = ACTION_LABELS[payload.action] || "검증에 필요한 외부 데이터를 조회";
+    if (!event.outcome) return `${tool || "Tool"}으로 ${purpose} 요청을 보냈고 결과를 기다리고 있습니다.`;
+    const outcome = event.outcome;
+    if (outcome.event_type === "TOOL_FAILED") return `${tool || "Tool"}으로 ${purpose}했지만 실패했습니다. 오류 코드: ${outcome.payload?.error_code || "미확인"}`;
+    const count = outcome.payload?.result_size;
+    return `${tool || "Tool"}으로 ${purpose}했고 정상 응답${count == null ? "" : ` ${count}건`}을 받았습니다.`;
+  }
   if (event.event_type === "TOOL_SUCCEEDED") return `${tool || "Tool"} 결과를 정상적으로 받았습니다.`;
   if (event.event_type === "TOOL_FAILED") return `${tool || "Tool"} 호출에 실패했습니다. 오류 코드: ${payload.error_code || "미확인"}`;
   if (event.event_type === "CONSTRAINT_EVALUATED") return `후보 ${payload.candidate_count ?? 0}개의 도달 가능성과 사용자 제약을 판정했습니다.`;
@@ -434,7 +472,7 @@ function renderChat(chat) {
   elements.reserveRatio.textContent = reserved || reserve === 0 ? `${Math.round(reserved)}%` : "—%";
   elements.rangeBalanceBar.style.width = `${usable}%`;
   elements.recommendationScope.textContent = chat.final_response?.scope === "evaluated_candidates_only" ? "실제로 평가한 후보 안에서 가격과 우회 비용을 비교한 결과입니다." : "검증된 후보와 조건을 기준으로 결과를 표시합니다.";
-  renderEvidence(chat.final_response?.evidence || []);
+  renderEvidence(chat);
   if (chat.status === "recommended" && candidate?.station) {
     renderRecommendation(chat, candidate, reachKm, detourKm, detourMin);
     elements.savePanel.hidden = false;
@@ -482,19 +520,56 @@ function renderQuestions(chat) {
 function renderQuestionItem(question) { return `<li>${escapeHtml(question)}</li>`; }
 
 /**
- * 검증 근거의 건수·대표 문장·최대 네 항목을 표시한다.
- * 빈 배열은 안내 placeholder를 복원하며 저장/네트워크 부작용은 없다.
- * @param {Array<object>} evidence ResponseFact 목록.
+ * 검증 근거와 실제 평가 후보 최대 5곳의 구체적인 비교를 표시한다.
+ * chat이 null이면 안내 placeholder를 복원하며 저장/네트워크 부작용은 없다.
+ * @param {object|null} chat ChatResponse 또는 초기화용 null.
  * @returns {void}
  */
-function renderEvidence(evidence) {
+function renderEvidence(chat) {
+  const evidence = chat ? buildRecommendationEvidence(chat) : [];
   elements.evidenceCount.innerHTML = `${evidence.length}<small>개</small>`;
-  elements.evidenceLead.textContent = evidence[0]?.text || "추천을 요청하면 검증한 가격·거리·제약 근거를 보여드립니다.";
-  elements.evidenceList.innerHTML = evidence.length ? evidence.slice(0, 4).map(renderEvidenceItem).join("") : '<li class="placeholder-line"></li><li class="placeholder-line short"></li>';
+  elements.evidenceLead.textContent = evidence[0] || "추천을 요청하면 후보별 가격·도달거리·안전 여유·우회 비용을 비교해 보여드립니다.";
+  elements.evidenceList.innerHTML = evidence.length ? evidence.map(renderEvidenceItem).join("") : '<li class="placeholder-line"></li><li class="placeholder-line short"></li>';
 }
 
-/** ResponseFact text를 안전한 li로 바꾼다. 내부 출처는 표시하지 않는다. @param {object} fact 근거. @returns {string} li HTML. */
-function renderEvidenceItem(fact) { return `<li>${escapeHtml(fact.text)}</li>`; }
+/** 추천 근거 문자열을 안전한 li로 바꾼다. @param {string} fact 근거 문장. @returns {string} li HTML. */
+function renderEvidenceItem(fact) { return `<li>${escapeHtml(fact)}</li>`; }
+
+/**
+ * 최종 검증 문장과 실제 평가 후보 최대 5곳의 비교 문장을 합친다.
+ * `ranked_candidates`만 사용하므로 전체 경로의 모든 주유소나 전역 최저가를 뜻하지 않는다.
+ * 후보별 제공 가격(KRW/L), 실제 자동차 도달거리(km), 우회거리(km)·시간(분), 안전거리 대비
+ * 잔여 여유(km)를 값이 있을 때 표시한다. 첫 후보에는 선택 이유와 정렬 기준을 명시한다.
+ * API 값은 변경하지 않으며 계산은 단위 변환과 차감뿐이고 외부 호출은 없다.
+ * @param {object} chat final_response와 judgement를 포함한 ChatResponse.
+ * @returns {string[]} 구체적인 추천 근거 문장 목록.
+ */
+function buildRecommendationEvidence(chat) {
+  const facts = (chat.final_response?.evidence || []).map((fact) => fact.text);
+  const recommendation = chat.judgement?.recommendation;
+  const safeRange = Number(chat.judgement?.safe_range_km);
+  const ranked = recommendation?.ranked_candidates || [];
+  const comparisons = ranked.slice(0, 5).map((candidate, index) => {
+    const station = candidate.station;
+    const name = station?.name || candidate.station_id;
+    const price = station?.price_krw_per_l == null ? "가격 미확인" : `${formatNumber(station.price_krw_per_l, 0)}원/L`;
+    const reachKm = candidate.reach_distance_m == null ? null : candidate.reach_distance_m / 1000;
+    const detourKm = candidate.detour_distance_m == null ? null : candidate.detour_distance_m / 1000;
+    const detourMin = candidate.detour_duration_s == null ? null : candidate.detour_duration_s / 60;
+    const margin = Number.isFinite(safeRange) && reachKm != null ? safeRange - reachKm : null;
+    const costs = [
+      `가격 ${price}`,
+      reachKm == null ? "도달거리 미확인" : `실제 도달 ${formatNumber(reachKm)}km`,
+      margin == null ? "안전 여유 미확인" : `안전거리 내 여유 ${formatNumber(margin)}km`,
+      detourKm == null ? "우회거리 미확인" : `추가 ${formatNumber(detourKm)}km`,
+      detourMin == null ? "우회시간 미확인" : `추가 ${formatNumber(detourMin)}분`,
+    ];
+    const priority = recommendation.sort_by === "detour_time" ? "우회시간" : "가격";
+    const reason = index === 0 ? ` — 안전·유종·우회 조건을 통과한 후보 중 ${priority} 우선 정렬 1위라 선택` : "";
+    return `평가 후보 ${index + 1}위 ${name}: ${costs.join(", ")}${reason}`;
+  });
+  return comparisons.length ? [...comparisons, ...facts] : facts;
+}
 
 /**
  * 대화 form을 `/api/chat`에 보내고 session ID를 후속 요청용 localStorage에 보관한다.
@@ -640,19 +715,38 @@ function buildLocationFragment(side) {
 
 /**
  * selector 값을 기존 `/api/chat`이 처리할 완전한 추천 요청 문장으로 조합한다.
- * 출발지·목적지, 유종, 계기판 주행 가능 거리(km), 안전 여유(km)가 필수이고 추가
- * 요청은 선택이다. 거리들은 유한수이며 `remaining > 0`, `0 <= reserve < remaining`
- * 규칙을 적용한다. DOM을 읽기만 하며 검증 실패는 Error, 성공은 문자열이다.
+ * 출발지·목적지, 유종, 계기판 주행 가능 거리(km), 안전 여유 방식이 필수이고 추가 요청은
+ * 선택이다. 적용 방식은 사용자가 입력한 km를, 미적용 방식은 사용자가 명시적으로 고른 0km와
+ * 가격 우선 문장을 사용한다. `remaining > 0`, `0 <= reserve < remaining`을 검증하며 DOM을
+ * 읽기만 한다. 검증 실패는 Error, 성공은 문자열이다.
  * @returns {string} ChatRequest.message에 넣을 구조화된 한국어 문장.
  * @throws {Error} 필수 선택 또는 거리 범위가 잘못된 경우.
  */
 function buildStructuredRequest() {
-  const remaining = Number(elements.remainingRange.value), reserve = Number(elements.reserveRange.value);
+  const remaining = Number(elements.remainingRange.value);
+  const reserveDisabled = elements.reserveMode.value === "none";
+  const reserve = reserveDisabled ? 0 : Number(elements.reserveRange.value);
   if (!Number.isFinite(remaining) || remaining <= 0) throw new Error("주행 가능 거리는 0보다 크게 입력하세요.");
   if (!Number.isFinite(reserve) || reserve < 0 || reserve >= remaining) throw new Error("안전 여유는 0 이상이며 주행 가능 거리보다 작아야 합니다.");
   const fuel = elements.fuelType.value === "diesel" ? "경유" : "휘발유";
   const extra = elements.messageInput.value.trim();
-  return `${buildLocationFragment("origin")}. ${buildLocationFragment("destination")}. 유종은 ${fuel}, 계기판 주행 가능 거리는 ${remaining}km, 안전 여유는 ${reserve}km다.${extra ? ` 추가 요청: ${extra}` : ""}`;
+  const reservePolicy = reserveDisabled ? "사용자가 안전 여유를 적용하지 않기로 선택했으므로 안전 여유는 명시적으로 0km이며, 실제 평가한 도달 가능 후보 중 가격을 우선 비교해줘." : `안전 여유는 ${reserve}km다.`;
+  return `${buildLocationFragment("origin")}. ${buildLocationFragment("destination")}. 유종은 ${fuel}, 계기판 주행 가능 거리는 ${remaining}km, ${reservePolicy}${extra ? ` 추가 요청: ${extra}` : ""}`;
+}
+
+/**
+ * 안전 여유 방식에 따라 거리 입력의 필수·활성 상태와 표시값을 동기화한다.
+ * reserveMode change, 초기화, 페이지 시작 때 호출한다. `none`이면 사용자가 명시적으로
+ * 미적용한 것이므로 reserveRange를 비우고 disabled 처리하며 요청 조합에서 0km를 사용한다.
+ * `apply`로 돌아오면 입력을 활성화하고 값을 임의 복원하지 않는다. DOM만 변경하고 API·DB
+ * 부작용은 없으며 반환값도 없다.
+ * @returns {void}
+ */
+function updateReserveMode() {
+  const disabled = elements.reserveMode.value === "none";
+  elements.reserveRange.disabled = disabled;
+  elements.reserveRange.required = !disabled;
+  if (disabled) elements.reserveRange.value = "";
 }
 
 /**
@@ -913,11 +1007,11 @@ async function deletePlan(plan) {
 function resetChat() {
   state.sessionId = null; state.latestChat = null; window.localStorage.removeItem("fuelroute.session_id");
   state.activeExecutionId = null; setExecutionState("idle", "대기 중");
-  elements.chatForm.reset(); populateProvinceSelectors(); elements.requestChip.textContent = "새 요청"; elements.savePanel.hidden = true;
+  elements.chatForm.reset(); populateProvinceSelectors(); updateReserveMode(); elements.requestChip.textContent = "새 요청"; elements.savePanel.hidden = true;
   elements.planMemo.value = ""; elements.planStartTime.value = ""; elements.planEndTime.value = "";
   elements.recommendation.className = "recommendation empty";
   elements.recommendation.innerHTML = '<div class="route-visual" aria-hidden="true"><svg viewBox="0 0 460 190" preserveAspectRatio="none"><path class="route-base" d="M18 152 C98 152 95 92 172 92 S255 36 334 43 S390 112 442 77"/><path class="route-active" d="M18 152 C98 152 95 92 172 92 S255 36 334 43"/><circle class="route-start" cx="18" cy="152" r="7"/><circle class="route-stop" cx="334" cy="43" r="16"/></svg><span>요청을 입력하면 안전하게 도달 가능한 추천 지점을 표시합니다.</span></div>';
-  renderEvidence([]); elements.originProvince.focus();
+  renderEvidence(null); elements.originProvince.focus();
 }
 
 /** 새 요청 click을 resetChat에 전달한다. @returns {void} */
@@ -987,6 +1081,8 @@ function closeEditDialog() { elements.editDialog.close(); }
  */
 function initialize() {
   populateProvinceSelectors();
+  updateReserveMode();
+  elements.reserveMode.addEventListener("change", updateReserveMode);
   for (const side of ["origin", "destination"]) {
     const fields = locationElements(side);
     fields.province.addEventListener("change", () => updateDistrictOptions(side));

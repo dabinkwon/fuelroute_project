@@ -38,6 +38,7 @@ def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
         'id="destinationCandidate"',
         'id="fuelType"',
         'id="remainingRange"',
+        'id="reserveMode"',
         'id="reserveRange"',
         'for="messageInput"',
         'aria-live="polite"',
@@ -65,6 +66,9 @@ def test_frontend_calls_chat_and_full_plan_crud() -> None:
     assert 'if (chat.status === "recommended") elements.messageInput.value = "";' in script
     assert "REGION_HIERARCHY" in script and "buildStructuredRequest" in script
     assert "candidate.longitude" in script and "candidate.latitude" in script
+    assert "updateReserveMode" in script
+    assert 'elements.reserveMode.value === "none"' in script
+    assert "안전 여유를 적용하지 않기로 선택" in script
 
 
 def test_plans_and_evidence_are_dialogs_outside_dashboard() -> None:
@@ -93,6 +97,18 @@ def test_execution_modal_connects_ordered_log_detail_and_delete() -> None:
     assert 'setExecutionState("running", "Agent 실행 중")' in script
     assert "log_delivery_failures" in script
     assert "chat.elapsed_ms / 1000" in script
+    assert "groupExecutionEvents" in script and "event.request_id" in script
+    assert "ACTION_LABELS" in script and "후보별 실제 도달 거리" in script
+
+
+def test_recommendation_evidence_compares_up_to_five_ranked_candidates() -> None:
+    """추천 근거가 평가 후보 최대 5곳의 이름·가격·거리·안전·우회 비용을 구체화한다."""
+    script = frontend_text("app.js")
+    assert "buildRecommendationEvidence" in script
+    assert "ranked.slice(0, 5)" in script
+    for phrase in ["원/L", "실제 도달", "안전거리 내 여유", "우회시간 미확인"]:
+        assert phrase in script
+    assert "전체 경로의 모든 주유소나 전역 최저가를 뜻하지 않는다" in script
 
 
 def test_frontend_does_not_embed_secrets_or_external_api_keys() -> None:

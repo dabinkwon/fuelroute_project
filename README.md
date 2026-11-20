@@ -33,8 +33,10 @@
 | 22. F3016 계획 수정·삭제 | revision 기반 핵심값 수정, 재검증 상태, 선택 삭제 | 전체424개·동시 수정/충돌 재판정/명시 시각 삭제 검증. [CRUD 기록](docs/DEVELOPMENT.md#f3016-plan-update-delete) | `4392797` |
 | 23. F3017 Backend API | 대화 Agent·Memory·로그 연결과 계획 CRUD FastAPI/OpenAPI | 전체429개·HTTP 정상/오류/충돌/영속성/`/docs` 검증. [API 기록](docs/DEVELOPMENT.md#f3017-backend-api) | F3017 기능 커밋 |
 | 24. F3018 기능 UI | 단일 흐름 대시보드, 실제 추천 표시, 추천 채택과 계획 CRUD | 전체438개·실제 Chrome 추천→저장→수정→삭제 검증. [UI 기록](docs/DEVELOPMENT.md#f3018-dashboard) | `2e1ed64` |
-| 25. 계층형 주행 조건 입력 | 시·도→시·군·구→상세 장소 후보, 유종·주행 가능 거리·안전 여유 selector | 전체453개·API/정적/계층 경계 검사 통과. [기록](docs/DEVELOPMENT.md#location-selector) | 사용자 확인 전 |
-| 25. F3019 실행 과정 UI | 처리 상태, 최근 실행 목록, 순서형 단계·Tool·판정·재계획 타임라인, 로그 삭제 | 전체439개·실제 로그 51개 Chrome 렌더링. [상태 화면 기록](docs/DEVELOPMENT.md#f3019-execution-ui) | F3019 기능 커밋 |
+| 25. 계층형 주행 조건 입력 | 시·도→시·군·구→상세 장소 후보, 유종·주행 가능 거리·안전 여유 selector | 전체453개·API/정적/계층 경계 검사 통과. [기록](docs/DEVELOPMENT.md#location-selector) | `b0cb095` |
+| 26. F3019 실행 과정 UI | 처리 상태, 최근 실행 목록, 순서형 단계·Tool·판정·재계획 타임라인, 로그 삭제 | 전체439개·실제 로그 51개 Chrome 렌더링. [상태 화면 기록](docs/DEVELOPMENT.md#f3019-execution-ui) | F3019 기능 커밋 |
+| 27. 실행·추천 근거 구체화 | Tool 요청/결과 통합, 호출 목적 표시, 실제 평가 후보 최대 5곳 비용 비교 | 자동 테스트·정적 검사. [상세 기록](docs/DEVELOPMENT.md#execution-evidence-detail) | 사용자 확인 전 |
+| 28. 안전 여유 미적용 비교 | 사용자가 직접 선택한 0km 안전 여유와 실제 도달 후보 가격 우선 비교 | 자동 테스트·정적 검사. [상세 기록](docs/DEVELOPMENT.md#optional-reserve) | 사용자 확인 전 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 

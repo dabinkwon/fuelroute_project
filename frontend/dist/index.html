@@ -59,14 +59,14 @@
                   <label class="candidate-field" for="destinationCandidate">검색 후보<select id="destinationCandidate" disabled><option value="">상세 장소를 검색하면 표시됩니다</option></select></label>
                 </section>
               </div>
-              <div class="drive-selectors"><label>유종<select id="fuelType" required><option value="gasoline">휘발유</option><option value="diesel">경유</option></select></label><label>주행 가능 거리 <span>km</span><input id="remainingRange" type="number" min="0.1" max="3000" step="0.1" required placeholder="180"></label><label>안전 여유 <span>km</span><input id="reserveRange" type="number" min="0" max="2999.9" step="0.1" required placeholder="30"></label></div>
+              <div class="drive-selectors"><label>유종<select id="fuelType" required><option value="gasoline">휘발유</option><option value="diesel">경유</option></select></label><label>주행 가능 거리 <span>km</span><input id="remainingRange" type="number" min="0.1" max="3000" step="0.1" required placeholder="180"></label><label>안전 여유 방식<select id="reserveMode" required><option value="apply">안전 여유 적용</option><option value="none">적용하지 않고 가격 비교</option></select></label><label>안전 여유 <span>km</span><input id="reserveRange" type="number" min="0" max="2999.9" step="0.1" required placeholder="30"></label></div>
             </fieldset>
             <label for="messageInput">추가 요청 <span class="optional-label">선택</span></label>
             <div class="message-field">
               <textarea id="messageInput" name="message" rows="2" maxlength="3000" placeholder="예: 우회 15분 이내, 가격 우선으로 추천해줘."></textarea>
               <button class="submit-button" type="submit" id="submitButton"><span>추천 받기</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6z"/></svg></button>
             </div>
-            <p class="form-hint">상세 장소 검색은 선택입니다. 후보를 고르면 제공사 좌표를 요청에 포함해 같은 이름의 다른 장소와 혼동하지 않습니다.</p>
+            <p class="form-hint">상세 장소 검색은 선택입니다. 안전 여유 미적용은 0km를 명시해 실제 평가 후보 중 가격을 우선 비교하며 별도 안전 잔량을 보장하지 않습니다.</p>
           </form>
           <div class="recommendation empty" id="recommendation" aria-live="polite">
             <div class="route-visual" aria-hidden="true">

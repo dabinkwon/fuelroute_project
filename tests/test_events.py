@@ -6,7 +6,7 @@ import json
 import pytest
 from test_execution import TODAY, USER, extracted, proposal, run_plan, settings
 
-from fuelroute.agent.events import EventBus, ExecutionEventStream
+from fuelroute.agent.events import EventBus, ExecutionEventStream, public_result_size
 from fuelroute.agent.graph import execute_request, make_graph
 from fuelroute.agent.response import finalize_response
 from fuelroute.calculations.constraints import judge_execution
@@ -16,6 +16,14 @@ from fuelroute.schemas.events import ExecutionEvent
 from fuelroute.schemas.execution import PlanExecution
 from fuelroute.schemas.planning import PlanProposal, WorkPlan
 from fuelroute.schemas.response import FinalResponse, ResponseContext
+
+
+def test_public_result_size_counts_items_without_counting_detail_fields() -> None:
+    """이벤트 건수는 items 원소를 세고 단일 상세 dict의 필드 수를 건수로 오인하지 않는다."""
+    assert public_result_size({"items": [{"id": "A"}, {"id": "B"}]}) == 2
+    assert public_result_size({"station_id": "A", "name": "주유소", "price": 1500}) == 1
+    assert public_result_size([1, 2, 3]) == 3
+    assert public_result_size(None) == 0
 
 
 def test_graph_publishes_ordered_steps_tools_judgement_and_response() -> None:
