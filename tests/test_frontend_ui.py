@@ -40,6 +40,7 @@ def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
         'id="destinationNeighborhood"',
         'id="destinationCandidate"',
         'id="fuelType"',
+        'id="sortBy"',
         'id="remainingRange"',
         'id="priceOnlyMode"',
         'id="reserveRange"',
@@ -70,6 +71,8 @@ def test_frontend_calls_chat_and_full_plan_crud() -> None:
     assert 'if (chat.status === "recommended") elements.messageInput.value = "";' in script
     assert "REGION_HIERARCHY" in script and "updateNeighborhoodOptions" in script
     assert "buildStructuredRequest" in script and "fields.neighborhood.value" in script
+    assert 'elements.sortBy.value === "detour_time"' in script
+    assert "추천 기준은 ${sortBy}" in script
     assert "candidate.longitude" in script and "candidate.latitude" in script
     assert "updateReserveMode" in script
     assert "elements.priceOnlyMode.checked" in script

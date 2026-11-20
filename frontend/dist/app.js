@@ -50,7 +50,7 @@ const elements = Object.fromEntries([
   "executionDetailTitle", "executionDetailMeta", "executionTimeline",
   "originProvince", "originDistrict", "originNeighborhood", "originDetail", "originSearchButton", "originCandidate", "originDetails",
   "destinationProvince", "destinationDistrict", "destinationNeighborhood", "destinationDetail", "destinationSearchButton",
-  "destinationCandidate", "destinationDetails", "fuelType", "remainingRange", "priceOnlyMode", "reserveRange",
+  "destinationCandidate", "destinationDetails", "fuelType", "sortBy", "remainingRange", "priceOnlyMode", "reserveRange",
 ].map(mapElementById));
 
 /**
@@ -719,7 +719,7 @@ function buildLocationFragment(side) {
 
 /**
  * selector 값을 기존 `/api/chat`이 처리할 완전한 추천 요청 문장으로 조합한다.
- * 출발지·목적지, 유종, 계기판 주행 가능 거리(km), 안전 여유 방식이 필수이고 추가 요청은
+ * 출발지·목적지, 유종, 추천 기준, 계기판 주행 가능 거리(km), 안전 여유 방식이 필수이고 추가 요청은
  * 선택이다. 적용 방식은 사용자가 입력한 km를, 미적용 방식은 사용자가 명시적으로 고른 0km와
  * 가격 우선 문장을 사용한다. `remaining > 0`, `0 <= reserve < remaining`을 검증하며 DOM을
  * 읽기만 한다. 검증 실패는 Error, 성공은 문자열이다.
@@ -733,9 +733,10 @@ function buildStructuredRequest() {
   if (!Number.isFinite(remaining) || remaining <= 0) throw new Error("주행 가능 거리는 0보다 크게 입력하세요.");
   if (!Number.isFinite(reserve) || reserve < 0 || reserve >= remaining) throw new Error("안전 여유는 0 이상이며 주행 가능 거리보다 작아야 합니다.");
   const fuel = elements.fuelType.value === "diesel" ? "경유" : "휘발유";
+  const sortBy = elements.sortBy.value === "detour_time" ? "우회시간 우선" : "가격 우선";
   const extra = elements.messageInput.value.trim();
-  const reservePolicy = reserveDisabled ? "사용자가 안전 여유를 적용하지 않기로 선택했으므로 안전 여유는 명시적으로 0km이며, 실제 평가한 도달 가능 후보 중 가격을 우선 비교해줘." : `안전 여유는 ${reserve}km다.`;
-  return `${buildLocationFragment("origin")}. ${buildLocationFragment("destination")}. 유종은 ${fuel}, 계기판 주행 가능 거리는 ${remaining}km, ${reservePolicy}${extra ? ` 추가 요청: ${extra}` : ""}`;
+  const reservePolicy = reserveDisabled ? "사용자가 안전 여유를 적용하지 않기로 선택했으므로 안전 여유는 명시적으로 0km다." : `안전 여유는 ${reserve}km다.`;
+  return `${buildLocationFragment("origin")}. ${buildLocationFragment("destination")}. 유종은 ${fuel}, 추천 기준은 ${sortBy}, 계기판 주행 가능 거리는 ${remaining}km, ${reservePolicy}${extra ? ` 추가 요청: ${extra}` : ""}`;
 }
 
 /**
