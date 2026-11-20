@@ -33,8 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     route-spike는 연결 실험, recommend는 유한한 재계획과 추천, tool-schemas는 정적 계약
     출력이다. 예: doctor 또는 --help. 명령을 정의하는 과정에서 HTTP를 실행하지 않는다.
     analyze는 F3005 분석·필요한 위치 검색, plan은 준비된 입력의 F3006 계획까지 수행한다.
-    run은 조회·판정 후 필요할 때 최대2회 재계획하며 모델은 추가 호출하지 않는다.
-    세션ID를 지정하면 검증 조건·요약을 SQLite에 저장한다. 실행 로그·최종 문장은 후속이다.
+    run은 조회·판정 후 최대2회 재계획하고 마지막에 한국어 답변을 만든다. GMS 상한은
+    분석/계획/최종 문단 구성 각1회다. --text는 run 전용이며 답변만 표시한다. 세션ID를
+    지정하면 검증 조건·짧은 요약을 SQLite에 저장한다. 실행 로그 저장은 후속이다.
     """
     parser = argparse.ArgumentParser(description="FuelRoute 환경·API 독립 검증")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -45,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
         ("plan", "F3006 작업 순서 수립 (GMS 최대 2회, 실행 Tool 호출 없음)"),
         (
             "run",
-            "F3007~F3010 조회·제약 판정·재계획·선택 대화 맥락 (GMS 최대 2회와 데이터 API 호출)",
+            "F3007~F3011 추천·재계획·맥락·한국어 응답 (GMS 최대 3회와 데이터 API 호출)",
         ),
     ):
         command = commands.add_parser(name, help=help_text)
@@ -54,6 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--session-id", help="같은 대화에 재사용할 ID; 지정하면 검증 조건·요약을 SQLite에 저장"
         )
+        if name == "run":
+            command.add_argument(
+                "--text", action="store_true", help="JSON 대신 최종 한국어 답변 출력"
+            )
     gms = commands.add_parser("gms", help="GMS 텍스트·조건 추출·Tool 왕복 검증")
     gms.add_argument("--mode", choices=["text", "conditions", "tool"], default="text")
     nearby = commands.add_parser("opinet-nearby", help="KATEC 직접 입력으로 Opinet 인증 확인")
@@ -122,7 +127,8 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
     tool-schemas는 HTTP 없이 계약만 반환한다. 두 명령도 LLM이나 DB를 사용하지 않는다.
     analyze는 GMS1회·필요한 Local 검색, plan은 준비된 요청에 계획 GMS1회를 추가한다.
     run은 준비된 계획을 조회·판정·상한 있는 재계획에 연결하고 핵심 실패는 종료1이다. 계획 보류/
-    생략은 성공 데이터로 구분하고 재계획 종료 근거도 출력한다.
+    생략은 성공 데이터로 구분하고 재계획 종료 근거·answer/final_response를 반환한다.
+    최종 문단 구성에 GMS를 최대1회 더 사용하며 실패 시 검증한 문장으로 복구한다.
     --session-id가 있으면 설정의 SQLite에 조건/요약만 저장하고
     지정하지 않으면 DB를 만들지 않는다. 같은 세션의 경로/가격은 재조회하며 로그 파일은 없다.
     """
@@ -222,11 +228,13 @@ async def dispatch(args: argparse.Namespace, settings: Settings) -> ToolResult[d
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI 인자를 해석하고 키가 제거된 JSON 결과를 출력한 뒤 종료 코드를 반환한다.
+    """CLI 인자를 해석해 정제한 JSON 또는 한국어 답변을 출력하고 종료 코드를 반환한다.
 
     argv=None은 터미널 인자를, 명시적 목록은 테스트 입력을 사용한다. 성공은 0,
     API/설정/입력 실패는 1이다. 원본 값이 담긴 Pydantic 예외는 출력하지 않고
-    설정 오류는 CONFIG_ERROR로 알린다. 파일 저장은 없다. 예: gms --mode tool.
+    설정 오류는 CONFIG_ERROR로 알린다. run --text는 성공 시 data.answer, 실패 시 정제한
+    error.message만 출력한다. 기본 JSON 출력 계약은 같다. 직접 파일을 쓰지는 않지만
+    세션 옵션의 맥락 저장은 dispatch가 수행한다. 예: run --text --message '안녕'.
     """
     args = build_parser().parse_args(argv)
     try:
@@ -256,5 +264,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     provider="local", request_id="input", elapsed_ms=0, fetched_at=utc_now()
                 ),
             )
-    print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
+    if getattr(args, "text", False):
+        print(result.data["answer"] if result.ok else result.error.message)
+    else:
+        print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
     return 0 if result.ok else 1

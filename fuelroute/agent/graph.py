@@ -1,4 +1,4 @@
-"""함수 주입으로 구성한 F3005~F3010 분석·계획·판정·재계획·대화 맥락 그래프."""
+"""함수 주입으로 구성한 F3005~F3011 분석·추천·대화 맥락·최종 응답 그래프."""
 
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
@@ -11,10 +11,11 @@ from pydantic import ValidationError
 
 from fuelroute.agent.analysis import analyze_conditions, refresh_analysis
 from fuelroute.agent.execution import PlanExecutionSession, enrich_rest_area
-from fuelroute.agent.llm import llm_analyze, llm_plan
+from fuelroute.agent.llm import llm_analyze, llm_plan, llm_response_outline
 from fuelroute.agent.memory import merge_conditions, remember_turn
 from fuelroute.agent.planning import finalize_plan, prepare_plan
 from fuelroute.agent.replanning import replan_stop_reason, stop_replanning
+from fuelroute.agent.response import finalize_response
 from fuelroute.calculations.constraints import apply_judgement, judge_execution
 from fuelroute.clients.kakao_local import resolve_location
 from fuelroute.core.config import Settings
@@ -30,6 +31,13 @@ from fuelroute.schemas.locations import LocationMatchSet
 from fuelroute.schemas.memory import ConversationMemory, SessionKey
 from fuelroute.schemas.planning import PlanProposal, WorkPlan
 from fuelroute.schemas.replanning import ReplanOutcome, ReplanRound, ReplanState
+from fuelroute.schemas.response import (
+    ExplanationOutline,
+    FinalResponse,
+    Narrator,
+    ResponseContext,
+    ResponseFacts,
+)
 from fuelroute.storage.conversations import ConversationStore, SQLiteConversationStore
 
 Analyzer = Callable[[str], Awaitable[ExtractedRequest]]
@@ -50,10 +58,11 @@ Judge = Callable[[RequestAnalysis, WorkPlan, PlanExecution], TripJudgement]
 Enricher = Callable[[WorkPlan, PlanExecution], Awaitable[PlanExecution]]
 
 Replanner = Callable[[WorkPlan, PlanExecution, TripJudgement, int], Awaitable[ReplanOutcome]]
+Responder = Callable[[ResponseContext], Awaitable[FinalResponse]]
 
 
 class State(TypedDict, total=False):
-    """원문·검증 조건·짧은 대화 맥락·계획·실행·판정·재계획 근거. 이벤트 저장은 후속이다."""
+    """원문·조건·대화 맥락·계획·실행·판정·재계획·최종 답변. 이벤트 저장은 후속이다."""
 
     user: str
     analysis: dict
@@ -64,6 +73,8 @@ class State(TypedDict, total=False):
     replanning: dict
     session_id: str | None
     memory: dict
+    answer: str
+    final_response: dict
 
 
 def make_graph(
@@ -77,6 +88,7 @@ def make_graph(
     enricher: Enricher | None = None,
     replanner: Replanner | None = None,
     memory: ConversationMemory | None = None,
+    responder: Responder | None = None,
 ) -> CompiledStateGraph:
     """분석·선택 위치 검색·선택 계획 함수를 주입받아 실행 전 그래프를 만든다.
 
@@ -92,11 +104,16 @@ def make_graph(
     executor를 쓰려면 llm_plan_fn도 필요하다. 구성 오류는ValueError이며 실행 실패는
     State.execution에 보존한다. judge가 있으면 실행 뒤 순수 제약 판정과 선택 보조 조회를
     연결한다. judge에는executor, enricher에는judge가 필요하다. memory는 같은 ID의 검증 조건·요약이며
-    병합 노드에서만 읽는다. DB 저장은 상위 진입점이 담당하고 이벤트·최종 문장은 후속이다.
+    병합 노드에서만 읽는다. DB 저장은 상위 진입점이 담당하고 이벤트 저장은 후속이다.
     추가 판정은 API/LLM을 사용하지 않는다. replanner에는judge가
     필요하며 judge→replan→judge로 추가 회차를최대2번 실행한다. 최초실행기는반복하지
     않고 주입 재계획기만 한 회차씩 호출한다. 인증/입력/평가/회차 상한은호출전에검사한다.
     State.replanning에회차·종료사유·입력안내를남기며 최종판정뒤에만enrich한다.
+    responder가 있으면 판정·보조 연결 뒤 respond에서 ResponseContext를 전달하고
+    State.answer/final_response를 보관한다. responder에는 judge가 필요하며 구성 오류는
+    ValueError다. 생략하면 기존 단계별 그래프를 유지한다. 최종 모델 호출/복구는 주입
+    설명기의 책임이고 그래프가 데이터를 다시 조회하지 않는다. 예: 입력 보완도 respond를
+    거치지만 기본 설명기는 추가 모델을 호출하지 않는다.
     """
 
     async def analyze(state: State) -> dict:
@@ -134,6 +151,9 @@ def make_graph(
         raise ValueError("판정에는 실행기, 보조 연결에는 판정 함수가 필요합니다.")
     if replanner is not None and judge is None:
         raise ValueError("재계획에는 제약 판정 함수가 필요합니다.")
+    if responder is not None and judge is None:
+        raise ValueError("최종 응답에는 제약 판정 함수가 필요합니다.")
+    response_end = "respond" if responder is not None else END
     graph = StateGraph(State)
     graph.add_node("analyze", analyze)
     graph.add_edge(START, "analyze")
@@ -255,7 +275,7 @@ def make_graph(
 
         graph.add_node("judge", judge_plan)
         graph.add_edge(
-            "judge", "replan" if replanner is not None else ("enrich" if enricher else END)
+            "judge", "replan" if replanner is not None else ("enrich" if enricher else response_end)
         )
     if replanner is not None:
 
@@ -321,10 +341,10 @@ def make_graph(
             """
             if state["replanning"]["stop_reason"] is None:
                 return "judge"
-            return "enrich" if enricher is not None else END
+            return "enrich" if enricher is not None else response_end
 
         graph.add_node("replan", replan)
-        finish_replan = "enrich" if enricher is not None else END
+        finish_replan = "enrich" if enricher is not None else response_end
         graph.add_conditional_edges(
             "replan", after_replan, {"judge": "judge", finish_replan: finish_replan}
         )
@@ -361,7 +381,34 @@ def make_graph(
             return values
 
         graph.add_node("enrich", enrich_plan)
-        graph.add_edge("enrich", END)
+        graph.add_edge("enrich", response_end)
+    if responder is not None:
+
+        async def respond(state: State) -> dict:
+            """최종 판정/보조 결과를 설명기로 전달하고 한국어 답변·출처를 State에 보관한다.
+
+            state의 현재 분석/계획/실행/판정/재계획과 선택 맥락만 사용한다. responder는
+            검증 사실의 문단 구성·렌더링을 담당하며 계산/추천을 바꾸지 않는다. 반환은
+            answer/final_response 상태 갱신이고 스키마 불일치는 INVALID_RESPONSE다.
+            직접 DB/데이터 API/재계획은 없고 모델 실패 복구는 설명기 책임이다.
+            예: 보조 조회 실패도 반영한 뒤 마지막에 한 번만 실행한다.
+            """
+            context = ResponseContext(
+                analysis=RequestAnalysis.model_validate(state["analysis"]),
+                plan=WorkPlan.model_validate(state["plan"]),
+                execution=PlanExecution.model_validate(state["execution"]),
+                judgement=TripJudgement.model_validate(state["judgement"]),
+                replanning=ReplanState.model_validate(state["replanning"]),
+                memory=memory,
+            )
+            try:
+                response = FinalResponse.model_validate(await responder(context))
+            except ValidationError as exc:
+                raise ProbeFailure("INVALID_RESPONSE", "최종 응답 출력 계약을 확인하세요.") from exc
+            return {"answer": response.answer, "final_response": response.model_dump(mode="json")}
+
+        graph.add_node("respond", respond)
+        graph.add_edge("respond", END)
     if location_resolver is None:
         graph.add_edge("analyze", finish)
     else:
@@ -519,27 +566,32 @@ async def _run_request(
     replanner: Replanner | None = None,
     session_id: str | None = None,
     memory_store: ConversationStore | None = None,
+    narrator: Narrator | None = None,
 ) -> ToolResult[dict]:
     """분석/계획/실행 진입점의 요청별 그래프·메모리·클라이언트 수명을 관리한다.
 
     원문1~5000자·선택 date를 검사한다. include_plan은 계획기를, include_execution은 최초
-    실행·판정·최대2회 재계획·마지막 보조를 활성화한다. 세션 ID가 있을 때만 SQLite 또는
+    실행·판정·최대2회 재계획·마지막 보조·최종 응답을 활성화한다. 세션 ID가 있을 때만 SQLite 또는
     주입 저장소를 읽고 정제한 맥락을 분석 모델·병합 노드에 전달한다. ID 없는 단독 요청은
     DB에 접근하지 않는다. 그래프 완료 후 조건·짧은 요약만 CAS로 저장한다. 실제 Tool
     캐시·경로·가격은 다음 발언에 저장/재사용하지 않고 항상 현재 요청에서 조회한다.
     주입 executor에는 명시 replanner만 연결한다. 주입 HTTP client는 닫지 않고 내부 생성
     client만 닫는다. 핵심 조회 실패는 data=None/error이며 그래프가 반환한 확인 조건은
     저장한다. 분석/계획 실패는 이전 메모리를 유지한다. 메모리 손상/충돌은 전용 공통
-    오류이고 프로그래밍 오류는 숨기지 않는다. 로그·계획 DB CRUD·최종 문장·자동 재시도는
-    없다. 예:같은 세션이라도 새 요청의 경로·주유 가격은 이전 Tool 응답을 재사용하지 않는다.
+    오류이고 프로그래밍 오류는 숨기지 않는다. narrator가 있으면 검증 사실의 문단 구성을
+    주입한다. 없으면 생산 분석 경로는 GMS를 최대1회 더 사용하고, 분석기 주입 경로는
+    암묵적 GMS 호출 없이 템플릿을 사용한다. 최종 모델의 예상 오류는 같은 사실로 복구하며
+    추천·비용·원래 핵심 실패 계약을 바꾸지 않는다. 로그·계획 CRUD·자동 재시도는 없다.
+    예: 같은 세션이어도 현재 가격은 재조회하고 답변 문장 전체는 맥락 DB에 저장하지 않는다.
     """
 
     async def operation() -> dict:
         """검증한 원문·기준일로 요청별 그래프를 실행하고 분석/계획 JSON을 만든다.
 
         분석/계획 함수 주입과 자동 Local 클라이언트 소유권을 정한다. 반환에는 실제 데이터와
-        구성한 노드·의존성 모드를 담으며 노드 목록은 실행 이력이 아니다. 누락/외부 오류는
-        바깥 run_probe에서 정제하고 전역 상태·DB·로그·재시도는 만들지 않는다.
+        구성한 노드·의존성 모드를 담으며 노드 목록/모드는 실행 이력이 아니다. 실행 요청은
+        answer/final_response도 포함한다. 세션이 있으면 그래프 후 검증 조건/요약만 저장한다.
+        누락/외부 오류는 바깥 run_probe에서 정제하며 전역 상태·로그·재시도는 만들지 않는다.
         """
         query = AnalysisInput(user=user, reference_date=reference_date)
         today = query.reference_date or datetime.now(timezone(timedelta(hours=9))).date()
@@ -566,6 +618,14 @@ async def _run_request(
         async def gms_plan(analysis: RequestAnalysis) -> PlanProposal:
             """현재 요청의 정규화 분석을 GMS 계획기에 전달한다. 실행 Tool은 호출하지 않는다."""
             return await llm_plan(analysis, settings)
+
+        async def gms_narrate(facts: ResponseFacts) -> ExplanationOutline:
+            """현재 설정으로 검증 사실의 최종 문단을 구성한다. 데이터 조회·DB·계산은 없다.
+
+            facts는 ResponseFacts이고 반환은 사실 ID만 묶은 ExplanationOutline이다.
+            GMS 최대1회이며 예상 오류는 상위 설명기가 fallback으로 처리한다.
+            """
+            return await llm_response_outline(facts, settings)
 
         async def execute(active_client: httpx.AsyncClient | None) -> tuple[State, list[str]]:
             """현재 분석/선택 계획기를 연결한 그래프를 실행하고 State와 구성 노드를 반환한다.
@@ -596,6 +656,18 @@ async def _run_request(
                 """확정 후보의 보조정보를 연결한다. 같은 ID의 과거 보조 호출은 재사용한다."""
                 return await enrich_rest_area(execution, plan.request, settings, active_client)
 
+            async def make_response(context: ResponseContext) -> FinalResponse:
+                """현재 최종 상태의 설명기를 선택하고 근거·질문이 있는 FinalResponse를 반환한다.
+
+                context는 보조 연결까지 끝난 ResponseContext다. 명시 narrator는 주입 함수,
+                생산 경로는 GMS, 분석기만 주입한 검증은 템플릿이다. 추천·근거는 코드가
+                결정하고 예상 모델 오류는 같은 사실로 복구한다. DB/데이터 API는 추가하지
+                않는다. 예: 분석기만 주입한 오프라인 테스트가 GMS를 임의 호출하지 않는다.
+                """
+                return await finalize_response(
+                    context, narrator=narrator or (gms_narrate if analyzer is None else None)
+                )
+
             graph = make_graph(
                 analyzer or gms_analyze,
                 today,
@@ -608,6 +680,7 @@ async def _run_request(
                 if include_execution and (executor is None or replanner is not None)
                 else None,
                 memory=previous,
+                responder=make_response if include_execution else None,
             )
             output = await graph.ainvoke({"user": query.user})
             return output, [name for name in graph.get_graph().nodes if not name.startswith("__")]
@@ -675,6 +748,11 @@ async def _run_request(
                 replanner_mode="injected"
                 if replanner
                 else ("disabled" if executor else "bounded_tools"),
+                answer=output["answer"],
+                final_response=output["final_response"],
+                narrator_mode="injected"
+                if narrator
+                else ("gms" if analyzer is None else "template"),
             )
         return data
 
@@ -701,22 +779,29 @@ async def execute_request(
     replanner: Replanner | None = None,
     session_id: str | None = None,
     memory_store: ConversationStore | None = None,
+    narrator: Narrator | None = None,
 ) -> ToolResult[dict]:
-    """조건 맥락을 이어 분석·계획·실제 조회·판정·최대2회 재계획과 보조정보를 반환한다.
+    """조건 맥락을 이어 분석·추천·보조 조회 후 근거가 있는 한국어 최종 응답을 반환한다.
 
-    user는1~5000자, 기준일은 선택 date이며 기본KST다. GMS는 분석1회+준비된 추천의 계획1회,
+    user는1~5000자, 기준일은 선택 date이며 기본KST다. GMS 상한은 분석1회+준비된 추천의
+    계획1회+추천/미발견의 최종 문단 구성1회다. 재계획은 모델을 추가 호출하지 않는다.
     Local은 최대4회다. 재계획은 미평가 후보 우선이며 기본 회차3/전체9곳·추가2회에서 멈춘다.
     안전 여유·유종·우회/시간 상한은 완화하지 않는다. 전체 조회 상한은Opinet14/Mobility19,
     휴게소1논리조회/최대10HTTP다. 입력 부족·핵심 인증/한도는 추가 회차를 하지 않는다.
-    data는analysis/plan/results/execution/judgement/replanning과 의존성 모드를 포함한다.
+    data는 analysis/plan/results/execution/judgement/replanning, 한국어 answer,
+    근거·질문·주의·출처 ID·생성 모드가 있는 final_response와 의존성 모드를 포함한다.
     session_id가 있으면 같은 세션의 검증 조건과 요약만 이어받고 data.session에 ID/버전/
     상속 필드를 준다. 기본 SQLite는 settings.database_path, 주입은 memory_store다.
     현재 발언의 경로·가격은 새로 조회하고 이전 요청의 Tool 캐시를 다음 발언에 쓰지 않는다.
-    모델/resolver/executor/client/replanner는 오프라인 주입용이며 주입 executor의 재계획은
+    모델/resolver/executor/client/replanner/narrator는 오프라인 주입용이다. narrator는
+    ResponseFacts를 받아 사실 ID만 묶은 ExplanationOutline을 비동기로 반환한다. 분석기를
+    주입하고 narrator를 생략하면 템플릿이며 암묵적 GMS 호출은 없다. 주입 executor의 재계획은
     replanner를 함께 명시해야 한다. 주입 client는 닫지 않는다. 핵심 오류는공통data=None,
     보조 실패는 확정 추천을 유지한다. DB 맥락 실패/충돌도 공통 코드로 알리며 이벤트·계획
-    CRUD·최종 문장·동일 실패 재시도는 후속이다. 예:두 번째 '우회10분'은 같은 ID의 위치·
-    km 조건을 유지해 현재 데이터로 다시 추천한다.
+    CRUD·동일 실패 재시도는 후속이다. 인사/입력 보완/핵심 실패는 최종 모델을 생략하고,
+    최종 모델의 형식/통신 오류는 검증 사실의 fallback으로 복구한다. 숫자·판단·추천은
+    모델이 변경하지 못한다. 예: 같은 ID의 '우회10분'은 위치·km 조건을 유지해 새로 조회하고
+    현재 근거를 설명하며, 최종 모델 TIMEOUT도 이미 확인한 추천을 지우지 않는다.
     """
     return await _run_request(
         user,
@@ -732,4 +817,5 @@ async def execute_request(
         replanner=replanner,
         session_id=session_id,
         memory_store=memory_store,
+        narrator=narrator,
     )

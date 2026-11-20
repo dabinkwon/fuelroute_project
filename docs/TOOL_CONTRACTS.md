@@ -34,7 +34,7 @@ python -m fuelroute tool-schemas
 
 LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하고 실행 wrapper가 Pydantic으로 같은 입력을 검사한다. `ainvoke(dict)`와 객체형 `ToolCall.args`를 사용한다. JSON 객체 대신 문자열을 넘기면 SDK가 wrapper 실행 전에 거절할 수 있다. `ToolMessage`를 받은 실행기는 본문의 `ok`를 확인해야 한다. 등록만으로 HTTP·LLM·DB 호출은 없고, `AsyncClient`의 종료는 호출자 책임이다. [LangChain 공식 Tool 문서](https://docs.langchain.com/oss/python/langchain/tools)
 
-실제 응답 기반 추천 연결과 기존 비용의 로컬 재판정은 [추천 검증 기록](verification/2026-11-18-recommendation.json)에 구분했다. 재계획·캐시·오류 분기는 모의 응답으로 검증했으며 F3009까지 조회·판정·재계획 그래프를 연결했고 조건 맥락은 F3010에서 연결했고 최종 문장·HTTP API·화면은 후속이다.
+실제 응답 기반 추천 연결과 기존 비용의 로컬 재판정은 [추천 검증 기록](verification/2026-11-18-recommendation.json)에 구분했다. 재계획·캐시·오류 분기는 모의 응답으로 검증했으며 F3009까지 조회·판정·재계획, F3010 조건 맥락, F3011 최종 응답을 연결했다. HTTP API·화면은 후속이다.
 
 ## F3007의 계획 실행 연결
 
@@ -42,7 +42,7 @@ LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하�
 
 `python -m fuelroute run --message ...`는 분석·계획 뒤 조회 네 종류를 실제 호출한다. 기본 경로의 검색용 기하는 `ToolRegistry.route_context(include_path=True)`가 같은 HTTP 응답에서 비용과 분리해 실행기 안에 보관한다. 등록 경로 Tool의 공개 출력 스키마는 그대로 `DrivingRoute`이며 원본 경로를 모델/공개 결과로 보내지 않는다.
 
-실행 결과의 `data.results`는 작업별 타입을 유지하며 `data.execution.calls`에 공개 입력과 공통 결과를 보관한다. 후보별 실패는 다른 후보와 격리하고 핵심 오류는 중단한다. 보조 조회 실패는 경고와 함께 추천을 유지한다. 호출 집계는 논리 Tool 시도 수이므로 실제 HTTP 요청 수와 구분한다. 한 회차 실행의 제약 판정·정렬은 기존 일반 코드 함수를 재사용하며 그래프 재계획은 아래 F3009 계약을 따르고 최종 설명·이벤트/저장·HTTP/화면은 후속이다. [F3007 실호출](verification/2026-11-19-tool-execution.json)을 참고한다.
+실행 결과의 `data.results`는 작업별 타입을 유지하며 `data.execution.calls`에 공개 입력과 공통 결과를 보관한다. 후보별 실패는 다른 후보와 격리하고 핵심 오류는 중단한다. 보조 조회 실패는 경고와 함께 추천을 유지한다. 호출 집계는 논리 Tool 시도 수이므로 실제 HTTP 요청 수와 구분한다. 한 회차 실행의 제약 판정·정렬은 기존 일반 코드 함수를 재사용하며 그래프 재계획은 아래 F3009 계약을 따른다. F3011 설명기는 새 Tool을 등록하지 않고 검증 문장·출처만 조합한다. 이벤트/저장·HTTP/화면은 후속이다. [F3007 실호출](verification/2026-11-19-tool-execution.json)을 참고한다.
 
 
 ## F3009의 재계획 연결
@@ -55,3 +55,7 @@ LangChain `StructuredTool`에는 JSON schema와 상세 description을 전달하�
 ## F3010의 조건 맥락
 
 Memory는 새 Tool이 아니며 기존 일곱 공개 Tool의 설명/스키마는 바꾸지 않는다. 세션에는 검증 조건과 짧은 요청/응답 요약만 저장하고 후보/상세/경로 Tool 응답이나 실행 캐시는 저장하지 않는다. 후속 run은 병합한 조건으로 현재 경로·가격을 조회한다. `analysis.field_sources`와 `data.session`으로 조건의 출처/세션 버전을 구분한다. 같은 요청 안의 F3009 캐시와 다른 요청 사이의 F3010 조건 맥락을 구분한다. [검증 기록](DEVELOPMENT.md#f3010-memory)을 따른다.
+
+## F3011의 최종 응답
+
+최종 응답 생성도 새 Tool이 아니다. `data.final_response.evidence`가 일반 코드로 검증한 가격·경로·판정 문장과 `request_id` 출처를 보존한다. GMS에는 사실 ID·분류·정제한 본문만 전달하며 모든 ID를 정확히 한 번 묶는 문단 구조만 받는다. 기존 일곱 공개 Tool의 직렬화 스키마는 변경하지 않았다. [검증 기록](DEVELOPMENT.md#f3011-response)을 따른다.

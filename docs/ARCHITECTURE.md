@@ -686,7 +686,7 @@ F3007 당시 그래프는 `START→analyze→resolve_locations→build_plan→ex
 
 `execute_request`의 모델/실행기 주입을 유지한다. 사용자 주입 executor만 있으면 임의 재계획은 비활성화하며 같은 소유권의 replanner를 함께 명시해야 반복한다. 생산 경로는 내부 Session.start/replan을 연결한다. 그래프 자체도 주입 콜백 전에 횟수/평가 상한을 검사하고 누적 결과·진행 없는 출력을 거절한다. 보조 조회는 마지막 확정 후보에만 최대1회이며 실패가 추천을 지우지 않는다.
 
-기본 전체 호출 상한은 GMS2·Local4·Opinet14·Mobility19·휴게소1논리조회/최대10HTTP다. [검증 기록](DEVELOPMENT.md#f3009-replanning)과 [실제 상한 종료](verification/2026-11-19-graph-replanning.json)를 따른다. 조건 맥락은 F3010 계약을 따르고 최종 문장·이벤트/로그 저장은 후속이다.
+F3011을 포함한 기본 전체 호출 상한은 GMS3·Local4·Opinet14·Mobility19·휴게소1논리조회/최대10HTTP다. GMS는 분석1+계획1+최종 문단1이며 재계획에는 추가되지 않는다. [검증 기록](DEVELOPMENT.md#f3009-replanning)과 [실제 상한 종료](verification/2026-11-19-graph-replanning.json)를 따른다. 조건 맥락은 F3010, 최종 문장은 아래 F3011 계약을 따르며 이벤트/로그 저장은 후속이다.
 
 ### F3010 세션 맥락 계약
 
@@ -703,6 +703,14 @@ F3007 당시 그래프는 `START→analyze→resolve_locations→build_plan→ex
 손상/파일 오류는MEMORY_ERROR, 동시 변경은MEMORY_CONFLICT다. 모르는 필드/다른ID/버전 불일치는 모델 호출 전에 거절하며 자동 덮어쓰기·재시도는 없다. 분석/계획 모델 실패는 저장본을 유지하고 그래프가 종료한 핵심 Tool 실패는 확인한 입력과 짧은 오류 코드를 저장한다. 이때 외부 응답의 기존 공통error/data=null 계약은 유지한다. 이는 로컬 세션 분리이며 HTTP 사용자 인증은 후속 서버 범위다.
 
 실제 GMS4회로 같은 세션3턴의 부분 변경과 다른 세션 분리를 확인했고 데이터 API는0회였다. 두 턴의 전체 추천/가격 재조회·모든 분기는 모의 전송으로 구분했다. [개발 기록](DEVELOPMENT.md#f3010-memory), [실제 분석·SQLite 근거](verification/2026-11-19-conversation-memory.json)를 따른다.
+
+### F3011 최종 응답 계약
+
+`agent/response.py`는 마지막 `ResponseContext`에서 가격·도달·안전거리·우회 비용·정렬·주요 제외·휴게소 보조정보·평가 범위를 한국어 `ResponseFact`로 만든다. 추천/미발견은 `judge_execution`으로 원본 정규화 비용을 다시 판정해 State와 불일치하면 `INVALID_RESPONSE`로 거절한다. 가격 기준시각과 Tool 처리 완료시각을 구분하고, 시간대 없는 시각은 KST로 추측하지 않는다. 휴게소 시설의 `None`은 미확인, 동일 시설/방향은 `unverified`, 위치 거리는 도로 거리가 아닌 직선거리로 표시한다.
+
+`agent.llm.llm_response_outline`에는 사실 ID·분류·정제된 본문만 전달한다. GMS는 모든 ID를 정확히 한 번 포함하는 문단 구조만 반환하고 자유 본문·숫자·추천을 만들지 않는다. `render_response`가 누락·중복·새 ID와 결과 문장 선두 여부를 검사하고 코드 생성 문장만 연결한다. 추천/미발견의 설명 모델 오류는 동일 사실의 `fallback`으로 복구하며 입력 보완·인사·핵심 오류는 최종 모델을 호출하지 않는다. 프로그래밍 오류와 선행 판정 모순은 fallback으로 숨기지 않는다.
+
+그래프는 `...→judge/replan→enrich→respond→END`로 끝난다. `State.answer/final_response`와 외부 결과의 `data.answer/final_response`에 답변·근거·질문·주의·추천 ID·평가 범위·출처 request ID·생성 모드를 반환한다. `run --text`는 답변만 표시하고 기본 JSON 계약은 유지한다. 전체 GMS 상한은 분석1+준비된 계획1+최종 문단1이며 재계획·코드 판정·템플릿 응답은 모델을 추가 호출하지 않는다. [개발 기록](DEVELOPMENT.md#f3011-response), [실호출 기록](verification/2026-11-19-final-response.json)을 따른다.
 
 ## 전체 Agent 연결 설계
 
