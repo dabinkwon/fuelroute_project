@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from fuelroute.core.errors import ProbeFailure
 from fuelroute.schemas.analysis import TripConditions
 from fuelroute.schemas.coordinates import Coordinate
 from fuelroute.schemas.plans import (
@@ -14,6 +15,7 @@ from fuelroute.schemas.plans import (
     PlanInputSnapshot,
     PlanLocation,
     PlanRecommendationSnapshot,
+    PlanUpdate,
 )
 from fuelroute.schemas.response import EvidenceSource, ResponseFact
 from fuelroute.schemas.stations import RestAreaInfo, StationDetails
@@ -176,3 +178,88 @@ def test_list_filters_trip_date_and_missing_detail_is_none(tmp_path: Path) -> No
     asyncio.run(store.create(create_command()))
     assert asyncio.run(store.list(date(2026, 11, 19))) == []
     assert asyncio.run(store.get("missing-plan")) is None
+
+
+def test_update_conditions_marks_revalidation_and_preserves_recommendation(tmp_path: Path) -> None:
+    """주행 조건 변경은 revision을 올리고 기존 추천을 재검증 필요 상태로 보존한다."""
+    store = SQLitePlanStore(tmp_path / "plans.sqlite3")
+    created = asyncio.run(store.create(create_command())).plan
+    changed_conditions = created.input_snapshot.conditions.model_copy(
+        update={"remaining_range_km": 160.0}
+    )
+    changed_input = created.input_snapshot.model_copy(update={"conditions": changed_conditions})
+    updated = asyncio.run(
+        store.update(
+            created.plan_id,
+            PlanUpdate(expected_revision=created.revision, input_snapshot=changed_input),
+        )
+    )
+    assert updated.plan.revision == 2
+    assert updated.plan.validation_status == "revalidation_required"
+    assert updated.plan.recommendation == created.recommendation
+    assert updated.plan.input_snapshot.conditions.remaining_range_km == 160
+    assert updated.plan.created_at == created.created_at
+    assert updated.plan.updated_at >= created.updated_at
+
+
+def test_update_time_rechecks_conflict_and_can_clear_time(tmp_path: Path) -> None:
+    """수정한 시간 구간의 충돌을 알리고 명시적 null 삭제는 판정 불가로 바꾼다."""
+    store = SQLitePlanStore(tmp_path / "plans.sqlite3")
+    start = datetime(2026, 11, 20, 9, 0, tzinfo=KST)
+    existing = asyncio.run(
+        store.create(create_command(start=start, end=start + timedelta(hours=2)))
+    ).plan
+    target = asyncio.run(store.create(create_command())).plan
+    overlapped = asyncio.run(
+        store.update(
+            target.plan_id,
+            PlanUpdate(
+                expected_revision=target.revision,
+                planned_start_at=start + timedelta(hours=1),
+                planned_end_at=start + timedelta(hours=3),
+            ),
+        )
+    )
+    assert [item.plan_id for item in overlapped.conflicts] == [existing.plan_id]
+    cleared = asyncio.run(
+        store.update(
+            target.plan_id,
+            PlanUpdate(expected_revision=overlapped.plan.revision, planned_end_at=None),
+        )
+    )
+    assert cleared.conflict_check == "not_comparable"
+    assert cleared.plan.planned_end_at is None
+
+
+def test_stale_revision_and_same_value_are_rejected(tmp_path: Path) -> None:
+    """오래된 revision과 실제 변경이 없는 PATCH는 현재 계획을 덮어쓰지 않는다."""
+    store = SQLitePlanStore(tmp_path / "plans.sqlite3")
+    created = asyncio.run(store.create(create_command())).plan
+    with pytest.raises(ProbeFailure) as stale:
+        asyncio.run(
+            store.update(
+                created.plan_id,
+                PlanUpdate(expected_revision=created.revision + 1, planned_start_at=None),
+            )
+        )
+    assert stale.value.error.code == "PLAN_CONFLICT"
+    with pytest.raises(ProbeFailure) as unchanged:
+        asyncio.run(
+            store.update(
+                created.plan_id,
+                PlanUpdate(expected_revision=created.revision, planned_start_at=None),
+            )
+        )
+    assert unchanged.value.error.code == "INVALID_INPUT"
+    assert asyncio.run(store.get(created.plan_id)) == created
+
+
+def test_delete_removes_only_selected_plan(tmp_path: Path) -> None:
+    """계획 삭제는 선택 ID만 제거하며 다른 계획은 유지하고 재삭제는 False다."""
+    store = SQLitePlanStore(tmp_path / "plans.sqlite3")
+    first = asyncio.run(store.create(create_command())).plan
+    second = asyncio.run(store.create(create_command())).plan
+    assert asyncio.run(store.delete(first.plan_id)) is True
+    assert asyncio.run(store.get(first.plan_id)) is None
+    assert asyncio.run(store.get(second.plan_id)) == second
+    assert asyncio.run(store.delete(first.plan_id)) is False

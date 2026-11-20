@@ -13,7 +13,14 @@ from pydantic import ValidationError
 
 from fuelroute.core.contracts import utc_now
 from fuelroute.core.errors import ProbeFailure
-from fuelroute.schemas.plans import PlanConflict, PlanCreate, PlanKey, PlanWriteResult, StoredPlan
+from fuelroute.schemas.plans import (
+    PlanConflict,
+    PlanCreate,
+    PlanKey,
+    PlanUpdate,
+    PlanWriteResult,
+    StoredPlan,
+)
 
 PLAN_SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -43,7 +50,7 @@ ON fuel_plans(trip_date, planned_start_at, planned_end_at);
 
 
 class PlanStore(Protocol):
-    """계획 저장·목록·상세 조회를 제공하는 비동기 F3015 Repository 계약."""
+    """계획 저장·조회와 revision 기반 수정·삭제를 제공하는 비동기 Repository 계약."""
 
     async def create(self, command: PlanCreate) -> PlanWriteResult:
         """검증된 추천 스냅샷을 저장하고 겹치는 계획을 함께 반환한다."""
@@ -55,6 +62,14 @@ class PlanStore(Protocol):
 
     async def get(self, plan_id: str) -> StoredPlan | None:
         """검증한 ID의 계획 또는 없는 경우 None을 반환한다."""
+        ...
+
+    async def update(self, plan_id: str, command: PlanUpdate) -> PlanWriteResult:
+        """예상 revision의 계획 핵심값을 바꾸고 재검증 상태·충돌을 반환한다."""
+        ...
+
+    async def delete(self, plan_id: str) -> bool:
+        """계획 한 건만 삭제하고 기존 존재 여부를 반환한다."""
         ...
 
 
@@ -241,3 +256,148 @@ class SQLitePlanStore:
             return await asyncio.to_thread(self._get, key.plan_id)
         except (sqlite3.Error, OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
             raise ProbeFailure("PLAN_STORE_ERROR", "계획을 읽을 수 없습니다.") from exc
+
+    @staticmethod
+    def _merge_update(current: StoredPlan, command: PlanUpdate) -> PlanCreate:
+        """현재 계획과 PATCH 필드를 병합해 전체 `PlanCreate` 계약으로 다시 검증한다.
+
+        명시하지 않은 필드는 현재 값을 유지하고, 명시적 null 계획 시각은 삭제한다. 날짜만
+        바꾸면 입력 스냅샷의 조건 날짜도 같은 명시값으로 바꾼다. 새 스냅샷만 주어지면 그
+        날짜를 사용한다. 추천 스냅샷·실행 참조는 유지하며 DB·시간·외부 호출 부작용은 없다.
+        """
+        fields = command.model_fields_set
+        input_snapshot = (
+            command.input_snapshot
+            if "input_snapshot" in fields and command.input_snapshot is not None
+            else current.input_snapshot
+        )
+        if "trip_date" in fields:
+            if command.trip_date is None:
+                raise ProbeFailure("INVALID_INPUT", "계획 날짜는 비울 수 없습니다.")
+            trip_date = command.trip_date
+            conditions = input_snapshot.conditions.model_copy(update={"trip_date": trip_date})
+            input_snapshot = input_snapshot.model_copy(update={"conditions": conditions})
+        elif "input_snapshot" in fields:
+            trip_date = input_snapshot.conditions.trip_date
+            if trip_date is None:
+                raise ProbeFailure("INVALID_INPUT", "입력 스냅샷의 계획 날짜가 필요합니다.")
+        else:
+            trip_date = current.trip_date
+        start = (
+            command.planned_start_at if "planned_start_at" in fields else current.planned_start_at
+        )
+        end = command.planned_end_at if "planned_end_at" in fields else current.planned_end_at
+        return PlanCreate(
+            execution_id=current.execution_id,
+            trip_date=trip_date,
+            input_snapshot=input_snapshot,
+            recommendation=current.recommendation,
+            planned_start_at=start,
+            planned_end_at=end,
+        )
+
+    def _update(self, plan_id: str, command: PlanUpdate) -> PlanWriteResult:
+        """쓰기 잠금에서 예상 revision을 확인하고 핵심값 변경을 원자적으로 저장한다.
+
+        없는 ID는 PLAN_NOT_FOUND, 다른 revision은 PLAN_CONFLICT다. 병합 결과가 현재 핵심값과
+        같으면 INVALID_INPUT이며 revision을 올리지 않는다. 실제 변경은 revision+1과 UTC
+        updated_at을 기록하고 기존 추천을 `revalidation_required`로 표시한다. 시간 충돌은
+        저장 후 조회하되 변경을 취소하지 않는다.
+        """
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT * FROM fuel_plans WHERE id = ?", (plan_id,)).fetchone()
+            if row is None:
+                raise ProbeFailure("PLAN_NOT_FOUND", "계획을 찾을 수 없습니다.")
+            current = self._row_to_plan(row)
+            if current.revision != command.expected_revision:
+                raise ProbeFailure(
+                    "PLAN_CONFLICT",
+                    "다른 요청이 계획을 먼저 변경했습니다. 최신 계획을 다시 확인하세요.",
+                )
+            merged = self._merge_update(current, command)
+            before = (
+                current.trip_date,
+                current.input_snapshot,
+                current.planned_start_at,
+                current.planned_end_at,
+            )
+            after = (
+                merged.trip_date,
+                merged.input_snapshot,
+                merged.planned_start_at,
+                merged.planned_end_at,
+            )
+            if before == after:
+                raise ProbeFailure("INVALID_INPUT", "계획의 변경된 값이 없습니다.")
+            updated = StoredPlan(
+                **merged.model_dump(),
+                plan_id=current.plan_id,
+                revision=current.revision + 1,
+                validation_status="revalidation_required",
+                created_at=current.created_at,
+                updated_at=utc_now(),
+            )
+            cursor = connection.execute(
+                "UPDATE fuel_plans SET revision = ?, validation_status = ?, trip_date = ?, "
+                "input_snapshot_json = ?, planned_start_at = ?, planned_end_at = ?, updated_at = ? "
+                "WHERE id = ? AND revision = ?",
+                (
+                    updated.revision,
+                    updated.validation_status,
+                    updated.trip_date.isoformat(),
+                    updated.input_snapshot.model_dump_json(),
+                    updated.planned_start_at.isoformat() if updated.planned_start_at else None,
+                    updated.planned_end_at.isoformat() if updated.planned_end_at else None,
+                    updated.updated_at.isoformat(),
+                    updated.plan_id,
+                    current.revision,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ProbeFailure("PLAN_CONFLICT", "계획 수정 충돌을 확인하세요.")
+            comparable = updated.planned_start_at is not None and updated.planned_end_at is not None
+            conflicts = self._conflicts(connection, updated) if comparable else []
+        return PlanWriteResult(
+            plan=updated,
+            conflicts=conflicts,
+            conflict_check="checked" if comparable else "not_comparable",
+        )
+
+    async def update(self, plan_id: str, command: PlanUpdate) -> PlanWriteResult:
+        """ID·PATCH 계약을 검증하고 작업 스레드에서 revision 기반 수정을 수행한다.
+
+        성공 시 기존 추천 본문은 보존하지만 `revalidation_required`가 된다. 없는 계획,
+        revision 충돌, 빈/무효 변경은 각 ProbeFailure 코드로 구분한다. DB/파일/손상은
+        PLAN_STORE_ERROR이며 외부 API·LLM·자동 재추천/재시도는 없다.
+        """
+        key = PlanKey(plan_id=plan_id)
+        checked = PlanUpdate.model_validate(command.model_dump(exclude_unset=True))
+        try:
+            return await asyncio.to_thread(self._update, key.plan_id, checked)
+        except ProbeFailure:
+            raise
+        except (sqlite3.Error, OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
+            raise ProbeFailure("PLAN_STORE_ERROR", "계획을 수정할 수 없습니다.") from exc
+
+    def _delete(self, plan_id: str) -> bool:
+        """쓰기 트랜잭션에서 계획 ID 한 건만 삭제하고 존재 여부를 반환한다.
+
+        로그·대화·다른 계획은 삭제하지 않는다. plan_id는 검증됐고 파라미터 바인딩한다.
+        DB 파일 쓰기 외 외부 호출·LLM 부작용은 없다.
+        """
+        with closing(self._connect()) as connection, connection:
+            cursor = connection.execute("DELETE FROM fuel_plans WHERE id = ?", (plan_id,))
+            return cursor.rowcount == 1
+
+    async def delete(self, plan_id: str) -> bool:
+        """안전한 ID의 계획 한 건을 작업 스레드에서 삭제한다.
+
+        있으면 True, 없으면 False다. 계획에 연결된 로그를 역으로 삭제하지 않는다. ID 형식은
+        ValidationError, DB/파일 문제는 PLAN_STORE_ERROR이며 외부 API·LLM·재시도는 없다.
+        """
+        key = PlanKey(plan_id=plan_id)
+        try:
+            return await asyncio.to_thread(self._delete, key.plan_id)
+        except (sqlite3.Error, OSError, ValueError, ValidationError) as exc:
+            raise ProbeFailure("PLAN_STORE_ERROR", "계획을 삭제할 수 없습니다.") from exc

@@ -272,7 +272,7 @@ created_at
 | `execution_events` | `id` PK, `session_id` FK, `(session_id, sequence)` UNIQUE | 이벤트 종류·단계·마스킹된 payload·시각 |
 | `fuel_plans` | `id` PK, `session_id` nullable FK | 입력 조건·추천 근거·가격 시각·보조정보 스냅샷·계획 날짜 |
 
-계획은 로그 삭제와 독립적으로 남는다. 세션 로그 삭제 시 이벤트는 함께 삭제하고 계획의 세션 참조는 `NULL`로 바꾼다. 시각은 시간대가 있는 ISO 8601 기준으로 처리하고 화면에서 KST로 표시한다. F3015에서 입력·추천·근거 스냅샷의 저장과 목록/상세 조회를 실제 SQLite Repository로 연결했다. 수정·삭제는 F3016, HTTP 연결은 F3017 범위다.
+계획은 로그 삭제와 독립적으로 남는다. 세션 로그 삭제 시 이벤트는 함께 삭제하고 계획의 세션 참조는 `NULL`로 바꾼다. 시각은 시간대가 있는 ISO 8601 기준으로 처리하고 화면에서 KST로 표시한다. F3015에서 입력·추천·근거 스냅샷의 저장과 목록/상세 조회를, F3016에서 revision 기반 수정·삭제를 SQLite Repository로 연결했다. 핵심 입력 변경은 저장 추천을 자동 재실행하지 않고 `revalidation_required`로 표시한다. HTTP 연결은 F3017 범위다.
 
 실행 가능한 설계는 [`storage.sql`](storage.sql)에 기록했다. `tests/test_storage_design.py`와 실제 조회 스냅샷을 넣은 메모리 SQLite 실험에서 이벤트 순서 중복·수정 금지, 로그 삭제 시 이벤트 제거·계획 보존을 확인했다. F3010의 conversation_memory, F3013의 실행 로그, F3015의 fuel_plans Repository를 연결했다. `fuel_plans`는 입력·추천 근거를 JSON 스냅샷으로 보관하고 `planned_start_at/end_at`이 모두 있는 경우에만 반개구간으로 충돌을 판단한다. 시각이 부족하면 값을 만들지 않고 `not_comparable`로 구분한다. 충돌은 저장을 막지 않는다.
 

@@ -215,6 +215,58 @@ class PlanWriteResult(BaseModel):
     conflict_check: Literal["checked", "not_comparable"]
 
 
+class PlanUpdate(BaseModel):
+    """저장 계획의 핵심 입력을 예상 revision에만 변경하는 F3016 계약.
+
+    `expected_revision`은 목록/상세에서 읽은 현재 버전이다. 날짜, 입력 스냅샷, 시작/종료
+    시각 중 최소 하나를 명시해야 하며 시각 필드는 명시적 null로 지울 수 있다. 추천 가격·
+    비용·근거는 직접 덮어쓰지 않고, 핵심 입력이 실제로 바뀌면 Repository가 기존 추천을
+    `revalidation_required`로 표시한다. 이 모델은 DB를 읽거나 값을 병합하지 않는다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=1)
+    trip_date: date | None = None
+    input_snapshot: PlanInputSnapshot | None = None
+    planned_start_at: datetime | None = None
+    planned_end_at: datetime | None = None
+
+    @field_validator("planned_start_at", "planned_end_at")
+    @classmethod
+    def aware_updated_time(cls, value: datetime | None) -> datetime | None:
+        """수정 요청의 비어 있지 않은 계획 시각에 UTC offset이 있는지 검사한다.
+
+        None은 필드 미지정 또는 명시적 삭제 양쪽에 쓰며 `model_fields_set`으로 구분한다.
+        naive 시각은 시간대를 추측하지 않고 ValueError다. 저장·외부 호출 부작용은 없다.
+        """
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("계획 시각에는 시간대가 필요합니다.")
+        return value
+
+    @model_validator(mode="after")
+    def editable_field_present(self) -> "PlanUpdate":
+        """expected_revision 외 수정 필드가 하나 이상 명시됐는지 검사한다.
+
+        날짜와 새 스냅샷을 함께 보냈으면 두 날짜가 같아야 한다. 시작/종료의 전체 순서는
+        기존 계획과 병합한 Repository가 재검사한다. 빈 PATCH는 ValueError이며 부작용은 없다.
+        """
+        editable = {
+            "trip_date",
+            "input_snapshot",
+            "planned_start_at",
+            "planned_end_at",
+        }
+        if not self.model_fields_set.intersection(editable):
+            raise ValueError("수정할 계획 필드가 필요합니다.")
+        if (
+            self.trip_date is not None
+            and self.input_snapshot is not None
+            and self.input_snapshot.conditions.trip_date != self.trip_date
+        ):
+            raise ValueError("계획 날짜가 입력 스냅샷과 다릅니다.")
+        return self
+
+
 class PlanList(BaseModel):
     """계획 목록 API/Repository가 반환하는 계획과 건수."""
 
