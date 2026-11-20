@@ -1,7 +1,7 @@
 # FuelRoute Agent
 
 > **현재 상태:** GMS·외부 API 3종 검증, 추천 정책·유한한 재계획·일곱 Tool 계약 구현 완료<br>
-> **구현 상태:** F3005~F3018 전체 추천·계획 CRUD·대화/계획 UI 연결 완료. F3019 실행 과정 표시는 후속
+> **구현 상태:** F3005~F3019 전체 추천·계획 CRUD·대화/계획/실행 과정 UI 연결 완료
 
 ## 단계별 진행 기록
 
@@ -32,7 +32,8 @@
 | 21. F3015 계획 저장 | 입력·추천·근거 스냅샷 저장, 목록/상세, 비차단 시간 충돌 | 전체420개·재시작 영속성/알 수 없는 시각/구간 경계 검증. [저장 기록](docs/DEVELOPMENT.md#f3015-plan-storage) | `14a4303` |
 | 22. F3016 계획 수정·삭제 | revision 기반 핵심값 수정, 재검증 상태, 선택 삭제 | 전체424개·동시 수정/충돌 재판정/명시 시각 삭제 검증. [CRUD 기록](docs/DEVELOPMENT.md#f3016-plan-update-delete) | `4392797` |
 | 23. F3017 Backend API | 대화 Agent·Memory·로그 연결과 계획 CRUD FastAPI/OpenAPI | 전체429개·HTTP 정상/오류/충돌/영속성/`/docs` 검증. [API 기록](docs/DEVELOPMENT.md#f3017-backend-api) | F3017 기능 커밋 |
-| 24. F3018 기능 UI | 비대칭 대시보드, 실제 추천 표시, 추천 채택과 계획 CRUD | 전체435개·실제 Chrome 추천→저장→수정→삭제 검증. [UI 기록](docs/DEVELOPMENT.md#f3018-dashboard) | 사용자 확인 후 커밋 |
+| 24. F3018 기능 UI | 단일 흐름 대시보드, 실제 추천 표시, 추천 채택과 계획 CRUD | 전체438개·실제 Chrome 추천→저장→수정→삭제 검증. [UI 기록](docs/DEVELOPMENT.md#f3018-dashboard) | `2e1ed64` |
+| 25. F3019 실행 과정 UI | 처리 상태, 최근 실행 목록, 순서형 단계·Tool·판정·재계획 타임라인, 로그 삭제 | 전체439개·실제 로그 51개 Chrome 렌더링. [상태 화면 기록](docs/DEVELOPMENT.md#f3019-execution-ui) | F3019 기능 커밋 |
 
 커밋 정리 과정에서는 실제 API 호출이나 재배포를 수행하지 않았다. 이후 단계도 완료 내용·검증 결과·남은 범위를 같은 형식으로 추가한다. 상세 개발 기록은 [DEVELOPMENT](docs/DEVELOPMENT.md), 실호출 근거는 [검증 JSON](docs/verification/2026-11-18-route-spike.json)에 있다.
 

@@ -28,6 +28,8 @@ def test_dashboard_has_reference_layout_and_accessible_controls() -> None:
         'id="evidence"',
         'id="planMemo"',
         'id="editMemo"',
+        'id="executionDialog"',
+        'id="executionTimeline"',
         'for="messageInput"',
         'aria-live="polite"',
         '<script src="/app.js" defer></script>',
@@ -63,6 +65,21 @@ def test_plans_and_evidence_are_dialogs_outside_dashboard() -> None:
     assert html.count('data-dialog-target="evidenceDialog"') == 2
     script = frontend_text("app.js")
     assert "openDashboardDialog" in script and "closeDashboardDialog" in script
+
+
+def test_execution_modal_connects_ordered_log_detail_and_delete() -> None:
+    """F3019 모달이 로그 목록·상세·삭제와 상태/Tool/재계획 타임라인을 연결한다."""
+    html = frontend_text("index.html")
+    script = frontend_text("app.js")
+    assert html.count('data-dialog-target="executionDialog"') == 2
+    assert 'id="executionList"' in html and 'id="deleteLogButton"' in html
+    assert 'apiFetch("/api/logs?limit=50")' in script
+    assert "`/api/logs/${encodeURIComponent(executionId)}`" in script
+    assert 'method: "DELETE"' in script
+    assert "renderExecutionEvent" in script and "buildExecutionTags" in script
+    assert "REPLAN_TRIGGERED" in script and "REPLAN_LIMIT_REACHED" in script
+    assert 'setExecutionState("running", "Agent 실행 중")' in script
+    assert "log_delivery_failures" in script
 
 
 def test_frontend_does_not_embed_secrets_or_external_api_keys() -> None:

@@ -21,6 +21,7 @@
       <a class="rail-logo" href="#main" aria-label="FuelRoute 홈">F</a>
       <nav class="rail-nav" aria-label="화면 바로가기">
         <a class="rail-button active" href="#planner" aria-label="추천 플래너" title="추천 플래너"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M6.5 3v7M17.5 3v7M5 11h14v9H5z"/></svg></a>
+        <button class="rail-button" type="button" data-dialog-target="executionDialog" aria-label="실행 과정" title="실행 과정"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h3l2-7 3 10 3-13 2 10h3"/></svg></button>
         <button class="rail-button" type="button" data-dialog-target="plansDialog" aria-label="저장한 플랜" title="저장한 플랜"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4z"/></svg></button>
         <button class="rail-button" type="button" data-dialog-target="evidenceDialog" aria-label="추천 근거" title="추천 근거"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg></button>
       </nav>
@@ -30,7 +31,7 @@
     <div class="workspace">
       <header class="topbar">
         <a class="brand" href="#main" aria-label="FuelRoute 홈"><span class="brand-symbol" aria-hidden="true"></span><span>FuelRoute</span></a>
-        <nav class="top-tabs" aria-label="주요 화면"><a class="active" href="#planner">추천 플래너</a><button type="button" data-dialog-target="plansDialog">내 플랜</button><button type="button" data-dialog-target="evidenceDialog">추천 근거</button></nav>
+        <nav class="top-tabs" aria-label="주요 화면"><a class="active" href="#planner">추천 플래너</a><button type="button" data-dialog-target="executionDialog"><span class="tab-state-dot" id="executionTabDot"></span><span id="executionTabLabel">실행 과정</span></button><button type="button" data-dialog-target="plansDialog">내 플랜</button><button type="button" data-dialog-target="evidenceDialog">추천 근거</button></nav>
         <button class="new-chat-button" id="newChatButton" type="button">새 요청 <span aria-hidden="true">+</span></button>
       </header>
 
@@ -73,6 +74,9 @@
     </div>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="dashboard-dialog execution-dialog" id="executionDialog" aria-labelledby="executionTitle">
+    <section class="execution-panel"><div class="modal-head"><div><span>AGENT EXECUTION</span><h2 id="executionTitle">실행 과정 <small id="executionState">대기 중</small></h2></div><div class="modal-actions"><button class="icon-button" id="refreshLogsButton" type="button" aria-label="실행 기록 새로고침">↻</button><button class="modal-close" id="closeExecutionDialog" type="button" aria-label="실행 과정 닫기">×</button></div></div><div class="execution-layout"><aside class="execution-sidebar" aria-label="최근 실행 기록"><div class="execution-list-head"><strong>최근 실행</strong><span id="executionCount">0개</span></div><div class="execution-list" id="executionList" aria-live="polite"><p class="execution-empty">아직 실행 기록이 없습니다.</p></div></aside><div class="execution-detail"><div class="execution-detail-head"><div><strong id="executionDetailTitle">실행을 선택해주세요.</strong><span id="executionDetailMeta">단계와 Tool 이력을 발생 순서대로 표시합니다.</span></div><button class="log-delete-button" id="deleteLogButton" type="button" disabled>기록 삭제</button></div><ol class="execution-timeline" id="executionTimeline" aria-live="polite"><li class="timeline-empty">추천 요청을 완료하면 실제 실행 과정이 이곳에 표시됩니다.</li></ol></div></div></section>
+  </dialog>
   <dialog class="dashboard-dialog" id="plansDialog" aria-labelledby="savedPlansTitle">
     <section class="plans-card" id="saved-plans"><div class="modal-head"><div><span>MY PLANS</span><h2 id="savedPlansTitle">저장한 플랜 <small id="planCount">0개</small></h2></div><div class="modal-actions"><button class="icon-button" id="refreshPlansButton" type="button" aria-label="플랜 새로고침">↻</button><button class="modal-close" id="closePlansDialog" type="button" aria-label="저장한 플랜 닫기">×</button></div></div><div class="plans-list" id="plansList" aria-live="polite"><div class="empty-plans"><strong>아직 저장한 플랜이 없습니다.</strong><span>추천을 채택하면 이곳에 일정이 쌓입니다.</span></div></div></section>
   </dialog>

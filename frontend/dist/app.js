@@ -6,6 +6,25 @@ const state = {
   latestChat: null,
   plans: [],
   editingPlan: null,
+  logs: [],
+  selectedLog: null,
+  activeExecutionId: null,
+};
+const EVENT_LABELS = {
+  STEP_STARTED: "단계 시작", STEP_COMPLETED: "단계 완료", TOOL_REQUESTED: "Tool 호출 요청",
+  TOOL_SUCCEEDED: "Tool 호출 성공", TOOL_FAILED: "Tool 호출 실패",
+  CONSTRAINT_EVALUATED: "제약 조건 판정", REPLAN_TRIGGERED: "재계획 실행",
+  REPLAN_LIMIT_REACHED: "재계획 종료", LLM_DECISION: "Agent 판단",
+  FINAL_RESPONSE_CREATED: "최종 응답 생성",
+};
+const STEP_LABELS = {
+  execution: "전체 실행", analyze: "요청 분석", resolve_locations: "위치 확인",
+  build_plan: "작업 계획", execute_plan: "Tool 실행", judge: "후보 판정",
+  replan: "재계획", enrich: "보조정보 확인", respond: "최종 응답",
+};
+const TOOL_LABELS = {
+  get_driving_route: "자동차 경로 조회", search_gas_stations: "주유소 후보 조회",
+  get_station_details: "주유소 상세 조회", search_rest_area_info: "휴게소 정보 조회",
 };
 const elements = Object.fromEntries([
   "main", "chatForm", "messageInput", "submitButton", "newChatButton", "requestChip",
@@ -16,6 +35,9 @@ const elements = Object.fromEntries([
   "connectionDot", "connectionText", "toast", "editDialog", "editPlanForm", "editPlanId",
   "editRevision", "editPlanDate", "editStartTime", "editEndTime", "editMemo", "closeEditButton",
   "cancelEditButton", "plansDialog", "evidenceDialog", "closePlansDialog", "closeEvidenceDialog",
+  "executionDialog", "closeExecutionDialog", "refreshLogsButton", "deleteLogButton",
+  "executionTabDot", "executionTabLabel", "executionState", "executionCount", "executionList",
+  "executionDetailTitle", "executionDetailMeta", "executionTimeline",
 ].map(mapElementById));
 
 /**
@@ -115,6 +137,199 @@ function setConnectionState(online) {
 async function checkHealth() {
   try { await apiFetch("/health"); setConnectionState(true); }
   catch (_error) { setConnectionState(false); }
+}
+
+/**
+ * 현재 Agent 실행 상태를 상단 탭 점·라벨과 실행 모달 제목에 동기화한다.
+ * status는 idle/running/completed/partial/failed 중 하나이며 label은 사용자에게 보여줄 짧은 한국어
+ * 문장이다. 실제 실행을 시작·중단하거나 로그를 만들지 않고 DOM class/text만 변경한다.
+ * @param {"idle"|"running"|"completed"|"partial"|"failed"} status 표시 상태.
+ * @param {string} label 상태 설명.
+ * @returns {void}
+ */
+function setExecutionState(status, label) {
+  elements.executionTabDot.className = `tab-state-dot ${status === "idle" ? "" : status}`.trim();
+  elements.executionTabLabel.textContent = status === "running" ? "실행 중" : "실행 과정";
+  elements.executionState.textContent = label;
+}
+
+/**
+ * `/api/logs`에서 최근 실행 목록을 읽어 시간 역순 선택 목록으로 표시한다.
+ * 성공 시 state.logs와 건수를 교체하고, 현재 선택 ID가 목록에 없으면 선택을 유지하지 않는다.
+ * 실패는 기존 목록을 보존하고 quiet=false일 때만 정제된 toast를 표시한다. 로그를 수정하거나
+ * Agent/외부 API를 실행하지 않는다.
+ * @param {boolean} [quiet=false] 실패 toast를 생략할지 여부.
+ * @returns {Promise<void>}
+ */
+async function loadExecutionLogs(quiet = false) {
+  try {
+    const result = await apiFetch("/api/logs?limit=50");
+    state.logs = result.items || [];
+    renderExecutionList();
+  } catch (error) {
+    if (!quiet) showToast(error.message || "실행 기록을 불러오지 못했습니다.", true);
+  }
+}
+
+/**
+ * 최근 실행 세션을 상태·시각·이벤트 수가 있는 선택 버튼 목록으로 그린다.
+ * 실행 ID와 API 문자열은 escape하고 현재 상세 ID에는 active class를 적용한다. 빈 목록도
+ * 정상 안내로 표시한다. DOM 변경 외 네트워크·DB 부작용은 없다.
+ * @returns {void}
+ */
+function renderExecutionList() {
+  elements.executionCount.textContent = `${state.logs.length}개`;
+  if (!state.logs.length) {
+    elements.executionList.innerHTML = '<p class="execution-empty">아직 실행 기록이 없습니다.</p>';
+    return;
+  }
+  elements.executionList.innerHTML = state.logs.map((session) => {
+    const active = session.execution_id === state.selectedLog?.session?.execution_id;
+    const status = session.status === "completed" ? "완료" : session.status === "failed" ? "실패" : "실행 중";
+    return `<button type="button" class="${active ? "active" : ""}" data-execution-id="${escapeHtml(session.execution_id)}"><strong>${escapeHtml(status)} · 이벤트 ${formatNumber(session.event_count, 0)}개</strong><span>${escapeHtml(formatDateTime(session.started_at))}</span></button>`;
+  }).join("");
+}
+
+/**
+ * 실행 ID 한 건의 상세 로그를 읽어 sequence 순서 타임라인과 상태 요약을 갱신한다.
+ * executionId는 서버가 발급한 안전한 ID다. 성공 시 선택 상태와 목록 강조를 바꾸고, 실패는
+ * 기존 상세를 유지한다. quiet=true이면 Chat 성공 직후 로그 전달 지연/실패를 toast로 중복
+ * 알리지 않는다. GET 외 로그 수정·Agent 실행 부작용은 없다.
+ * @param {string} executionId 조회할 실행 ID.
+ * @param {boolean} [quiet=false] 실패 toast 생략 여부.
+ * @returns {Promise<void>}
+ */
+async function loadExecutionDetail(executionId, quiet = false) {
+  if (!executionId) return;
+  try {
+    const detail = await apiFetch(`/api/logs/${encodeURIComponent(executionId)}`);
+    state.selectedLog = detail;
+    renderExecutionList();
+    renderExecutionDetail();
+  } catch (error) {
+    if (!quiet) showToast(error.message || "실행 상세를 불러오지 못했습니다.", true);
+  }
+}
+
+/**
+ * 선택한 실행 세션의 상태·기간과 모든 이벤트를 순서대로 실행 모달에 표시한다.
+ * selectedLog가 없으면 빈 안내와 비활성 삭제 버튼을 유지한다. 이벤트 데이터는 renderEvent가
+ * 정제해 HTML로 변환한다. DOM 변경 외 네트워크·삭제 부작용은 없다.
+ * @returns {void}
+ */
+function renderExecutionDetail() {
+  const detail = state.selectedLog;
+  if (!detail) {
+    elements.executionDetailTitle.textContent = "실행을 선택해주세요.";
+    elements.executionDetailMeta.textContent = "단계와 Tool 이력을 발생 순서대로 표시합니다.";
+    elements.executionTimeline.innerHTML = '<li class="timeline-empty">추천 요청을 완료하면 실제 실행 과정이 이곳에 표시됩니다.</li>';
+    elements.deleteLogButton.disabled = true;
+    return;
+  }
+  const session = detail.session;
+  const status = session.status === "completed" ? "완료" : session.status === "failed" ? "실패" : "실행 중";
+  elements.executionState.textContent = `선택 실행 ${status}`;
+  elements.executionDetailTitle.textContent = `${status} · 이벤트 ${session.event_count}개`;
+  elements.executionDetailMeta.textContent = `${formatDateTime(session.started_at)} 시작 · ${session.finished_at ? `${formatDateTime(session.finished_at)} 종료` : "진행 중"}`;
+  elements.executionTimeline.innerHTML = detail.events.map(renderExecutionEvent).join("");
+  elements.deleteLogButton.disabled = false;
+}
+
+/**
+ * 한 ExecutionEvent를 한국어 설명·메타 태그가 있는 안전한 타임라인 HTML로 변환한다.
+ * event_type/step/tool/payload는 서버의 정제 계약만 읽고 모든 문자열을 escape한다. 원본 Tool
+ * 응답·키·좌표는 입력에 없으며 추측해 표시하지 않는다. DOM·네트워크 부작용은 없다.
+ * @param {object} event `/api/logs/{id}`의 ExecutionEvent.
+ * @returns {string} 타임라인 `<li>` HTML.
+ */
+function renderExecutionEvent(event) {
+  const label = EVENT_LABELS[event.event_type] || event.event_type;
+  const step = STEP_LABELS[event.step] || event.step;
+  const tool = event.tool_name ? (TOOL_LABELS[event.tool_name] || event.tool_name) : null;
+  const classes = ["timeline-event"];
+  if (event.event_type.startsWith("TOOL_")) classes.push("tool");
+  if (["TOOL_SUCCEEDED", "STEP_COMPLETED", "FINAL_RESPONSE_CREATED"].includes(event.event_type)) classes.push("success");
+  if (event.event_type === "TOOL_FAILED") classes.push("failure");
+  if (event.event_type.startsWith("REPLAN_")) classes.push("replan");
+  const tags = buildExecutionTags(event);
+  const description = describeExecutionEvent(event, step, tool);
+  return `<li class="${classes.join(" ")}"><div class="timeline-event-head"><strong>${escapeHtml(`${event.sequence}. ${label}`)}</strong><time>${escapeHtml(formatDateTime(event.created_at))}</time></div><p>${escapeHtml(description)}</p>${tags.length ? `<div class="timeline-tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}</li>`;
+}
+
+/**
+ * 이벤트 유형별로 사용자에게 필요한 실행 의미만 짧은 한국어 문장으로 만든다.
+ * step/tool은 이미 표시명으로 변환된 값이며 payload의 상태·오류·재계획 사유만 사용한다.
+ * 누락값은 생성하지 않고 일반 설명으로 대체한다. DOM·저장·외부 호출 부작용은 없다.
+ * @param {object} event ExecutionEvent.
+ * @param {string} step 단계 표시명.
+ * @param {string|null} tool Tool 표시명.
+ * @returns {string} 공개 실행 설명.
+ */
+function describeExecutionEvent(event, step, tool) {
+  const payload = event.payload || {};
+  if (event.event_type === "STEP_STARTED") return `${step} 단계를 시작했습니다.`;
+  if (event.event_type === "STEP_COMPLETED") return payload.status === "failed" ? `${step} 단계가 실패했습니다.` : `${step} 단계를 완료했습니다.`;
+  if (event.event_type === "TOOL_REQUESTED") return `${tool || "Tool"} 요청을 보냈습니다.`;
+  if (event.event_type === "TOOL_SUCCEEDED") return `${tool || "Tool"} 결과를 정상적으로 받았습니다.`;
+  if (event.event_type === "TOOL_FAILED") return `${tool || "Tool"} 호출에 실패했습니다. 오류 코드: ${payload.error_code || "미확인"}`;
+  if (event.event_type === "CONSTRAINT_EVALUATED") return `후보 ${payload.candidate_count ?? 0}개의 도달 가능성과 사용자 제약을 판정했습니다.`;
+  if (event.event_type === "REPLAN_TRIGGERED") return `조건을 유지한 채 추가 후보 탐색을 실행했습니다. ${payload.reason || ""}`.trim();
+  if (event.event_type === "REPLAN_LIMIT_REACHED") return `재계획을 종료했습니다. 종료 사유: ${payload.stop_reason || "미확인"}`;
+  if (event.event_type === "FINAL_RESPONSE_CREATED") return `검증한 근거 ${payload.evidence_count ?? 0}개로 최종 응답을 만들었습니다.`;
+  if (event.event_type === "LLM_DECISION") return `${step} 단계의 구조화된 판단을 기록했습니다.`;
+  return `${step} 실행 상태를 기록했습니다.`;
+}
+
+/**
+ * 이벤트의 정제된 메타 중 화면 판단에 필요한 값만 태그 문자열로 선택한다.
+ * provider·소요시간·결과 수·재계획 횟수·재시도/재계획 가능 여부를 표시하고 입력 필드나
+ * request ID 전체는 노출하지 않는다. 빈 값은 제외하며 부작용은 없다.
+ * @param {object} event ExecutionEvent.
+ * @returns {string[]} 표시할 메타 태그.
+ */
+function buildExecutionTags(event) {
+  const payload = event.payload || {};
+  const tags = [];
+  if (event.tool_name) tags.push(TOOL_LABELS[event.tool_name] || event.tool_name);
+  if (payload.provider) tags.push(`제공사 ${payload.provider}`);
+  if (event.elapsed_ms != null) tags.push(`${formatNumber(event.elapsed_ms, 0)}ms`);
+  if (payload.result_size != null) tags.push(`결과 ${payload.result_size}건`);
+  if (payload.round_index != null) tags.push(`${Number(payload.round_index) + 1}회차`);
+  if (payload.replan_count != null) tags.push(`재계획 ${payload.replan_count}회`);
+  if (payload.retryable === true) tags.push("동일 요청 재시도 가능");
+  if (payload.replan_allowed === true) tags.push("조건 변경 재계획 가능");
+  return tags;
+}
+
+/**
+ * 최근 실행 목록에서 클릭한 실행 ID의 상세 로그를 조회한다.
+ * 실행 버튼이 아닌 빈 영역 클릭은 무시한다. data 값은 서버 발급 ID이며 loadExecutionDetail이
+ * URL encoding한다. GET 외 부작용은 없다.
+ * @param {MouseEvent} event 실행 목록 click 이벤트.
+ * @returns {Promise<void>}
+ */
+async function handleExecutionSelection(event) {
+  const button = event.target.closest("button[data-execution-id]");
+  if (!button) return;
+  await loadExecutionDetail(button.dataset.executionId);
+}
+
+/**
+ * 사용자가 확인한 현재 실행 로그 한 건을 DELETE하고 목록·상세 화면을 갱신한다.
+ * 선택 로그가 없거나 confirm을 취소하면 아무 작업도 하지 않는다. 성공 시 계획은 서버 계약에
+ * 따라 유지되며 실행 세션·이벤트만 복구 불가능하게 삭제된다. 네트워크/DB 삭제 부작용이 있다.
+ * @returns {Promise<void>}
+ */
+async function deleteSelectedExecutionLog() {
+  const executionId = state.selectedLog?.session?.execution_id;
+  if (!executionId || !window.confirm("이 실행 기록을 삭제할까요? 저장한 플랜은 유지됩니다.")) return;
+  try {
+    await apiFetch(`/api/logs/${encodeURIComponent(executionId)}`, { method: "DELETE" });
+    state.selectedLog = null;
+    renderExecutionDetail();
+    await loadExecutionLogs();
+    showToast("실행 기록을 삭제했습니다.");
+  } catch (error) { showToast(error.message || "실행 기록을 삭제하지 못했습니다.", true); }
 }
 
 /**
@@ -277,8 +492,19 @@ async function handleChatSubmit(event) {
     window.localStorage.setItem("fuelroute.session_id", chat.session_id);
     renderChat(chat); setConnectionState(true);
     if (chat.status === "recommended") elements.messageInput.value = "";
+    state.activeExecutionId = chat.execution_id;
+    setExecutionState(
+      chat.log_delivery_failures ? "partial" : "completed",
+      chat.log_delivery_failures ? `응답 완료 · 로그 ${chat.log_delivery_failures}건 누락` : `응답 완료 · 이벤트 ${chat.event_count}개`,
+    );
+    await loadExecutionLogs(true);
+    await loadExecutionDetail(chat.execution_id, true);
     showToast(chat.status === "recommended" ? "추천이 준비되었습니다." : "추가 입력 내용을 확인해주세요.");
-  } catch (error) { setConnectionState(false); showToast(error.message || "추천 요청에 실패했습니다.", true); }
+  } catch (error) {
+    setConnectionState(false);
+    setExecutionState("failed", "요청 실패 · 설정과 외부 서비스 상태를 확인하세요");
+    showToast(error.message || "추천 요청에 실패했습니다.", true);
+  }
   finally { setLoading(false); }
 }
 
@@ -292,6 +518,7 @@ function setLoading(loading) {
   elements.main.setAttribute("aria-busy", String(loading));
   elements.submitButton.disabled = loading;
   elements.submitButton.querySelector("span").textContent = loading ? "경로 분석 중" : "추천 받기";
+  if (loading) setExecutionState("running", "Agent 실행 중");
 }
 
 /**
@@ -502,6 +729,7 @@ async function deletePlan(plan) {
  */
 function resetChat() {
   state.sessionId = null; state.latestChat = null; window.localStorage.removeItem("fuelroute.session_id");
+  state.activeExecutionId = null; setExecutionState("idle", "대기 중");
   elements.chatForm.reset(); elements.requestChip.textContent = "새 요청"; elements.savePanel.hidden = true;
   elements.planMemo.value = ""; elements.planStartTime.value = ""; elements.planEndTime.value = "";
   elements.recommendation.className = "recommendation empty";
@@ -513,19 +741,41 @@ function resetChat() {
 function handleNewChat() { resetChat(); }
 
 /**
- * 상단 탭이나 사이드 메뉴가 지정한 저장 플랜·추천 근거 dialog를 모달로 연다.
- * `data-dialog-target`은 `plansDialog` 또는 `evidenceDialog`만 허용하며 다른 값은 무시한다.
- * 저장 플랜 모달은 열린 직후 최신 목록을 API에서 다시 읽고, 추천 근거는 현재 Chat 결과를
- * 그대로 보여준다. dialog DOM 변경과 선택적인 GET `/api/plans` 외 부작용은 없다.
+ * 상단 탭이나 사이드 메뉴가 지정한 실행 과정·저장 플랜·추천 근거 dialog를 모달로 연다.
+ * `data-dialog-target`은 세 허용 ID만 받는다. 저장 플랜은 최신 계획 목록, 실행 과정은 최신
+ * 로그 목록과 현재/최근 상세를 읽고, 추천 근거는 현재 Chat 결과를 그대로 보여준다. dialog
+ * DOM 변경과 선택적인 GET `/api/plans`·`/api/logs` 외 부작용은 없다.
  * @param {MouseEvent} event 모달 열기 버튼의 click 이벤트.
  * @returns {Promise<void>}
  */
 async function openDashboardDialog(event) {
   const targetId = event.currentTarget.dataset.dialogTarget;
-  if (!['plansDialog', 'evidenceDialog'].includes(targetId)) return;
+  if (!["executionDialog", "plansDialog", "evidenceDialog"].includes(targetId)) return;
   const dialog = document.getElementById(targetId);
   if (!dialog.open) dialog.showModal();
-  if (targetId === 'plansDialog') await loadPlans();
+  if (targetId === "plansDialog") await loadPlans();
+  if (targetId === "executionDialog") {
+    await loadExecutionLogs();
+    const available = new Set(state.logs.map((item) => item.execution_id));
+    const selected = state.selectedLog?.session?.execution_id;
+    const preferred = available.has(state.activeExecutionId) ? state.activeExecutionId : available.has(selected) ? selected : state.logs[0]?.execution_id;
+    if (preferred) await loadExecutionDetail(preferred);
+  }
+}
+
+/**
+ * 실행 과정 모달의 새로고침 버튼에서 목록을 다시 읽고 현재 선택 상세도 갱신한다.
+ * 선택이 없으면 가장 최근 실행을 선택한다. 로그를 생성·수정하지 않고 GET 요청만 수행하며
+ * 조회 실패는 각 로더의 정제 toast로 표시한다.
+ * @returns {Promise<void>}
+ */
+async function refreshExecutionLogs() {
+  const selected = state.selectedLog?.session?.execution_id;
+  await loadExecutionLogs();
+  const available = new Set(state.logs.map((item) => item.execution_id));
+  const target = available.has(selected) ? selected : state.logs[0]?.execution_id;
+  if (target) await loadExecutionDetail(target);
+  else { state.selectedLog = null; renderExecutionDetail(); }
 }
 
 /**
@@ -536,7 +786,7 @@ async function openDashboardDialog(event) {
  * @returns {void}
  */
 function closeDashboardDialog(event) {
-  const dialog = event.currentTarget.closest('dialog');
+  const dialog = event.currentTarget.closest("dialog");
   if (dialog?.open) dialog.close();
 }
 
@@ -566,6 +816,10 @@ function initialize() {
   });
   elements.closePlansDialog.addEventListener("click", closeDashboardDialog);
   elements.closeEvidenceDialog.addEventListener("click", closeDashboardDialog);
+  elements.closeExecutionDialog.addEventListener("click", closeDashboardDialog);
+  elements.refreshLogsButton.addEventListener("click", refreshExecutionLogs);
+  elements.executionList.addEventListener("click", handleExecutionSelection);
+  elements.deleteLogButton.addEventListener("click", deleteSelectedExecutionLog);
   void Promise.allSettled([checkHealth(), loadPlans()]);
 }
 

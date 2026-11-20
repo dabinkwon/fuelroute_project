@@ -1,0 +1,23 @@
+{
+  "verified_at": "2026-11-20T10:47:43.8639110+09:00",
+  "method": "Chrome DevTools Protocol with local static server and actual FastAPI log API",
+  "dialog_open": true,
+  "listed_executions": 11,
+  "selected_execution_id": "be8215ad34e94353b0aae0c2d4892918",
+  "selected_status": "completed",
+  "event_count": 51,
+  "rendered_event_count": 51,
+  "sequence_ordered": true,
+  "tool_requested_count": 14,
+  "tool_succeeded_count": 14,
+  "tool_failed_count": 0,
+  "replan_event_count": 0,
+  "secret_label_exposed": false,
+  "delete_control_enabled": true,
+  "delete_executed": false,
+  "notes": [
+    "실제 로컬 SQLite 로그를 읽기 전용으로 조회했다.",
+    "기존 사용자 로그를 보존하기 위해 브라우저 검증에서는 삭제 버튼 활성화까지만 확인했다.",
+    "삭제 동작과 계획 보존은 기존 ASGI 임시 SQLite 테스트로 검증한다."
+  ]
+}
